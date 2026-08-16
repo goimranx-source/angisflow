@@ -1,0 +1,5531 @@
+@import 'tailwindcss';
+
+@source '../js/**/*.{ts,tsx}';
+@source '../views/**/*.blade.php';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design tokens
+
+   Carried over from the first version of Prism unchanged, so the tool looks
+   like itself. Everything below is expressed against these — no component
+   hard-codes a hex value, which is what makes a re-theme one file rather than
+   a hunt.
+
+   Fonts are self-hosted rather than pulled from Google. A font fetched from a
+   third party is a render-blocking request to a host we do not control, on
+   every cold load, for every user — and at the scale this is built for that is
+   both a latency tax and a privacy one. The stack falls back to the system UI
+   font, which is metrically close enough that nothing shifts.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+    /* The shell's own "desktop starts here" line, not Tailwind's default
+       768px. The sidebar and the header's full-bleed mobile treatment both
+       need more room to make sense of a rail beside them, so md: — used
+       throughout Sidebar.tsx and Topbar.tsx — now means 880px everywhere it
+       is written, without touching each usage. */
+    --breakpoint-md: 55rem;
+
+    --color-site-bg: #f4f9fd;
+    --color-card-bg: #ffffff;
+    --color-card-raised: #eaf5fb;
+    --color-border-light: #d6eaf8;
+    --color-border-strong: #a8cde8;
+
+    --color-ink: #0d1b2a;
+    --color-ink-soft: #1e2f6b;
+    --color-ink-mid: #2a4080;
+
+    --color-text-main: #0d1b2a;
+    --color-text-body: #2e3d52;
+    --color-text-muted: #7a8fa6;
+    --color-text-subtle: #a8bed4;
+    --color-text-on-dark: #f4f9fd;
+    --color-text-on-accent: #ffffff;
+
+    /* Updated brand colors - more professional and text-friendly */
+    --color-brand: #0891b2; /* Cyan 600 - better for backgrounds and borders */
+    --color-brand-hover: #0e7490; /* Cyan 700 */
+    --color-brand-active: #155e75; /* Cyan 800 - darker for better contrast */
+    --color-brand-text: #0e7490; /* Cyan 700 - optimized for text readability */
+    --color-brand-text-hover: #155e75; /* Cyan 800 - darker on hover */
+    --color-brand-subtle: #ecfeff; /* Cyan 50 */
+    --color-brand-border: #67e8f9; /* Cyan 300 */
+
+    --color-success: #2e7d32;
+    --color-success-subtle: #e8f5e9;
+    --color-danger: #ff5c5c;
+    --color-danger-hover: #d94040;
+    --color-danger-subtle: #fdecea;
+    --color-danger-text: #b71c1c;
+    --color-warning: #f59e0b;
+    --color-warning-subtle: #fffbeb;
+    --color-link: #3b5ba5;
+
+    /* ── The shell ───────────────────────────────────────────────────────────
+       The rail and the top bar, named separately from the page's own colours.
+       Every shell rule reads these rather than a literal, so switching the
+       whole frame between light and dark later is a change to this block and
+       nothing else — which is the point of naming them at all. */
+    --shell-bg: #ffffff;
+    --shell-border: #e4edf5;
+    /* A neutral slate rather than the blue-grey this was. The rail sits beside
+       a page full of brand cyan, and a resting label carrying its own hint of
+       blue read as faintly active — so the only coloured text in the rail is
+       now the row you are actually on. */
+    --shell-text: #4b5563;
+    --shell-text-strong: #0d1b2a;
+    --shell-hover: #f1f7fc;
+    --shell-active-soft: #eaf5fb;
+    /* One corner for the whole frame — the rail, and every panel that floats
+       out of it. Three of them had picked their own (5px, 12px, 16px), so a
+       flyout never looked like it came from the sidebar it was attached to. */
+    --shell-radius: 5px;
+    /* For anything small enough that 5px reads as a circle rather than a
+       rounded corner — the 24px marks in a list, a badge, a chip. */
+    --shell-radius-sm: 4px;
+    /* The tint a shell row takes when hovered, and the one an open department
+       or an open picker keeps. Neutral rather than the blue-tinted
+       --shell-hover: on a rail sitting beside a cyan page, a blue-grey
+       highlight reads as half-active. */
+    --shell-tint: rgba(13, 27, 42, 0.06);
+
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-heading: 'Rubik', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-card: 20px;
+    --radius-pill: 999px;
+
+    --shadow-xs: 0 1px 2px rgba(13, 27, 42, 0.06);
+    --shadow-sm: 0 2px 6px rgba(13, 27, 42, 0.08);
+    --shadow-md: 0 4px 16px rgba(13, 27, 42, 0.1);
+    --shadow-lg: 0 8px 32px rgba(13, 27, 42, 0.12);
+    --shadow-xl: 0 16px 48px rgba(13, 27, 42, 0.15);
+}
+
+:root {
+    /* How wide the rail is when it is open — as the page's gutter normally,
+       and as the width a collapsed rail grows to while peeked. Named, because
+       those two now need to agree and one of them is not --sidebar-width. */
+    --sidebar-open: 16rem;
+    --sidebar-width: var(--sidebar-open);
+    /* Wide enough to actually hold what goes in it. Every collapsed row is a
+       40px square, the rail sits inside 12px of page padding either side, and
+       its nav has 10px of its own — so anything under 84px was squeezing a
+       40px icon into a 16px box and letting it spill over both edges. */
+    --sidebar-rail: 5.25rem;
+    --sidebar-padding: 12px;
+    --sidebar-header-height: 4rem;
+    --topbar-height: 4rem;
+    --focus-ring: 0 0 0 3px rgba(0, 212, 232, 0.35);
+
+    /*
+     * Where the header actually ends, and where things that hang off it start.
+     *
+     * The header is a card now, inset from the top of the viewport by
+     * --sidebar-padding, --sidebar-header-height tall — so its bottom edge is
+     * the sum of the two, not --topbar-height alone. Two things need that
+     * number and want it by a different amount:
+     *
+     *   --header-bottom        flush against it. A panel docked under the
+     *                          header, or a mobile overlay that takes the rest
+     *                          of the screen, wants no gap at all.
+     *
+     *   --header-flyout-top    clear of it. A floating menu — the context
+     *                          picker, search, the account menu, Ask —  wants
+     *                          the same small gap every time, rather than each
+     *                          one guessing its own number and drifting a
+     *                          pixel or two from its neighbours.
+     */
+    --header-bottom: calc(var(--sidebar-padding) + var(--sidebar-header-height));
+    --header-flyout-gap: 8px;
+    --header-flyout-top: calc(var(--header-bottom) + var(--header-flyout-gap));
+}
+
+/* Below 880px the bar loses its 12px top inset (see .topbar) — flush against
+   the viewport instead of floating a padding below it — so its actual bottom
+   edge moves up by exactly that much too. Everything anchored off
+   --header-bottom follows without needing to know why. */
+@media (max-width: 879px) {
+    :root {
+        --header-bottom: var(--sidebar-header-height);
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Dark
+
+   Every rule in this file reads a token rather than a literal, which is what
+   makes this one block rather than a hunt through four thousand lines. Set on
+   <html> before the first paint (see app.blade.php + useTheme) so a dark
+   preference never flashes light on a cold load.
+
+   "Ink" and "on-dark" swap deliberately rather than each staying put: ink is
+   the filled colour a chip or an active tab wears, on-dark is what sits on
+   top of it, and in light mode that is a near-black chip carrying near-white
+   text. Keep ink dark here and it would vanish into the site background it
+   is supposed to stand out from — so the pair inverts together, and every
+   rule built on "ink says solid, on-dark says legible against it" is still
+   true without knowing which theme it is in. */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-site-bg: #0a1420;
+    --color-card-bg: #111d2e;
+    --color-card-raised: #16283d;
+    --color-border-light: #22354a;
+    --color-border-strong: #3c5978;
+
+    --color-ink: #e8eef5;
+    --color-ink-soft: #c3d4e6;
+    --color-ink-mid: #9fb8d1;
+
+    --color-text-main: #e8f0f8;
+    --color-text-body: #c3d2e0;
+    --color-text-muted: #8296ab;
+    --color-text-subtle: #5b7086;
+    --color-text-on-dark: #0d1b2a;
+    --color-text-on-accent: #ffffff;
+
+    --color-brand-text: #22d3ee;
+    --color-brand-text-hover: #67e8f9;
+    --color-brand-subtle: #0e2a30;
+
+    --color-success-subtle: #123320;
+    --color-danger-subtle: #3a1414;
+    --color-danger-text: #ff8a8a;
+    --color-warning-subtle: #332a10;
+    --color-link: #7fa3e8;
+
+    --shell-bg: #111d2e;
+    --shell-border: #253c54;
+    --shell-text: #9fb0c2;
+    --shell-text-strong: #eef4fa;
+    --shell-hover: #1b3049;
+    --shell-active-soft: #1b3049;
+    --shell-tint: rgba(255, 255, 255, 0.07);
+}
+
+/* The rail width is read from one variable so the sidebar and the page beside
+   it can never disagree about how wide it is. Set on <html> before the first
+   paint (see app.blade.php) so a collapsed rail never flashes open. */
+html.rail-collapsed {
+    --sidebar-width: var(--sidebar-rail);
+}
+
+/*
+ * Peeking: a collapsed rail held open under the pointer.
+ *
+ * Deliberately absent from this block — --sidebar-width stays at the rail
+ * width while peeking, and only the rail itself grows. That is what makes it
+ * an overlay: the page keeps the margin it had, the rail comes over the top of
+ * it and over the header, and nothing on screen reflows. Widening the variable
+ * instead would shove every page a hundred and seventy pixels sideways each
+ * time the pointer crossed the sidebar, which is the whole reason people
+ * collapse it in the first place.
+ */
+html.rail-peek .rail {
+    width: calc(var(--sidebar-open) - var(--sidebar-padding) * 2);
+    box-shadow: var(--shadow-xl);
+    /* Over the header too, not just the page. The rail's own logo is already
+       in its header; sliding out from underneath the top bar and stopping
+       short of it would put two of them on screen at once. */
+    z-index: 70;
+}
+
+/*
+ * The contents fade up as the rail widens.
+ *
+ * Opening only. There is no matching pass on the way out, and deliberately so:
+ * anything that outlives the state change has to survive the layout changing
+ * underneath it, which is what made the old closing phase shake. Going out,
+ * the contents are already narrow by the first frame and the edge simply
+ * travels to meet them.
+ */
+@keyframes rail-peek-reveal {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+html.rail-peek .rail-primary,
+html.rail-peek .rail-nav,
+html.rail-peek/* Whatever a viewer has told their system about motion wins. The rail still
+   widens — that is the layout, not decoration — it simply arrives. */
+@media (prefers-reduced-motion: reduce) {
+    html.rail-peek .rail {
+        transition: none;
+    }
+
+    html.rail-peek .rail-primary,
+    html.rail-peek .rail-nav,
+    html.rail-peek .rail-foot {
+        animation: none;
+    }
+}
+
+/* ── Skeleton shimmer animation ───────────────────────────────────────────── */
+@keyframes shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+.animate-pulse {
+    background: linear-gradient(
+        90deg,
+        var(--color-brand-subtle) 0%,
+        #d6eaf8 20%,
+        var(--color-brand-subtle) 40%,
+        var(--color-brand-subtle) 100%
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-pulse {
+        animation: none;
+        background: var(--color-brand-subtle);
+    }
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        background: var(--color-site-bg);
+        color: var(--color-text-body);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    /* All buttons should have pointer cursor */
+    button:not(:disabled),
+    [role="button"]:not(:disabled),
+    [type="button"]:not(:disabled),
+    [type="submit"]:not(:disabled) {
+        cursor: pointer;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        font-family: var(--font-heading);
+        color: var(--color-text-main);
+    }
+
+    :focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+        border-radius: var(--radius-sm);
+    }
+
+    /* Form controls are excluded from the blanket ring.
+
+       Each one either styles its own focus (.field) or sits inside a container
+       that lights up around it (.ask-form, .search-field). Adding a ring on top
+       of that draws a second indicator for one thing — and on a bare input with
+       no border of its own it invented an outline where the design had none.
+       Focus is still always visible; it is just shown once, by whichever
+       element actually owns the look. */
+    input:focus-visible,
+    textarea:focus-visible,
+    select:focus-visible {
+        box-shadow: none;
+    }
+
+    /* A page that jumps as the scrollbar appears reads as a reload even when
+       nothing reloaded — which is the exact impression this build exists to
+       avoid. */
+    @media (min-width: 880px) {
+        html {
+            scrollbar-gutter: stable;
+        }
+    }
+
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: var(--color-border-strong);
+        border-radius: var(--radius-pill);
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+}
+
+@layer components {
+    /* ── Surfaces ───────────────────────────────────────────────────────── */
+
+    /* The page's card is the same object as the bar and the rail: same
+       surface, same hairline, same 5px corner, and no shadow — the shell
+       separates things with lines, so a card that also floated read as
+       belonging to a different design. */
+    .card {
+        background: var(--shell-bg);
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+    }
+
+    /* An icon control in the top bar. Same glass-and-hairline language as the
+       search beside it, so the row reads as one set of controls. */
+    .topbar-icon {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--shell-text);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            border-color 0.15s ease,
+            color 0.15s ease;
+    }
+
+    .topbar-icon:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+
+    /* Logo in the topbar: visible at mobile/tablet, hidden at md where the
+       sidebar already shows it. Mark only below 580px; mark + name above. */
+    .topbar-logo {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Same height as every icon button beside it — 2.25rem — so the row
+       reads as one set of controls at one weight, not a small mark next to
+       full-size buttons. */
+    .topbar-logo .brand-mark {
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        flex: none;
+    }
+
+    .topbar-logo-name {
+        display: none;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--shell-text-strong);
+        white-space: nowrap;
+    }
+
+    @media (min-width: 580px) {
+        .topbar-logo-name {
+            display: block;
+        }
+    }
+
+    /* Direct actions collapse one at a time into the overflow menu as the
+       bar runs out of room, lowest priority first: Search (Ctrl+K still
+       reaches it without the button), then Messages, then the theme toggle.
+       Notifications, Ask AI and the account never collapse — see Topbar.
+       The trigger and each menu row mirror these same breakpoints, so the
+       "more" button only ever appears once something has actually been
+       dropped into it. */
+    @media (max-width: 459px) {
+        .topbar-icon.topbar-search-direct {
+            display: none;
+        }
+    }
+
+    /* The wrapper, not the button inside it — see HeaderPopover's
+       `className`. Hiding only the button leaves an empty flex item in the
+       row, and the gap either side of it stays, which reads as a hole
+       between Notifications and Ask AI. */
+    @media (max-width: 399px) {
+        .topbar-messages-direct {
+            display: none;
+        }
+    }
+
+    @media (max-width: 339px) {
+        .topbar-icon.topbar-theme-direct {
+            display: none;
+        }
+    }
+
+    /* Bare — no border, no background, no box. It only exists once
+       something has actually been dropped into it, so it should read as
+       part of the row, not as a fourth button competing with the rest. */
+    .topbar-overflow-trigger {
+        display: none;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 2.125rem;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--shell-text);
+        cursor: pointer;
+        transition: color 0.15s ease;
+    }
+
+    .topbar-overflow-trigger:hover {
+        color: var(--shell-text-strong);
+    }
+
+    @media (max-width: 459px) {
+        .topbar-overflow-trigger {
+            display: inline-flex;
+        }
+    }
+
+    .topbar-overflow-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 120;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 10rem;
+        padding: 4px;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.14s ease-out;
+    }
+
+    .topbar-overflow-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.5rem 0.625rem;
+        border-radius: var(--shell-radius-sm);
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--shell-text-strong);
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.1s ease;
+    }
+
+    .topbar-overflow-item:hover {
+        background: var(--shell-hover);
+    }
+
+    .topbar-overflow-item-search {
+        display: none;
+    }
+
+    @media (max-width: 459px) {
+        .topbar-overflow-item-search {
+            display: flex;
+        }
+    }
+
+    .topbar-overflow-item-theme {
+        display: none;
+    }
+
+    @media (max-width: 339px) {
+        .topbar-overflow-item-theme {
+            display: flex;
+        }
+    }
+
+    .topbar-overflow-item-messages {
+        display: none;
+    }
+
+    @media (max-width: 399px) {
+        .topbar-overflow-item-messages {
+            display: flex;
+        }
+    }
+
+    /* ── Pova ───────────────────────────────────────────────────────────────
+       One panel, three postures. Everything shared lives here; each posture
+       only says where it sits and how big it is. */
+
+    .pova {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+    }
+
+    /* The only posture that floats: under the button that opened it, over the
+       page you were reading. */
+    .pova-floating {
+        position: fixed;
+        z-index: 90;
+        top: var(--header-flyout-top);
+        right: var(--sidebar-padding);
+        width: 24rem;
+        max-width: calc(100vw - 2rem);
+        height: 32rem;
+        max-height: calc(100vh - var(--header-flyout-top) - var(--sidebar-padding));
+        border-radius: var(--shell-radius);
+        box-shadow: var(--shadow-xl);
+        animation: palette-rise 0.14s ease-out;
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    
+    .pova-floating.is-exiting {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    /* In the flow, beside the content — which narrows to make room rather than
+       being covered. Sticky so it stays put while the page scrolls past it. */
+    .pova-sidebar {
+        position: sticky;
+        top: var(--header-bottom);
+        flex: none;
+        width: 24rem;
+        height: calc(100vh - var(--header-bottom));
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+    }
+
+    /* In the flow, instead of the content. */
+    .pova-full {
+        flex: 1;
+        min-width: 0;
+        height: calc(100vh - var(--header-bottom));
+        border: 0;
+        border-left: 1px solid var(--color-border-light);
+    }
+
+    .pova-head {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.625rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    /* Chat and History — the only two things there are to do here. */
+    .pova-tabs {
+        display: flex;
+        flex: none;
+        gap: 2px;
+        border-radius: var(--radius-pill);
+        background: var(--color-site-bg);
+        padding: 2px;
+    }
+
+    .pova-tab {
+        border-radius: var(--radius-pill);
+        padding: 0.3125rem 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .pova-tab:hover {
+        color: var(--color-text-main);
+    }
+
+    .pova-tab.is-active {
+        background: var(--color-card-bg);
+        color: var(--color-text-main);
+        box-shadow: var(--shadow-xs);
+    }
+
+    .pova-layouts {
+        display: flex;
+        flex: none;
+        gap: 1px;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--color-border-light);
+        padding: 1px;
+    }
+
+    .pova-layout {
+        display: grid;
+        place-items: center;
+        width: 1.625rem;
+        height: 1.625rem;
+        border-radius: var(--shell-radius-sm);
+        color: var(--color-text-muted);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .pova-layout:hover {
+        background: var(--shell-hover);
+        color: var(--color-text-main);
+    }
+
+    .pova-layout.is-active {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    .pova-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: var(--shell-radius);
+        color: var(--color-text-muted);
+        cursor: pointer;
+    }
+
+    .pova-icon:hover {
+        background: var(--shell-hover);
+        color: var(--color-text-main);
+    }
+
+    .pova-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 0.5rem;
+        overflow-y: auto;
+        padding: 0.875rem;
+    }
+
+    /* The full view is a reading width rather than the whole column — a line of
+       text the width of a desktop screen is a line nobody finishes. */
+    .pova-full .pova-body,
+    .pova-full .pova-foot > * {
+        width: 100%;
+        max-width: 44rem;
+        margin-inline: auto;
+    }
+
+    .pova-empty {
+        margin: auto 0;
+    }
+
+    .pova-suggestion {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        padding: 0.5rem 0.625rem;
+        font-size: 0.8125rem;
+        color: var(--color-text-body);
+        text-align: left;
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .pova-suggestion:hover:not(:disabled) {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+    }
+
+    .pova-suggestion:disabled {
+        opacity: 0.55;
+        cursor: default;
+    }
+
+    .pova-history-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--shell-radius);
+        padding: 0.5rem 0.625rem;
+        cursor: pointer;
+    }
+
+    .pova-history-row:hover {
+        background: var(--shell-hover);
+    }
+
+    .pova-foot {
+        flex: none;
+        padding: 0.75rem;
+        border-top: 1px solid var(--color-border-light);
+        background: var(--color-site-bg);
+    }
+
+    /* On a phone every posture is the same one: the whole screen under the
+       bar, flush against it — the bar itself is edge to edge here too. */
+    @media (max-width: 879px) {
+        .pova-floating,
+        .pova-sidebar,
+        .pova-full {
+            position: fixed;
+            z-index: 90;
+            top: var(--header-bottom);
+            right: 0;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            max-width: none;
+            height: auto;
+            max-height: none;
+            border-radius: 0;
+            border: 0;
+            border-top: 1px solid var(--color-border-light);
+        }
+
+        .pova-layouts {
+            display: none;
+        }
+    }
+
+    /* ── Search flyout ──────────────────────────────────────────────────── */
+
+    .search-flyout {
+        position: fixed;
+        top: var(--header-flyout-top);
+        right: var(--sidebar-padding);
+        z-index: 90;
+        display: flex;
+        width: 34rem;
+        max-width: calc(100vw - 2rem);
+        max-height: calc(100vh - var(--header-flyout-top) - var(--sidebar-padding));
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        box-shadow: var(--shadow-xl);
+        animation: palette-rise 0.14s ease-out;
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    
+    .search-flyout.is-exiting {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    .search-field {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.625rem;
+        padding: 0.75rem 0.875rem;
+        border-bottom: 1px solid var(--color-border-light);
+        transition: border-color 0.15s ease;
+    }
+
+    /* The row owns the focus look, so the input inside it does not need one. */
+    .search-field:focus-within {
+        border-bottom-color: var(--color-brand);
+    }
+
+    .search-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        font-size: 0.9375rem;
+        color: var(--color-text-main);
+        outline: none;
+    }
+
+    .search-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    /* Horizontal padding lives on the end tabs (below), not here — a
+       flex container's own end padding gets clipped once its content
+       actually overflows and is scrolled to that edge, in every engine that
+       implements this. Margin on the first/last child survives scrolling;
+       padding on the scroller does not. */
+    .search-tabs {
+        display: flex;
+        flex: none;
+        gap: 0.25rem;
+        overflow-x: auto;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .search-tab {
+        flex: none;
+        /* Reserved on every tab, not just the active one, so gaining a
+           border on selection does not nudge its neighbours sideways. */
+        border: 1px solid transparent;
+        border-radius: var(--shell-radius);
+        padding: 0.25rem 0.6875rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            border-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .search-tab:first-child {
+        margin-left: 0.625rem;
+    }
+
+    .search-tab:last-child {
+        margin-right: 0.625rem;
+    }
+
+    .search-tab:hover {
+        background: var(--shell-hover);
+        color: var(--color-text-main);
+    }
+
+    .search-tab.is-active {
+        background: var(--color-brand-subtle);
+        border-color: var(--color-brand-border);
+        color: var(--color-brand-text);
+        font-weight: 600;
+    }
+
+    .search-results {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.375rem;
+    }
+
+    .search-row {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        border-radius: var(--shell-radius);
+        padding: 0.5rem 0.625rem;
+        color: var(--color-text-body);
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.1s ease;
+    }
+
+    .search-row:hover {
+        background: var(--shell-hover);
+    }
+
+    .search-row.is-active {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .search-row-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--shell-radius);
+        background: var(--shell-tint);
+        color: var(--color-ink-soft);
+    }
+
+    .search-row.is-active .search-row-icon {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    .search-foot {
+        display: flex;
+        flex: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        border-top: 1px solid var(--color-border-light);
+        background: var(--color-site-bg);
+    }
+
+    .search-ask-pova {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 0.375rem;
+        border-radius: var(--shell-radius);
+        background: var(--color-ink);
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-text-on-dark);
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+
+    .search-ask-pova:hover {
+        background: var(--color-ink-soft);
+    }
+
+    .search-ask-pova svg {
+        color: var(--color-brand-active);
+    }
+
+    @media (max-width: 879px) {
+        .search-flyout {
+            top: var(--header-bottom);
+            right: 0;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+            border-inline: 0;
+            border-bottom: 0;
+        }
+    }
+
+    /* ── Home ───────────────────────────────────────────────────────────── */
+
+    .home-ask {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        gap: 0.5rem;
+        max-width: 36rem;
+        margin: 1.25rem auto 0;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0.75rem;
+        transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    /* A coloured ring sitting outside the box, drawn with a shadow so it does
+       not take space and nothing shifts under the pointer. */
+    .home-ask:hover {
+        border-color: var(--color-brand);
+        box-shadow: 0 0 0 4px var(--color-brand-subtle);
+    }
+
+    .home-ask:focus-within {
+        border-color: var(--color-brand);
+    }
+
+    /* One pulse when the box is entered. The class is removed on animationend
+       (see HomeAsk), so it fires once rather than on every keystroke. */
+    .home-ask.is-glowing {
+        animation: ask-glow 0.85s ease-out;
+    }
+
+    @keyframes ask-glow {
+        0% {
+            box-shadow:
+                0 0 0 0 rgba(0, 212, 232, 0.55),
+                0 0 0 0 rgba(124, 92, 255, 0.4);
+        }
+        60% {
+            box-shadow:
+                0 0 0 7px rgba(0, 212, 232, 0),
+                0 0 22px 6px rgba(124, 92, 255, 0.22);
+        }
+        100% {
+            box-shadow: var(--shadow-sm);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .home-ask.is-glowing {
+            animation: none;
+        }
+    }
+
+    .home-ask-input {
+        flex: 1;
+        min-width: 0;
+        min-height: 3rem;
+        max-height: 12rem;
+        background: transparent;
+        padding: 0.5rem 0;
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        color: var(--color-text-main);
+        outline: none;
+        border: none;
+        resize: vertical;
+        font-family: inherit;
+    }
+
+    .home-ask-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    .home-ask-send {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            opacity 0.15s ease;
+    }
+
+    .home-ask-send:hover:not(:disabled) {
+        background: var(--color-brand-hover);
+    }
+
+    /* Subtle until there is a whole question to send — including while one is
+       still being typed out. */
+    .home-ask-send:disabled {
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+        cursor: default;
+    }
+
+    /* Left as a pill deliberately — these are the one genuinely
+       conversational thing on the page, the same exception the Ask AI pill
+       gets in the bar. Everything structural around them takes the corner. */
+    .starter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--color-text-body);
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .starter-chip:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    .starter-chip.is-ask svg {
+        color: var(--color-brand-active);
+    }
+
+    /* Six full-length questions at desktop sizing is six stacked rows on a
+       phone — most of a screen spent on suggestions before the page proper
+       begins. Tighter type and padding fits two to a line instead. */
+    @media (max-width: 639px) {
+        .starter-chip {
+            gap: 0.3125rem;
+            padding: 0.3125rem 0.625rem;
+            font-size: 0.75rem;
+            line-height: 1.3;
+            text-align: left;
+        }
+    }
+
+    /* ── A row's own menu ───────────────────────────────────────────────── */
+
+    .row-menu-trigger {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--shell-radius);
+        color: var(--color-text-muted);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .row-menu-trigger:hover {
+        background: var(--shell-hover);
+        color: var(--color-text-main);
+    }
+
+    .row-menu {
+        position: fixed;
+        z-index: 110;
+        width: 13rem;
+        padding: 0.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.1s ease-out;
+    }
+
+    /* The same row as .topbar-overflow-item — a 4px corner inside a 5px
+       card, so the highlight sits concentric with the panel around it
+       instead of a 12px pill rattling around in it. */
+    .row-menu-item {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--shell-radius-sm);
+        padding: 0.5rem 0.625rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--shell-text-strong);
+        cursor: pointer;
+        text-align: left;
+        transition:
+            background-color 0.1s ease,
+            color 0.1s ease;
+    }
+
+    .row-menu-item:hover,
+    .row-menu-item.is-open {
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+
+    .row-menu-item.is-danger {
+        color: var(--color-danger-text);
+    }
+
+    .row-menu-item.is-danger:hover {
+        background: var(--color-danger-subtle);
+        color: var(--color-danger-text);
+    }
+
+    /* Opens to the right of the parent item, or to its left when the window
+       has no room — see ItemMenu, which measures before painting. Same card
+       as .row-menu it hangs off, down to the 4px inner padding its options
+       are inset by. */
+    .row-submenu {
+        position: absolute;
+        top: -0.25rem;
+        left: calc(100% + 0.25rem);
+        z-index: 1;
+        width: 12rem;
+        padding: 4px;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .row-submenu.is-left {
+        left: auto;
+        right: calc(100% + 0.25rem);
+    }
+
+    .row-tag-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--shell-radius-sm);
+        padding: 0.4375rem 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--shell-text-strong);
+        cursor: pointer;
+        transition: background-color 0.1s ease;
+    }
+
+    .row-tag-option:hover {
+        background: var(--shell-hover);
+    }
+
+    .row-tag-option input {
+        flex: none;
+        accent-color: var(--color-brand);
+    }
+
+    /* Divider drawn with a margin either side so it stops short of the
+       card's rounded corners rather than running into them. */
+    .row-submenu-manage {
+        display: block;
+        width: calc(100% - 8px);
+        margin: 4px 4px 0;
+        padding: 0.4375rem 0.5rem;
+        border-top: 1px solid var(--shell-border);
+        border-radius: 0 0 var(--shell-radius-sm) var(--shell-radius-sm);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--color-brand-text);
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.1s ease;
+    }
+
+    .row-submenu-manage:hover {
+        background: var(--shell-hover);
+    }
+
+    /* ── Modals ─────────────────────────────────────────────────────────── */
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 2rem 1rem;
+        background: rgba(9, 15, 28, 0.5);
+        backdrop-filter: blur(3px);
+        animation: palette-fade 0.12s ease-out;
+        overflow-y: auto;
+    }
+
+    .modal {
+        position: relative;
+        width: 100%;
+        max-width: 26rem;
+        padding: 1.25rem;
+        margin: auto;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-xl);
+        animation: palette-rise 0.14s ease-out;
+    }
+
+    .modal-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .modal-icon.is-danger {
+        background: var(--color-danger-subtle);
+        color: var(--color-danger-text);
+    }
+
+    .modal-primary-action,
+    .modal-danger-action {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        padding: 0 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.12s ease;
+    }
+
+    .modal-primary-action {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    .modal-primary-action:hover:not(:disabled) {
+        background: var(--color-brand-hover);
+    }
+
+    .modal-danger-action {
+        background: var(--color-danger-text);
+        color: #fff;
+    }
+
+    .modal-danger-action:hover:not(:disabled) {
+        background: #8f1616;
+    }
+
+    .modal-primary-action:disabled,
+    .modal-danger-action:disabled {
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+        cursor: default;
+    }
+
+    .modal-lg {
+        max-width: 32rem;
+    }
+
+    /* ── Multi-step dialogs ─────────────────────────────────────────────────
+     *
+     * The body scrolls, the head and foot do not. A wizard whose Continue
+     * button scrolls off the bottom of a long list of categories is one people
+     * think is broken, so the controls stay put and only the choices move.
+     */
+
+    .modal-wizard {
+        display: flex;
+        max-width: 42rem;
+        max-height: min(42rem, calc(100dvh - 4rem));
+        flex-direction: column;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .wizard-head {
+        flex: none;
+        padding: 1rem 1.25rem 0.875rem;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .wizard-body {
+        flex: 1;
+        min-height: 0;
+        padding: 1.25rem;
+        overflow-y: auto;
+    }
+
+    .wizard-foot {
+        display: flex;
+        flex: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.875rem 1.25rem;
+        border-top: 1px solid var(--shell-border);
+        background: var(--shell-tint);
+    }
+
+    .wizard-progress {
+        display: flex;
+        gap: 0.3125rem;
+        margin-top: 0.75rem;
+    }
+
+    .wizard-progress span {
+        height: 3px;
+        flex: 1;
+        border-radius: 999px;
+        background: var(--shell-border);
+        transition: background-color 0.18s ease;
+    }
+
+    .wizard-progress span.is-reached {
+        background: var(--color-brand);
+    }
+
+    /* ── Picking one of several ─────────────────────────────────────────── */
+
+    .choice-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    .choice-grid.is-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (max-width: 48rem) {
+        .choice-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 30rem) {
+        .choice-grid,
+        .choice-grid.is-list {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    .choice {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        text-align: left;
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .choice:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    .choice.is-selected {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+    }
+
+    .choice.is-row {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.625rem;
+    }
+
+    .choice-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--shell-radius-sm);
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .choice.is-selected .choice-icon {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    .choice-radio {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1rem;
+        height: 1rem;
+        border-radius: 999px;
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .choice-radio::after {
+        content: '';
+        width: 0.375rem;
+        height: 0.375rem;
+        border-radius: 999px;
+        background: var(--color-text-on-accent);
+        transform: scale(0);
+        transition: transform 0.12s ease;
+    }
+
+    .choice.is-selected .choice-radio {
+        border-color: var(--color-brand);
+        background: var(--color-brand);
+    }
+
+    .choice.is-selected .choice-radio::after {
+        transform: scale(1);
+    }
+
+    .choice-name {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+    }
+
+    .choice-note {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: var(--color-text-muted);
+    }
+
+    /* A secondary fact parked at the far end of a row — a currency beside a
+       country. Never the thing being chosen, so it stays quiet. */
+    .choice-tail {
+        flex: none;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--color-text-muted);
+    }
+
+    .logo-well {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: var(--shell-radius);
+        border: 1px dashed var(--shell-border);
+        background: var(--shell-bg);
+        overflow: hidden;
+    }
+
+    .logo-well:has(img) {
+        border-style: solid;
+    }
+
+    /* A dashed "add one more" control sitting inside a list rather than
+       heading it. Deliberately quieter than a .btn. */
+    .add-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 0.625rem;
+        border-radius: var(--shell-radius);
+        border: 1px dashed var(--shell-border);
+        background: transparent;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .add-inline:hover:not(:disabled) {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+    }
+
+    .add-inline.is-spent {
+        color: var(--color-text-muted);
+        cursor: default;
+        opacity: 0.6;
+    }
+
+    /* ── Picking a mark ─────────────────────────────────────────────────── */
+
+    .icon-pick-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 0.375rem;
+    }
+
+    @media (max-width: 30rem) {
+        .icon-pick-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+    }
+
+    .icon-pick {
+        display: grid;
+        aspect-ratio: 1;
+        place-items: center;
+        border-radius: var(--shell-radius-sm);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--color-text-subtle);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .icon-pick:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    .icon-pick.is-selected {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .wizard-summary {
+        display: flex;
+        gap: 0.625rem;
+        padding: 0.75rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-tint);
+    }
+
+    /* ── Filtering a list ───────────────────────────────────────────────── */
+
+    .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0.4375rem;
+    }
+
+    .filter-search {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    /* The same box as .topbar-icon — these sit in a bar of their own, but it
+       is the same kind of bar. */
+    .filter-toggle {
+        position: relative;
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--shell-text);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            border-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .filter-toggle:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+
+    .filter-toggle.is-active {
+        border-color: var(--color-brand-border);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .filter-count {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        display: grid;
+        place-items: center;
+        min-width: 1rem;
+        height: 1rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-brand-active);
+        padding: 0 0.25rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    /* The same card as .row-menu and .row-submenu — one flyout everywhere,
+       whether it hangs off a filter button or a row's own menu. */
+    .filter-tags {
+        position: absolute;
+        top: calc(100% + 0.375rem);
+        right: 0;
+        z-index: 70;
+        width: 13rem;
+        padding: 4px;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.1s ease-out;
+    }
+
+    /* ── A tag, shown on a row ──────────────────────────────────────────── */
+
+    /* Matches .biz-open-tag exactly — both are small badges sitting on the
+       same meta line, and they read as one kind of mark. */
+    .row-tag {
+        border-radius: var(--shell-radius-sm);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-tint);
+        padding: 0.0625rem 0.375rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        color: var(--shell-text);
+    }
+
+    /* ── Index screens: search, group heading, empty ────────────────────── */
+
+    .list-search {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        margin-bottom: 1rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        padding: 0.625rem 0.875rem;
+        transition: border-color 0.15s ease;
+    }
+
+    .list-search:focus-within {
+        border-color: var(--color-brand);
+    }
+
+    .list-search-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        font-size: 0.875rem;
+        color: var(--color-text-main);
+        outline: none;
+    }
+
+    .list-search-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    .list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--shell-border);
+        background: var(--shell-tint);
+    }
+
+    @media (max-width: 639px) {
+        .list-head {
+            flex-wrap: wrap;
+            row-gap: 0.625rem;
+            padding: 0.75rem 0.875rem;
+        }
+
+        .list-head > .todo-action {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    /* ── "This workspace is full" ─────────────────────────────────────────
+       Was written against --color-warning-bg, --color-warning-text and
+       --color-border, none of which this stylesheet has ever defined — so
+       the banner rendered with no background at all and inherited its text
+       colour, and its buttons carried a hard-coded bg-white that would have
+       gone opaque in dark mode. Same warning tone as .notice, built out of
+       tokens that exist. */
+    .limit-banner {
+        border-bottom: 1px solid var(--shell-border);
+        background: var(--color-warning-subtle);
+    }
+
+    .limit-banner-toggle {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.625rem 1rem;
+        text-align: left;
+        color: var(--color-warning);
+        transition: background-color 0.12s ease;
+    }
+
+    .limit-banner-toggle:hover {
+        background: var(--shell-tint);
+    }
+
+    .limit-banner-body {
+        border-top: 1px solid var(--shell-border);
+        padding: 0.875rem 1rem;
+    }
+
+    .limit-banner-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        height: 2rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid transparent;
+        background: var(--color-brand);
+        padding: 0 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-text-on-accent);
+        transition: background-color 0.15s ease;
+    }
+
+    .limit-banner-cta:hover {
+        background: var(--color-brand-hover);
+    }
+
+    .page-header-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--shell-text);
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2.5rem 1.5rem;
+        text-align: center;
+    }
+
+    @media (max-width: 639px) {
+        .empty-state {
+            padding: 2rem 1rem;
+        }
+    }
+
+    .empty-state.is-compact {
+        padding: 2rem 1.25rem;
+    }
+
+    .empty-state-icon {
+        display: grid;
+        place-items: center;
+        width: 3rem;
+        height: 3rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .empty-state.is-compact .empty-state-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+
+    .home-see-all {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--color-brand-text);
+        cursor: pointer;
+        transition: color 0.12s ease;
+    }
+
+    .home-see-all:hover {
+        color: var(--color-brand-text-hover);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    /* ── Home: to-dos ───────────────────────────────────────────────────── */
+
+    .todo-count {
+        display: grid;
+        place-items: center;
+        min-width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-danger);
+        padding: 0 0.375rem;
+        font-family: var(--font-sans);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .todo-row,
+    .biz-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+    }
+
+    .todo-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .todo-icon.is-warning {
+        background: var(--color-warning-subtle);
+        color: var(--color-warning);
+    }
+
+    /* The same box every other secondary control in the shell wears — the
+       header's icon buttons, the notice's action — with a label in it. */
+    .todo-action,
+    .biz-row-action {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        height: 2rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--shell-text-strong);
+        cursor: pointer;
+        transition:
+            border-color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .todo-action:hover,
+    .biz-row-action:hover:not(:disabled) {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    .biz-row-action:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    .biz-open-tag {
+        border-radius: var(--shell-radius-sm);
+        background: var(--color-brand-subtle);
+        border: 1px solid var(--color-brand-border);
+        padding: 0.0625rem 0.375rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--color-brand-text);
+    }
+
+    /*
+     * On a phone the row stops being a row.
+     *
+     * Four things abreast — mark, text, action, menu — needs about 380px of
+     * width before the text column is wide enough to set a sentence in. Below
+     * that the action and the menu keep their size (they are targets, they
+     * cannot shrink) and every pixel comes out of the words instead, so
+     * titles break mid-phrase and a one-line description runs to three.
+     *
+     * So the action drops to its own full-width line underneath. The mark,
+     * the text and the dismiss stay on the first line — the text gets the
+     * whole width back, and the action becomes a proper full-width button
+     * rather than a squeezed one.
+     */
+    @media (max-width: 639px) {
+        .todo-row,
+        .biz-row {
+            flex-wrap: wrap;
+            row-gap: 0.75rem;
+            padding: 0.875rem;
+        }
+
+        .todo-row > .todo-action,
+        .biz-row > .biz-row-action {
+            order: 5;
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* Keeps the dismiss and the overflow menu beside the title rather
+           than letting them wrap under it with the action. */
+        .todo-row > .row-menu-trigger,
+        .biz-row > .row-menu-trigger {
+            order: 4;
+        }
+    }
+
+    /* ── Home: the ask box ──────────────────────────────────────────────── */
+
+    .ask-box {
+        border-radius: var(--radius-card);
+        border: 1px solid var(--color-brand-border);
+        background:
+            linear-gradient(180deg, var(--color-brand-subtle) 0%, var(--color-card-bg) 55%);
+        padding: 1.125rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .ask-box-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 0.875rem;
+    }
+
+    .ask-box-mark {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand);
+        color: var(--color-ink);
+    }
+
+    .ask-thread {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-height: 20rem;
+        overflow-y: auto;
+        margin-bottom: 0.75rem;
+        padding-right: 0.25rem;
+    }
+
+    .ask-turn {
+        max-width: 88%;
+        border-radius: var(--radius-lg);
+        padding: 0.5625rem 0.75rem;
+        font-size: 0.875rem;
+        line-height: 1.55;
+    }
+
+    .ask-turn-user {
+        align-self: flex-end;
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+        font-weight: 500;
+    }
+
+    .ask-turn-assistant {
+        align-self: flex-start;
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+        color: var(--color-text-body);
+    }
+
+    .ask-form {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        padding: 0.25rem 0.25rem 0.25rem 1rem;
+    }
+
+    .ask-form:focus-within {
+        border-color: var(--color-brand);
+    }
+
+    .ask-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        padding: 0.5rem 0;
+        font-size: 0.9375rem;
+        color: var(--color-text-main);
+        outline: none;
+    }
+
+    .ask-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    .ask-send {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.125rem;
+        height: 2.125rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            opacity 0.15s ease;
+    }
+
+    .ask-send:hover:not(:disabled) {
+        background: var(--color-brand-hover);
+    }
+
+    .ask-send:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    .ask-suggestion {
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        padding: 0.3125rem 0.6875rem;
+        font-size: 0.75rem;
+        color: var(--color-text-body);
+        cursor: pointer;
+        transition:
+            border-color 0.15s ease,
+            background-color 0.15s ease;
+    }
+
+    .ask-suggestion:hover {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+    }
+
+    .ask-page-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--color-brand-border);
+        background: var(--color-brand-subtle);
+        padding: 0.1875rem 0.5625rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-ink-soft);
+        cursor: pointer;
+    }
+
+    .ask-page-chip:hover {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    /* ── Home: what the tool covers ─────────────────────────────────────── */
+
+    .feature-card {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        padding: 1rem;
+        transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    .feature-card:hover {
+        border-color: var(--color-brand-border);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .feature-icon {
+        display: grid;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    /* ── Business menu ──────────────────────────────────────────────────── */
+
+    .biz-trigger {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.25rem 0.5rem;
+        color: var(--color-text-on-dark);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            border-color 0.15s ease;
+    }
+
+    .biz-trigger:hover {
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .biz-trigger:disabled {
+        opacity: 0.6;
+    }
+
+    .biz-mark {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: var(--radius-sm);
+        background: var(--color-brand);
+        color: var(--color-ink);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+
+    .biz-mark-lg {
+        width: 2.25rem;
+        height: 2.25rem;
+        font-size: 0.8125rem;
+    }
+
+    .biz-mark-sm {
+        width: 1.5rem;
+        height: 1.5rem;
+        font-size: 0.625rem;
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .biz-panel {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        right: 0;
+        z-index: 60;
+        width: 17rem;
+        overflow: hidden;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.12s ease-out;
+    }
+
+    .biz-head {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        padding: 0.875rem;
+        background: var(--color-brand-subtle);
+    }
+
+    .biz-section {
+        padding: 0.375rem;
+    }
+
+    .biz-section-divided {
+        border-top: 1px solid var(--color-border-light);
+    }
+
+    .biz-label {
+        padding: 0.375rem 0.5rem 0.25rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+    }
+
+    .biz-item {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--color-text-body);
+        cursor: pointer;
+        text-align: left;
+    }
+
+    .biz-item:hover {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    /* ── Account notices ────────────────────────────────────────────────── */
+
+    /* A card in the same language as the bar and the rail: their surface,
+       their hairline, their 5px corner. It used to be a 16px-cornered slab
+       of saturated brand fill with a hard --color-brand-hover outline and
+       white-tinted panels inside it, which read as another product's
+       component dropped onto the page — and those hard-coded
+       rgba(255,255,255,…) fills became pale smears the moment the shell
+       went dark. Tone is carried by the icon and one accent edge now,
+       which is as much as a notice this quiet needs. */
+    .notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding: 0.875rem 1rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--color-text-body);
+    }
+
+    /* The one bit of colour: a bar down the leading edge, drawn as the
+       border itself so it cannot add width and shift the contents. */
+    .notice-brand {
+        border-left: 3px solid var(--color-brand);
+    }
+
+    .notice-warning {
+        border-left: 3px solid var(--color-warning);
+    }
+
+    .notice-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+    }
+
+    .notice-body {
+        margin-top: 0.125rem;
+        font-size: 0.8125rem;
+        color: var(--color-text-muted);
+    }
+
+    .notice-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: var(--shell-radius-sm);
+        background: var(--shell-tint);
+    }
+
+    .notice-brand .notice-icon {
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .notice-warning .notice-icon {
+        background: var(--color-warning-subtle);
+        color: var(--color-warning);
+    }
+
+    /* The same box as .topbar-icon, given a label. */
+    .notice-action {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 0.25rem;
+        align-self: center;
+        height: 2rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--shell-text-strong);
+        transition:
+            background-color 0.15s ease,
+            border-color 0.15s ease;
+    }
+
+    .notice-action:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    @media (max-width: 639px) {
+        /* The action drops under the text rather than squeezing beside it. */
+        .notice {
+            flex-wrap: wrap;
+        }
+
+        .notice-action {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    /* ── Command palette ────────────────────────────────────────────────── */
+
+    .palette-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 12vh 1rem 1rem;
+        background: rgba(9, 15, 28, 0.5);
+        backdrop-filter: blur(3px);
+        animation: palette-fade 0.12s ease-out;
+    }
+
+    .palette {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: 40rem;
+        max-height: 70vh;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.14s ease-out;
+    }
+
+    .palette-head {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .palette-input {
+        min-width: 0;
+        flex: 1;
+        background: transparent;
+        padding: 1rem 0;
+        font-size: 0.9375rem;
+        color: var(--color-text-main);
+        outline: none;
+    }
+
+    .palette-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    .palette-clear {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-border-light);
+        color: var(--color-text-muted);
+        cursor: pointer;
+    }
+
+    .palette-clear:hover {
+        color: var(--color-text-main);
+    }
+
+    .palette-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+
+    .palette-group + .palette-group {
+        margin-top: 0.25rem;
+    }
+
+    .palette-group-label {
+        padding: 0.5rem 0.625rem 0.25rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+    }
+
+    .palette-row {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem 0.625rem;
+        color: var(--color-text-body);
+        cursor: pointer;
+        text-align: left;
+    }
+
+    /* Driven by the cursor, not by :hover — the keyboard has to be able to move
+       the highlight, and two independent highlights (one following the mouse,
+       one following the arrows) is the classic way these go wrong. */
+    .palette-row-active {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-row-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.875rem;
+        height: 1.875rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-row-active .palette-row-icon {
+        background: var(--color-brand);
+        color: var(--color-ink);
+    }
+
+    .palette-mark {
+        background: transparent;
+        color: inherit;
+        font-weight: 700;
+        text-decoration: underline;
+        text-decoration-color: var(--color-brand-active);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 2px;
+    }
+
+    .palette-soon {
+        flex: none;
+        border-radius: var(--radius-pill);
+        background: var(--color-border-light);
+        padding: 0.0625rem 0.375rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        color: var(--color-text-muted);
+    }
+
+    /* The ask row sits above the matches rather than among them: it is not one
+       more result, it is the other thing this box can do. */
+    .assistant-ask {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        margin-bottom: 0.25rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--color-brand-border);
+        padding: 0.5rem 0.625rem;
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.15s ease;
+    }
+
+    .assistant-ask:hover {
+        background: var(--color-brand-subtle);
+    }
+
+    .assistant-ask-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.875rem;
+        height: 1.875rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand);
+        color: var(--color-ink);
+    }
+
+    .assistant-question {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.25rem 0.75rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .assistant-back {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border-light);
+        color: var(--color-text-muted);
+        cursor: pointer;
+    }
+
+    .assistant-back:hover {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-foot {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.875rem;
+        padding: 0.5rem 1rem;
+        border-top: 1px solid var(--color-border-light);
+        background: var(--color-site-bg);
+        font-size: 0.6875rem;
+        color: var(--color-text-muted);
+    }
+
+    .palette-hint {
+        display: inline-flex;
+        min-width: 1.125rem;
+        justify-content: center;
+        border: 1px solid var(--color-border-light);
+        border-radius: 4px;
+        padding: 0 0.1875rem;
+        font-family: var(--font-mono);
+    }
+
+    @media (max-width: 639px) {
+        .palette-backdrop {
+            padding-top: 6vh;
+        }
+
+        /* The keyboard hints are the first thing to go on a touch screen —
+           there is no keyboard to hint at. */
+        .palette-foot > :not(:last-child) {
+            display: none;
+        }
+    }
+
+    @keyframes palette-fade {
+        from {
+            opacity: 0;
+        }
+    }
+
+
+    .rail-action-footer {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--shell-border);
+        background: transparent;
+        color: var(--shell-text);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            border-color 0.15s ease,
+            color 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .rail-action-footer:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+
+
+    @keyframes context-flyout-slide-up {
+        from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.96);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @keyframes context-flyout-slide-down {
+        from {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(4px) scale(0.98);
+        }
+    }
+
+    /* Spinner animation for loading states */
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .animate-spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes context-flyout-slide-up {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes context-flyout-slide-down {
+        from {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    @keyframes context-flyout-slide-right {
+        from {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* ── The two menus ──────────────────────────────────────────────────────
+       The account's menu and the open business's, divided by a line so the
+       rail reads as two things rather than one long list in which "Home" and
+       "Purchasing" appear to be the same kind of entry. */
+
+    .rail-primary {
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .rail-context {
+        padding: 10px 8px;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail-context {
+        padding: 10px 4px;
+    }
+
+    .primary-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    /* Compact: the same entries as a row of icons.
+
+       It scrolls sideways rather than dividing the width between however many
+       there are. Four fit today; the fifth would squeeze all of them to
+       something unhittable, and the tenth would be a few pixels wide. Scrolling
+       means adding an entry costs the existing ones nothing. */
+    .primary-strip {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .primary-strip::-webkit-scrollbar {
+        display: none;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .primary-strip {
+        flex-direction: column;
+        overflow-x: visible;
+        overflow-y: auto;
+    }
+
+    /* While they all fit they share the rail's width evenly — four icons spread
+       across it reads as a row of equals rather than a huddle in one corner.
+       min-width is what stops that becoming a squeeze: past the point where
+       they would shrink below a hittable size, the strip scrolls instead. */
+    .primary-chip {
+        display: grid;
+        flex: 1 0 auto;
+        place-items: center;
+        min-width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 5px;
+        color: var(--shell-text);
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    /* Collapsed there is one column, so they stack at a fixed size instead. */
+    html.rail-collapsed:not(.rail-peek) .primary-chip {
+        flex: none;
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+
+    .primary-chip:hover {
+        background: var(--shell-active-soft);
+        color: var(--shell-text-strong);
+    }
+
+    .primary-chip.is-active {
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+    
+    .primary-chip.is-active:hover {
+        background: var(--shell-active-soft);
+    }
+
+    /* ── The workspace and business selects ─────────────────────────────── */
+
+    .context-picker {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    /* ── The mark that stands for a workspace or a business ─────────────── */
+
+    .badge-wrap {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        overflow: hidden;
+        /* The same corner every small surface in the shell uses. It was
+           `rounded-lg`, and its overlays were `rounded-full` — one mark, two
+           shapes, neither of them the shell's. */
+        border-radius: var(--shell-radius-sm);
+        border: 1px solid var(--shell-border);
+        /* Kept even when an image fills the tile: a logo is usually a
+           transparent PNG, and whatever the artwork does not cover has to be
+           something rather than the page showing through. */
+        background: var(--color-brand-subtle);
+        color: var(--color-text-main);
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .badge-sm {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.6875rem;
+    }
+
+    .badge-md {
+        width: 2.5rem;
+        height: 2.5rem;
+        font-size: 0.8125rem;
+    }
+
+    .badge-lg {
+        width: 3rem;
+        height: 3rem;
+        font-size: 0.9375rem;
+    }
+
+    /* Full width and height of the tile, and `contain` so nothing is cropped —
+       `cover` took the ends off anything wider than it was tall, which is most
+       logos. */
+    .badge-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .badge-overlay {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        display: grid;
+        place-items: center;
+        width: 1rem;
+        height: 1rem;
+        overflow: hidden;
+        border-radius: var(--shell-radius-sm);
+        border: 1px solid var(--shell-bg);
+        background: var(--shell-bg);
+        color: var(--shell-text);
+    }
+
+    .badge-star {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        display: grid;
+        place-items: center;
+        width: 1.125rem;
+        height: 1.125rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    /* ── The context picker, in the header ──────────────────────────────── */
+
+    .context-anchor {
+        position: relative;
+        flex: none;
+        min-width: 0;
+    }
+
+    /*
+     * A bordered button, sized against the header rather than the rows of a
+     * menu: 2.25rem tall, which is what every other control in this bar is, so
+     * the left of the header and the right of it sit on the same baseline.
+     */
+    /* 2.75rem, not 2.25. The tile inside is 32px; at 36px tall that left two
+       pixels of air above and below it and the button read as shrink-wrapped
+       around its own contents. */
+    .context-trigger {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        max-width: 16rem;
+        height: 2.25rem;
+        /* Left/right matches the breathing room the fixed height already
+           gives the badge top and bottom — (36px − 26px) / 2 — rather than
+           a wider number picked on its own that made the row read taller
+           than it is wide. */
+        padding: 0 0.3125rem;
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        background: transparent;
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            border-color 0.12s ease;
+    }
+
+    .context-trigger:hover:not(:disabled) {
+        background: var(--shell-hover);
+        border-color: var(--color-brand-border);
+    }
+
+    /* Open holds the hover tint and firms the border — the same "this is the
+       one that is doing something" the rail's open department wears, rather
+       than a second idea about what open looks like. */
+    .context-trigger.is-open {
+        background: var(--shell-tint);
+        border-color: var(--color-border-strong);
+    }
+
+    .context-trigger:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+    .context-trigger.is-busy,
+    .context-trigger:disabled {
+        cursor: wait;
+        opacity: 0.7;
+    }
+
+    .context-trigger-mark {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 1.625rem;
+        height: 1.625rem;
+        overflow: hidden;
+        border-radius: var(--shell-radius-sm);
+        color: var(--shell-text);
+    }
+
+    /* Scale down the badge to fit inside the trigger mark container. */
+    .context-trigger-mark .badge-sm {
+        width: 1.625rem;
+        height: 1.625rem;
+        font-size: 0.5625rem;
+    }
+
+    .context-trigger-mark .badge-overlay {
+        width: 0.8125rem;
+        height: 0.8125rem;
+        right: -2px;
+        bottom: -2px;
+    }
+
+    /* The words go when the header runs out of room. The mark identifies the
+       business on its own, and on a phone the header has a menu button, a
+       logo, search and an avatar to fit first. */
+    .context-trigger-text {
+        display: none;
+        min-width: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        line-height: 1.15;
+    }
+
+    /* Text stays hidden through tablet too — the trigger reads fine as a
+       badge and a caret, and the room it frees up is what keeps the rest of
+       the bar from crowding at those widths. */
+    @media (min-width: 880px) {
+        .context-trigger-text {
+            display: flex;
+        }
+    }
+
+    .context-trigger-name {
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--shell-text-strong);
+    }
+
+    .context-trigger-meta {
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.6875rem;
+        color: var(--shell-text);
+    }
+
+    .context-trigger-caret {
+        flex: none;
+        color: var(--shell-text);
+        transition: transform 0.15s ease;
+    }
+
+    .context-trigger.is-open .context-trigger-caret {
+        transform: rotate(180deg);
+    }
+
+    /* Below 340px the caret is the first thing to go — the badge alone is
+       still an obvious tap target, and the row next to it needs the room
+       more than this needs the extra affordance. */
+    @media (max-width: 339px) {
+        .context-trigger-caret {
+            display: none;
+        }
+    }
+
+    /*
+     * The menu itself.
+     *
+     * A declared width, not one measured from the trigger. The trigger is a
+     * button a few words wide and its width changes with the length of a
+     * business name; a menu that followed it would change size every time
+     * somebody switched. This is the width the contents need — wide enough for
+     * a name, a code and a currency on two lines — and it stays that width.
+     */
+    .context-menu {
+        position: fixed;
+        z-index: 120;
+        display: flex;
+        flex-direction: column;
+        width: 17.5rem;
+        overflow: hidden;
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+        animation: context-flyout-slide-up 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .context-menu.is-exiting {
+        animation: context-flyout-slide-down 0.12s cubic-bezier(0.4, 0, 1, 1);
+        opacity: 0;
+    }
+
+    /* Below 640px an anchored card has nowhere good to sit — full screen
+       instead, flush under the header like the search flyout. */
+    @media (max-width: 879px) {
+        .context-menu {
+            top: var(--header-bottom);
+            right: 0;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            max-width: none;
+            max-height: none !important;
+            border-radius: 0;
+            border: 0;
+            border-top: 1px solid var(--shell-border);
+        }
+    }
+
+    .context-field {
+        display: block;
+    }
+
+    .context-label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-bottom: 3px;
+        font-size: 0.625rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        text-transform: none;
+        color: var(--color-text-main);
+    }
+
+    /* ── The list inside the menu ───────────────────────────────────────── */
+
+    /*
+     * Just the contents. The .context-menu wrapper owns the card — border,
+     * background, shadow, corner — and this used to draw a second, identical
+     * one inside it, which showed as a doubled edge down every side.
+     */
+    .context-flyout {
+        position: relative;
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+    }
+
+    /* 14px of side padding, which is where a row's badge starts: 6px of list
+       gutter plus the 8px a row carries itself. The magnifier then sits in the
+       same column as every badge under it instead of four pixels adrift. */
+    .context-search {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .context-search-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        font-size: 0.8125rem;
+        color: var(--shell-text-strong);
+        outline: none;
+    }
+
+    .context-search-input::placeholder {
+        color: var(--shell-text);
+        opacity: 0.7;
+    }
+
+    .context-search-icon {
+        flex: none;
+        color: var(--shell-text);
+    }
+
+    /* Over the whole panel. The switch clears every cached query in the
+       application, so for that moment the panel is out of date, not one row of
+       it — and a spinner on the row you clicked suggests the rest is still
+       good. */
+    .context-busy {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        background: color-mix(in srgb, var(--shell-bg) 85%, transparent);
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--shell-text);
+    }
+
+    .context-busy svg {
+        color: var(--color-brand);
+    }
+    
+    .context-add-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        margin: 0.375rem 0.375rem 0;
+    }
+
+    .context-add {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        gap: 0.4375rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--color-brand-border);
+        padding: 0.4375rem 0.625rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-ink-soft);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            border-color 0.12s ease;
+    }
+
+    .context-add:hover:not(.is-disabled) {
+        background: var(--color-brand-subtle);
+        border-color: var(--color-brand);
+    }
+
+    /* Disabled rather than hidden: "you cannot add another" is information, and
+       a button that quietly disappears at the ceiling teaches nobody why. */
+    .context-add.is-disabled {
+        border-color: var(--color-border-light);
+        color: var(--color-text-muted);
+        cursor: default;
+        padding-right: 2.5rem;
+    }
+
+    .context-add-note {
+        margin-left: auto;
+        border-radius: var(--radius-pill);
+        background: var(--color-border-light);
+        padding: 0.0625rem 0.375rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+    }
+    
+    /* Warning icon for plan limit */
+    .context-limit-icon {
+        position: absolute;
+        right: 0.625rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        border: 0;
+        background: var(--color-card-bg);
+        cursor: pointer;
+        color: var(--color-warning);
+        border-radius: 6px;
+        transition: background-color 0.12s ease;
+        z-index: 10;
+        pointer-events: all;
+    }
+    
+    .context-limit-icon:hover {
+        background: rgba(245, 158, 11, 0.1);
+    }
+    
+    /* Limit info flyout - rendered in portal */
+    .context-limit-flyout {
+        position: fixed;
+        z-index: 130;
+        padding: 0.75rem;
+        border-radius: var(--radius-md);
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+        box-shadow: var(--shadow-md);
+        width: 16rem;
+    }
+    
+    /* Arrow indicator - looks like border curves around it */
+    .context-limit-flyout-arrow {
+        position: absolute;
+        left: -7px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-top: 7px solid transparent;
+        border-bottom: 7px solid transparent;
+        border-right: 7px solid var(--color-card-bg);
+        filter: drop-shadow(-1px 0 0 var(--color-border-light));
+    }
+    
+    .context-limit-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .context-limit-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+    }
+    
+    .context-limit-desc {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: var(--color-text-body);
+        margin: 0;
+    }
+
+    .context-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 6px;
+    }
+
+    /* A row in a picker, not a link in a menu — so unlike the nav rows this
+       one keeps a background for the thing currently chosen. "Which of these
+       am I on" is the whole question the panel is open to answer, and colour
+       alone is too quiet next to a list of near-identical names. */
+    .context-option {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--shell-radius);
+        padding: 6px 8px;
+        font-size: 0.8125rem;
+        font-weight: 400;
+        color: var(--shell-text);
+        cursor: pointer;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .context-option:hover:not(:disabled) {
+        background: var(--shell-tint);
+        color: var(--shell-text-strong);
+    }
+
+    /* The panel opens with the search box focused and is driven from the
+       keyboard as often as the pointer, so a row you have tabbed to has to be
+       as visible as one you are hovering. Nothing in the rail needed this,
+       because nothing in the rail is a listbox. */
+    .context-option:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+    .context-option.is-current {
+        background: var(--shell-tint);
+        color: var(--color-brand);
+        font-weight: 500;
+    }
+
+    .context-option:disabled {
+        cursor: default;
+    }
+
+    /* A wrapper around a .badge, which brings its own 32px box, corner and
+       background — so this sets neither. When there is no badge to show it
+       falls back to initials and needs the tile itself, hence the shared
+       look below. */
+    .context-option-mark {
+        display: grid;
+        flex: none;
+        place-items: center;
+        min-width: 2rem;
+        min-height: 2rem;
+        border-radius: var(--shell-radius-sm);
+        color: var(--color-ink-soft);
+        font-size: 0.6875rem;
+        font-weight: 600;
+    }
+
+    /* Only when it is holding raw initials rather than a badge. */
+    .context-option-mark:not(:has(.badge-wrap)):not(:has(.badge)) {
+        background: var(--color-brand-subtle);
+        border: 1px solid var(--shell-border);
+    }
+
+    /* Two lines, so a name and what tells it apart can both be full-width
+       rather than competing for one row. */
+    .context-option-text {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        flex-direction: column;
+        align-items: flex-start;
+        line-height: 1.2;
+    }
+
+    .context-option-name {
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .context-option-meta {
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.6875rem;
+        font-weight: 400;
+        color: var(--shell-text);
+    }
+
+    /* Stays grey on the chosen row rather than taking the brand colour with
+       the label. Two cyan things on one line is one too many; the tick is
+       there to be found, not to be read. */
+    .context-option.is-current .context-option-meta {
+        color: var(--shell-text);
+    }
+
+    .context-option-check {
+        flex: none;
+        color: var(--color-brand);
+    }
+
+    /* White on the brand fill. It was --color-ink — near-black initials on a
+       mid-cyan square, which is the one pairing in this palette that fails to
+       separate at 10px. */
+    .context-option.is-current .context-option-mark {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    /* Indented to 8px so the heading starts in the same column as the labels
+       under it — the same relationship a pinned department heading has with
+       its pages. It was at 12px, which left every heading in the panel four
+       pixels out from the list it named. */
+    .context-flyout-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0 8px;
+        margin: 10px 0 3px;
+    }
+
+    .context-flyout-head:first-child {
+        margin-top: 0;
+    }
+
+    /* Same heading the pinned list uses. */
+    .context-flyout-title {
+        padding: 0;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--shell-text);
+    }
+
+    /* The way out of the picker and into the full screen. Quiet at rest — it
+       is not what the panel is for — and it takes the same brand colour on
+       hover that a chosen row wears, so the panel only ever speaks in two
+       colours. */
+    .context-manage {
+        margin-left: auto;
+        flex: none;
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--shell-text);
+        cursor: pointer;
+        transition: color 0.12s ease;
+    }
+
+    .context-manage:hover {
+        color: var(--color-brand);
+    }
+
+    .context-empty {
+        padding: 1rem 8px;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--shell-text);
+    }
+
+    /* ── Context main flyout sections ───────────────────────────────────── */
+
+    /* Each section: a heading row (title + Manage link) above a tappable option
+       row showing the currently active selection. The option row, when clicked,
+       opens the submenu beside this flyout. */
+    .context-section {
+        padding: 6px 6px 8px;
+    }
+
+    .context-section-sep {
+        height: 1px;
+        background: var(--shell-border);
+        margin: 0 6px;
+    }
+
+    .context-section-head {
+        display: flex;
+        align-items: center;
+        padding: 4px 8px 5px;
+    }
+
+    /* Normal-weight title, not uppercase — reads as a label, not a heading. */
+    .context-section-title {
+        flex: 1;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--shell-text);
+    }
+
+    /* The option row inside a section doubles as the trigger for the submenu. */
+    .context-section-option {
+        border-radius: var(--shell-radius);
+    }
+
+    /* Caret on the right — signals a submenu will open beside this flyout. */
+    .context-sub-caret {
+        flex: none;
+        color: var(--shell-text);
+        transition: color 0.12s ease;
+    }
+
+    .context-option.is-sub-open .context-sub-caret,
+    .context-option.is-sub-open .context-option-name {
+        color: var(--color-brand);
+    }
+
+    .context-option.is-sub-open {
+        background: var(--shell-tint);
+    }
+
+    /* Muted placeholder when no business is selected. */
+    .context-no-selection {
+        color: var(--shell-text) !important;
+        font-style: italic;
+    }
+
+    /* ── Submenu panel ───────────────────────────────────────────────────── */
+
+    /* Positioned to the right of the main flyout, aligned to the button that
+       opened it. Same card style as .context-menu; one z-index higher so it
+       clearly sits on top of it. */
+    .context-submenu {
+        position: fixed;
+        z-index: 121;
+        display: flex;
+        flex-direction: column;
+        width: 17.5rem;
+        max-height: min(85vh, 32rem);
+        overflow: visible; /* tooltip portals out — no clip needed here */
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        background: var(--shell-bg);
+        box-shadow: var(--shadow-lg);
+        animation: context-flyout-slide-right 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Below 640px this drills down full screen instead of floating beside a
+       main card that no longer has room to exist — see ContextPicker's
+       mobileFull state. The back header inside stands in for "beside it". */
+    @media (max-width: 879px) {
+        .context-submenu {
+            top: var(--header-bottom) !important;
+            right: 0;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            max-width: none;
+            max-height: none !important;
+            border-radius: 0;
+            border: 0;
+            border-top: 1px solid var(--shell-border);
+            animation: context-flyout-slide-up 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    }
+
+    /* The inner flex column clips its own scrolling list without clipping the
+       portaled tooltip — the outer wrapper stays overflow:visible. */
+    .context-subflyout {
+        overflow: hidden;
+        border-radius: var(--shell-radius);
+    }
+
+    /* Contents of the submenu — search, add button, scrollable list, footer. */
+    .context-subflyout {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        flex-direction: column;
+    }
+
+    .context-subflyout-mobile-head {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .context-back {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--shell-radius-sm);
+        color: var(--shell-text-strong);
+        cursor: pointer;
+        transition: background-color 0.1s ease;
+    }
+
+    .context-back:hover {
+        background: var(--shell-hover);
+    }
+
+    .context-subflyout-mobile-title {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--shell-text-strong);
+    }
+
+    /* Manage link at the bottom of the submenu. */
+    .context-subflyout-foot {
+        flex: none;
+        display: flex;
+        align-items: center;
+        padding: 8px 14px;
+        border-top: 1px solid var(--shell-border);
+    }
+
+    /* Limit tooltip — portaled to <body> so it escapes the submenu's stacking
+       context and is never clipped by overflow. Appears beside the warning icon
+       on hover; position set in JS from the icon's getBoundingClientRect(). */
+    .context-limit-tooltip {
+        position: fixed;
+        z-index: 130;
+        width: 14rem;
+        padding: 0.625rem 0.75rem;
+        border-radius: var(--shell-radius);
+        background: var(--shell-bg);
+        border: 1px solid var(--shell-border);
+        box-shadow: var(--shadow-md);
+        pointer-events: none;
+    }
+
+    /* ── Command palette ────────────────────────────────────────────────── */
+
+    .palette-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 12vh 1rem 1rem;
+        background: rgba(9, 15, 28, 0.5);
+        backdrop-filter: blur(3px);
+        animation: palette-fade 0.12s ease-out;
+    }
+
+    .palette {
+        position: relative;
+        display: flex;
+        width: 100%;
+        max-width: 40rem;
+        max-height: 70vh;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.14s ease-out;
+    }
+
+    .palette-head {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .palette-input {
+        min-width: 0;
+        flex: 1;
+        background: transparent;
+        padding: 1rem 0;
+        font-size: 0.9375rem;
+        color: var(--color-text-main);
+        outline: none;
+    }
+
+    .palette-input::placeholder {
+        color: var(--color-text-muted);
+    }
+
+    .palette-clear {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-pill);
+        background: var(--color-border-light);
+        color: var(--color-text-muted);
+        cursor: pointer;
+    }
+
+    .palette-clear:hover {
+        color: var(--color-text-main);
+    }
+
+    .palette-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+
+    .palette-group + .palette-group {
+        margin-top: 0.25rem;
+    }
+
+    .palette-group-label {
+        padding: 0.5rem 0.625rem 0.25rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+    }
+
+    .palette-row {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem 0.625rem;
+        color: var(--color-text-body);
+        cursor: pointer;
+        text-align: left;
+    }
+
+    /* Driven by the cursor, not by :hover — the keyboard has to be able to move
+       the highlight, and two independent highlights (one following the mouse,
+       one following the arrows) is the classic way these go wrong. */
+    .palette-row-active {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-row-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.875rem;
+        height: 1.875rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-row-active .palette-row-icon {
+        background: var(--color-brand);
+        color: var(--color-ink);
+    }
+
+    .palette-mark {
+        background: transparent;
+        color: inherit;
+        font-weight: 700;
+        text-decoration: underline;
+        text-decoration-color: var(--color-brand-active);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 2px;
+    }
+
+    .palette-soon {
+        flex: none;
+        border-radius: var(--radius-pill);
+        background: var(--color-border-light);
+        padding: 0.0625rem 0.375rem;
+        font-size: 0.625rem;
+        font-weight: 600;
+        color: var(--color-text-muted);
+    }
+
+    /* The ask row sits above the matches rather than among them: it is not one
+       more result, it is the other thing this box can do. */
+    .assistant-ask {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        margin-bottom: 0.25rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--color-brand-border);
+        padding: 0.5rem 0.625rem;
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.15s ease;
+    }
+
+    .assistant-ask:hover {
+        background: var(--color-brand-subtle);
+    }
+
+    .assistant-ask-icon {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.875rem;
+        height: 1.875rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand);
+        color: var(--color-ink);
+    }
+
+    .assistant-question {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.25rem 0.75rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .assistant-back {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border-light);
+        color: var(--color-text-muted);
+        cursor: pointer;
+    }
+
+    .assistant-back:hover {
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+    }
+
+    .palette-foot {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 0.875rem;
+        padding: 0.5rem 1rem;
+        border-top: 1px solid var(--color-border-light);
+        background: var(--color-site-bg);
+        font-size: 0.6875rem;
+        color: var(--color-text-muted);
+    }
+
+    .palette-hint {
+        display: inline-flex;
+        min-width: 1.125rem;
+        justify-content: center;
+        border: 1px solid var(--color-border-light);
+        border-radius: 4px;
+        padding: 0 0.1875rem;
+        font-family: var(--font-mono);
+    }
+
+    @media (max-width: 639px) {
+        .palette-backdrop {
+            padding-top: 6vh;
+        }
+
+        /* The keyboard hints are the first thing to go on a touch screen —
+           there is no keyboard to hint at. */
+        .palette-foot > :not(:last-child) {
+            display: none;
+        }
+    }
+
+    @keyframes palette-fade {
+        from {
+            opacity: 0;
+        }
+    }
+
+    @keyframes palette-rise {
+        from {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+    }
+
+    /* ── Controls ───────────────────────────────────────────────────────── */
+
+    /* 36px, the same height every control in the shell is — so a field and
+       the button beside it in a row line up instead of the button sitting
+       short against it. Applied to inputs only; nothing here is a textarea. */
+    .field {
+        width: 100%;
+        min-height: 2.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        color: var(--color-text-main);
+        transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    .field::placeholder {
+        color: var(--color-text-subtle);
+    }
+
+    .field:focus {
+        outline: none;
+        border-color: var(--color-brand-border);
+        box-shadow: var(--focus-ring);
+    }
+
+    .field[aria-invalid='true'] {
+        border-color: var(--color-danger);
+    }
+
+    .field:disabled {
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+        cursor: not-allowed;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: var(--radius-md);
+        padding: 0.625rem 1.125rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        line-height: 1.25rem;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            color 0.15s ease,
+            border-color 0.15s ease,
+            transform 0.06s ease;
+        white-space: nowrap;
+    }
+
+    .btn:active:not(:disabled) {
+        transform: translateY(1px);
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .btn-primary {
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: var(--color-brand-hover);
+    }
+
+    .btn-secondary {
+        background: var(--color-card-bg);
+        border-color: var(--color-border-light);
+        color: var(--color-text-main);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+        background: var(--color-brand-subtle);
+        border-color: var(--color-border-strong);
+    }
+
+    .btn-ghost {
+        background: transparent;
+        color: var(--color-text-body);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+        background: var(--color-brand-subtle);
+    }
+
+    .btn-danger {
+        background: var(--color-danger);
+        color: #fff;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+        background: var(--color-danger-hover);
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       The sidebar
+
+       Full viewport height with padding around it. Border around the entire
+       sidebar with consistent spacing inside. Sidebar header has logo and
+       collapse button with border below.
+
+       Two levels. A department folds open to reveal its pages, one department
+       at a time. Ten open at once is the flat list again with extra steps.
+
+       One left edge for the whole rail: consistent padding throughout.
+       ────────────────────────────────────────────────────────────────────── */
+
+    .rail {
+        background: var(--shell-bg);
+        color: var(--shell-text-strong);
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        width: calc(var(--sidebar-width) - var(--sidebar-padding) * 2);
+        margin: var(--sidebar-padding);
+        height: calc(100vh - var(--sidebar-padding) * 2);
+        /*
+         * Clipped, so the rail's edge is what reveals and conceals its
+         * contents while it is peeked — see the peek rules near the top of
+         * this file. Nothing inside needs to escape: the nav scrolls in its
+         * own box and the business switcher's panel is portaled to the body.
+         *
+         * It also makes the rounded corners actually cut the content, which
+         * they were not doing before.
+         */
+        overflow: hidden;
+        /*
+         * Decelerating rather than ease-in-out. A width that starts slowly
+         * reads as hesitation on something the pointer has already asked for;
+         * this leaves immediately and settles. Nothing in JavaScript is timed
+         * against it any more — the contents change on the state change and
+         * only the edge is still moving afterwards, so this duration is free
+         * to be tuned on its own.
+         */
+        transition:
+            width 240ms cubic-bezier(0.32, 0.72, 0, 1),
+            box-shadow 240ms ease,
+            /* The mobile drawer sliding in. It lives here rather than as a
+               `transition-transform` utility on the element, because a
+               transition utility does not merge with this declaration — it
+               replaces it, and the width stops animating entirely. */
+            transform 200ms ease;
+        z-index: 60; /* Above topbar */
+        top: 0;
+        left: 0;
+        bottom: 0;
+    }
+
+    /* Mobile: sidebar overlays the page, dropped below the header with the
+       same gap the header's own flyouts use — flush against it read as
+       broken, not intentional. */
+    @media (max-width: 879px) {
+        .rail {
+            z-index: 50; /* Below topbar on mobile */
+            top: calc(var(--header-bottom) + var(--sidebar-padding));
+            height: calc(100vh - var(--header-bottom) - var(--sidebar-padding) * 2);
+            margin-top: 0;
+            /* Collapsed is a desktop preference, carried on <html> so it
+               survives navigation. Mobile has no peek to widen back out of —
+               it is a full-width drawer driven by the menu button alone, or
+               a collapsed cookie from a desktop session would leave a phone
+               stuck with a 60px sliver nobody can read. */
+            width: calc(var(--sidebar-open) - var(--sidebar-padding) * 2);
+        }
+
+        /*
+         * Closed, and actually off the screen.
+         *
+         * This was Tailwind's -translate-x-full, which shifts an element by
+         * exactly its own width — correct only for a drawer flush against
+         * the edge. This one is inset by --sidebar-padding, so its own
+         * width put its right edge back at the margin rather than at zero
+         * and left a strip of rail down the side of every page. The margin
+         * has to be in the sum; the extra 2px carries the border and any
+         * sub-pixel rounding past the edge with it.
+         */
+        .rail:not(.is-open) {
+            transform: translateX(calc(-100% - var(--sidebar-padding) - 2px));
+        }
+    }
+
+    .rail-head {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: var(--sidebar-header-height);
+        padding: 0 12px;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .rail-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1;
+        min-width: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    /* Fixed, in every state. The mark is the one thing on screen that must not
+       move while the rail widens — it is what somebody is looking at to know
+       the sidebar is still the sidebar — so its box never changes and the
+       wordmark appears beside it instead. */
+    .brand-mark {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+        border-radius: 8px;
+        object-fit: cover;
+    }
+
+    .rail-wordmark {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-family: var(--font-heading);
+        font-size: 1.0625rem;
+        font-weight: 700;
+        color: var(--shell-text-strong);
+    }
+
+    /* Narrow, the header holds the mark alone and centres it — there is no
+       room for a control beside it, and none is needed: hovering the rail
+       widens it, and the control appears in the header that comes with the
+       extra width. */
+    html.rail-collapsed:not(.rail-peek) .rail-head {
+        justify-content: center;
+        padding: 0;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail-logo {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+    }
+
+    /* No `.rail-logo img` sizing. It used to set 32px wide and 40px narrow,
+       which is precisely the resize on reveal this was meant to stop — and
+       being a descendant selector it quietly outranked .brand-mark's own box.
+       The mark owns its size now, in one place, for every state. */
+
+    /*
+     * A scrollbar that fades in rather than sitting there.
+     *
+     * `.is-scroll-visible` is set by useScrollReveal — on hover, immediately;
+     * on scroll, immediately, and held for nearly a second after the last
+     * scroll event so a hand moving toward the bar does not watch it vanish
+     * first. `:hover` stays alongside it as a plain-CSS fallback, and covers
+     * the moment before the effect has attached.
+     *
+     * A native scrollbar has no opacity to animate, so the fade is the alpha
+     * of the thumb's own colour: transparent at rest, the border colour when
+     * shown. Chromium and Firefox each need telling in their own dialect —
+     * `::-webkit-scrollbar-thumb` for one, the standard `scrollbar-color` for
+     * the other — so both are set together and never separately, or the two
+     * engines would fall out of step with each other.
+     */
+    .rail-nav {
+        padding: 10px;
+        overflow-y: auto;
+        flex: 1;
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+        transition: scrollbar-color 0.15s ease;
+    }
+
+    /* Only the class, never :hover. A :hover rule here holds the bar up for
+       as long as the pointer is anywhere over the pane, which no amount of
+       timing in useScrollReveal can override — the class would come off on
+       schedule and the bar would stay lit anyway. Every decision about when
+       this is visible belongs to that hook, in one place. */
+    .rail-nav.is-scroll-visible {
+        scrollbar-color: var(--color-border-strong) transparent;
+    }
+
+    .rail-nav::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .rail-nav::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .rail-nav::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: 3px;
+        transition: background-color 0.15s ease;
+    }
+
+    .rail-nav.is-scroll-visible::-webkit-scrollbar-thumb {
+        background: var(--color-border-strong);
+    }
+
+    /* Darker again under the pointer's own hover on the thumb — the usual
+       "you can grab this" cue, one step past merely being visible. */
+    .rail-nav::-webkit-scrollbar-thumb:hover {
+        background: var(--shell-text);
+    }
+
+    /* No blanket hide for the collapsed rail here on purpose. Usually rows
+       are 40px squares with nothing to scroll, and the browser already
+       omits a scrollbar with nothing behind it — but a business with enough
+       departments can overflow even collapsed, and that case still needs
+       the same hover-to-reveal bar as everywhere else, not a permanently
+       invisible one. */
+
+    .rail-primary {
+        padding: 10px;
+    }
+
+
+    /* Every icon control on a dark surface — the mobile hamburger, the mobile
+       close, the collapse toggle, the top bar's icons — wears the same hairline
+       box and brightens rather than filling on hover. */
+    .rail-action {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--shell-border);
+        background: transparent;
+        color: var(--shell-text);
+        cursor: pointer;
+        transition:
+            background-color 0.15s ease,
+            border-color 0.15s ease,
+            color 0.15s ease;
+    }
+
+    .rail-action:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+        color: var(--shell-text-strong);
+    }
+
+    /* Footer action button - for collapse/expand */
+    .rail-action-footer {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 5px;
+        border: 1px solid var(--shell-border);
+        color: var(--shell-text);
+        background: transparent;
+        cursor: pointer;
+        opacity: 0;
+        transition:
+            opacity 0.15s ease,
+            background-color 0.15s ease,
+            border-color 0.15s ease,
+            color 0.15s ease;
+    }
+
+    .rail-head:hover .rail-action-footer,
+    .rail-action-footer:focus-visible {
+        opacity: 1;
+    }
+
+    .rail-action-footer:hover {
+        border-color: var(--color-border-strong);
+        background: rgba(13, 27, 42, 0.04);
+        color: var(--shell-text-strong);
+    }
+
+    /* Peeked, it is already showing — the pointer is on the rail, which is the
+       gesture that reveals it everywhere else. Waiting for a second hover on
+       the header itself would hide the one control that explains what the
+       widened rail is and how to keep it. */
+    html.rail-peek .rail-action-footer {
+        opacity: 1;
+    }
+
+    /* ── A top-level page ──────────────────────────────────────────────── */
+
+    .nav-flat,
+    .nav-parent {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+        padding: 7px 5px;
+        border-radius: 5px;
+        color: var(--shell-text);
+        text-decoration: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 0.9375rem;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+    
+    .nav-flat:last-child,
+    .nav-parent:last-child {
+        margin-bottom: 0;
+    }
+
+    .nav-flat:hover,
+    .nav-parent:hover {
+        background: var(--shell-tint);
+        color: var(--shell-text-strong);
+    }
+
+    .nav-flat.active {
+        background: rgba(0, 212, 232, 0.08);
+        color: var(--shell-text-strong);
+    }
+    
+    .nav-flat.active:hover {
+        background: var(--shell-tint);
+    }
+
+    .nav-icon {
+        width: 40px;
+        min-width: 40px;
+        flex: 0 0 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+    }
+
+    /* Only set height when collapsed */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-icon {
+        height: 40px;
+    }
+
+    .nav-flat.active .nav-icon {
+        background: transparent;
+        color: var(--shell-text-strong);
+    }
+
+    /* One line each, so the list keeps its rhythm. "Courier & Delivery"
+       wrapping to two lines made its row twice as tall as its neighbours and
+       pushed the badge out of line with every other one. */
+    .nav-label {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ── A department ──────────────────────────────────────────────────── */
+
+    /* Holding the page you are on, it carries the same filled marker a
+       top-level page does. Folded shut it is the only thing saying where you
+       are, and a colour change alone was too quiet to do that job. */
+    .nav-parent.holds-active {
+        background: rgba(0, 212, 232, 0.08);
+        color: var(--shell-text-strong);
+    }
+
+    .nav-parent.holds-active:hover {
+        background: var(--shell-tint);
+        color: var(--shell-text-strong);
+    }
+    
+    .nav-parent.holds-active .nav-caret {
+        opacity: 0.8;
+    }
+
+    /* Unfolded. The row keeps the same tint it takes on hover for as long as
+       it stays open, so the heading reads as one piece with the pages hanging
+       under it rather than as a label that happens to sit above them.
+       Both selectors are "wide enough to have unfolded into": open, or
+       collapsed and currently peeked. Narrow there are no labels under it to
+       be one piece with. */
+    html:not(.rail-collapsed) .nav-group.is-open > .nav-parent,
+    html.rail-peek .nav-group.is-open > .nav-parent {
+        background: var(--shell-tint);
+        color: var(--shell-text-strong);
+    }
+
+    .nav-caret {
+        margin-left: auto;
+        flex: 0 0 auto;
+        opacity: 0.5;
+        transition:
+            transform 0.18s ease,
+            opacity 0.12s ease;
+    }
+
+    .nav-parent:hover .nav-caret {
+        opacity: 0.9;
+    }
+
+    .nav-group.is-open > .nav-parent .nav-caret {
+        transform: rotate(90deg);
+    }
+
+    .nav-group {
+        position: relative;
+        margin-bottom: 4px;
+    }
+
+    .nav-group:last-child {
+        margin-bottom: 0;
+    }
+
+    /* No margin-bottom on .nav-parent, conditional or otherwise. The gap
+       between a heading and its own pages is .nav-children's padding-top
+       instead, because that lives *inside* the animated fold and grows
+       with it. As a margin on the heading it was applied the instant the
+       is-open class flipped, while the fold itself took 0.2s to follow —
+       a 4px jolt at the start of every open and again at every close,
+       which is the shake. Spacing between one closed department and the
+       next is .nav-group's own margin-bottom, above, and only that. */
+
+    /* ── The pages inside it ───────────────────────────────────────────── */
+
+    /* The fold, open and shut.
+       A CSS grid row animating between 0fr and 1fr rather than a max-height
+       guess: max-height has to pick a number bigger than any department will
+       ever be, and then the transition's actual duration is spent mostly on
+       the gap between that guess and the real content, not on the content
+       itself — a three-page department and a nine-page one would visibly
+       animate at different speeds for the same declared time. The fr unit
+       tracks the content's own height instead, so every department opens
+       and closes at the same felt speed regardless of how long it is.
+       Always mounted now rather than conditionally rendered — an element
+       that does not exist yet cannot transition into existing. */
+    .nav-children-shell {
+        display: grid;
+        /* minmax(0, …), not a bare 0fr: a flexible track still reserves its
+           content's automatic minimum size unless told its floor is 0, so a
+           bare 0fr sat at the padding's height instead of collapsing past it. */
+        grid-template-rows: minmax(0, 0fr);
+        /* Both this and .nav-children clip, for two different reasons, and
+           dropping either one brings a bug back. This one hides the item
+           that overflows a collapsed track: .nav-children's own padding is
+           a floor its border box cannot shrink below, so at 0fr the track
+           is 0px tall while the item inside is still 16px — and without
+           this, that 16px (guide line included) draws straight through
+           the gap under every closed department. */
+        overflow: hidden;
+        transition: grid-template-rows 0.2s ease;
+    }
+
+    .nav-children-shell.is-open {
+        grid-template-rows: minmax(0, 1fr);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .nav-children-shell {
+            transition: none;
+        }
+    }
+
+    /* Hung off a line rising from under the parent's icon.
+       The line sits well left of the icon's centre and the gap after it is
+       wide, so the pages read as a list of their own rather than as text
+       pressed up against a rule — and the labels get back the width, which is
+       what stops the longer ones ("Receivable & Payable") ellipsing.
+
+       The 6px/10px vertical space is padding, not margin, deliberately: a
+       grid item's own margin does not shrink as its track does, so a closed
+       shell at 0fr still held it as a visible sliver. Padding is inside the
+       box the track is actually sizing, so it compresses to nothing right
+       along with the row — and it is also what makes .nav-children's own
+       scrollHeight double as "how tall this will be once open", which is
+       what the reveal-scroll in useAccordionReveal reads to start moving
+       the instant the row does, rather than waiting for it to finish.
+
+       The guide line is a pseudo-element sitting 4px inside this box, not
+       this box's own border-left, and that is the whole reason the active
+       dot can be centred on it. overflow: hidden clips at the padding box
+       — which is exactly where a border-left is drawn — so while the line
+       *was* that border, a dot centred on it was half inside the clip and
+       half outside by construction, and no offset could fix it: moving the
+       dot to clear the cut moved it off the line, moving it onto the line
+       put it back under the cut. Four pixels of padding between the clip
+       edge and the line is the room a 7px dot needs to straddle the line
+       and still be whole. The margin/padding split below keeps every row's
+       final x-position identical to what it was. */
+    .nav-children {
+        position: relative;
+        min-height: 0;
+        overflow: hidden;
+        margin-left: 12px;
+        padding: 10px 0 10px 23px;
+    }
+
+    .nav-children::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--shell-border);
+    }
+
+    .nav-child {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 7px 5px;
+        margin-bottom: 4px;
+        border-radius: 5px;
+        font-size: 0.8125rem;
+        line-height: 1.35;
+        /* The same grey as the department above it, one step lighter in weight.
+           These were near-black at weight 300 — darker than their own heading,
+           which read as the child being the more important of the two. */
+        font-weight: 400;
+        color: var(--shell-text);
+        text-decoration: none;
+        transition:
+            background-color 0.12s ease,
+            color 0.12s ease;
+    }
+
+    .nav-child:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Text only, no slab. A nested row is already inside a group that carries
+       its own tint while it is open; filling the child as well stacks two
+       backgrounds on top of each other and the panel stops reading as one
+       thing. */
+    .nav-child:hover {
+        color: var(--shell-text-strong);
+    }
+
+    /* The page you are on, marked with a dot on the guide line rather than a
+       filled slab. A nested row in full colour competes with its own
+       department heading, and then neither reads as the answer to "where am
+       I". */
+    .nav-child::before {
+        content: '';
+        position: absolute;
+        /* Centred on the guide line: .nav-children indents its rows by
+           23px and draws the line 4px in from its own left edge, so 22px
+           back from a row puts this 7px dot's middle on the line's middle
+           — and 1px clear of the clip, which is what the line being a
+           pseudo-element rather than a border buys. Move the line and this
+           moves with it. */
+        left: -22px;
+        top: 50%;
+        width: 7px;
+        height: 7px;
+        margin-top: -3.5px;
+        border-radius: 9999px;
+        background: transparent;
+        transition:
+            background-color 0.12s ease,
+            box-shadow 0.12s ease;
+    }
+
+    /* Colour and weight, matching the dot and the icon. Three marks saying the
+       same thing in the same colour is one signal; a filled row underneath a
+       filled department heading is two competing ones. */
+    .nav-child.active {
+        color: var(--color-brand);
+        font-weight: 500;
+    }
+
+    .nav-child.active::before {
+        background: var(--color-brand);
+        box-shadow: 0 0 0 3px rgba(0, 212, 232, 0.18);
+    }
+
+    /* Hovering the page you are already on should not make it look like
+       somewhere else. */
+    .nav-child.active:hover {
+        color: var(--color-brand);
+    }
+
+    .nav-child.active .nav-child-icon {
+        color: var(--color-brand);
+        opacity: 1;
+    }
+
+    .nav-child-icon {
+        width: 16px;
+        flex: 0 0 16px;
+        opacity: 0.55;
+    }
+
+    /* ── Inside Pinned ─────────────────────────────────────────────────── */
+
+    /* Pinned holds pages from several departments at once, so each one is
+       banded under the department it came from. The gap between bands is what
+       does the work: without it a page pinned out of Production, printed
+       straight after the rows of a pinned Sales, reads as the last item of
+       Sales — which is a menu telling you something untrue about where a
+       screen lives. */
+    .nav-pinned-section + .nav-pinned-section {
+        margin-top: 10px;
+    }
+
+    .nav-pinned-title {
+        padding: 0 8px;
+        margin-bottom: 3px;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        /* The rail's own grey, like every other label in here. Weight and case
+           already separate a heading from the rows under it; giving it a
+           colour of its own as well made it the one thing in the sidebar that
+           belonged to no palette. */
+        color: var(--shell-text);
+    }
+
+    /* ── Not built yet ─────────────────────────────────────────────────── */
+
+    /* A word saying "soon" in every other row was four letters of noise
+       repeated twenty-seven times. A paused mark says the same thing at a
+       glance and gets out of the way of the label, which is what anybody is
+       actually reading. */
+    .nav-soon {
+        margin-left: auto;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        color: var(--color-danger);
+        opacity: 0.55;
+    }
+
+    a:hover .nav-soon,
+    a.active .nav-soon {
+        opacity: 0.85;
+    }
+
+    /* Collapsed to icons the mark would land on top of one, so it goes — but
+       the flyout has room for it, and hiding it there was hiding the one thing
+       that distinguishes a page from a plan. */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-soon {
+        display: none;
+    }
+
+
+    /* ── Pinning ───────────────────────────────────────────────────────── */
+
+    /* Hidden until the row is hovered, so forty pin buttons are not competing
+       with forty labels. Once something is pinned its own pin stays lit,
+       because that is the only way to find it again to take it off. */
+    .nav-pin {
+        margin-left: 6px;
+        padding: 2px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        color: var(--shell-text);
+        border-radius: 6px;
+        transform: rotate(45deg);
+        opacity: 0.6;
+        transition: all 0.15s ease;
+    }
+
+    .nav-pin:hover {
+        color: var(--color-brand-text);
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .nav-pin.is-pinned {
+        display: inline-flex;
+        color: var(--color-brand-text);
+        opacity: 1;
+        transform: none;
+    }
+
+    .nav-flat:hover > .nav-pin,
+    .nav-child:hover > .nav-pin,
+    .nav-parent:hover > .nav-pin {
+        display: inline-flex;
+    }
+
+    /* The mark moves aside rather than being pushed off the end. */
+    .nav-flat:hover > .nav-soon,
+    .nav-child:hover > .nav-soon {
+        margin-left: auto;
+    }
+
+    /* On the rail there is no room for a pin beside a label, because there is
+       no label. It becomes a badge on the corner of the icon instead — see
+       below — and the flyout keeps its own, so a department's *pages* stay
+       pinnable while collapsed. Scoped to the rows rather than to everything
+       inside the sidebar, which is what hid the flyout's pins too. */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-child > .nav-pin {
+        display: none !important;
+    }
+
+    /* ── Pinning from the rail ─────────────────────────────────────────
+       A badge on the corner of the icon rather than the icon swapping to a
+       pin outright. Swapping it would mean the only way to pin something is
+       to stop being able to see what you are pinning — and on a rail of
+       forty identical squares, the icon is the label. */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat > .nav-pin,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent > .nav-pin {
+        position: absolute;
+        top: -1px;
+        right: -1px;
+        z-index: 2;
+        width: 17px;
+        height: 17px;
+        min-width: 17px;
+        margin: 0;
+        padding: 0;
+        border-radius: 9999px;
+        background: var(--color-ink);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        color: rgba(244, 249, 253, 0.7);
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat:hover > .nav-pin,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent:hover > .nav-pin {
+        display: inline-flex;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-pin.is-pinned {
+        display: inline-flex;
+        background: var(--color-brand-text);
+        border-color: var(--color-brand-text);
+        color: white;
+        opacity: 1;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-pin:hover {
+        background: var(--color-brand-text-hover);
+        border-color: var(--color-brand-text-hover);
+        color: white;
+        opacity: 1;
+    }
+
+    /* ── Collapsed to icons ────────────────────────────────────────────── */
+
+    /* Every menu item is a square the size of the logo badge above it. Left as
+       a full-width row it was 56 wide by 36 tall, so the current page read as
+       a wide cyan bar rather than a button — the one shape in the rail that
+       matched nothing else in it. */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+        margin: 0 auto 2px;
+        padding: 0;
+        justify-content: center;
+        border-radius: 11px;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-icon {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+        border-radius: 11px;
+        background: transparent;
+    }
+
+    /* Active states for collapsed rail icons */
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat.active,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent.holds-active {
+        background: var(--shell-active-soft);
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat.active .nav-icon,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent.holds-active .nav-icon {
+        background: transparent;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-label,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-caret,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-children {
+        display: none;
+    }
+
+    /* Departments unfold in place at every width the rail is readable at —
+       narrow, there are no labels to unfold under. */
+    @media (min-width: 880px) {
+        html.rail-collapsed:not(.rail-peek) .nav-children {
+            display: none;
+        }
+    }
+
+    /* ── The person signed in ──────────────────────────────────────────── */
+
+    /* The avatar is a circle at the same size as a menu icon, so the name
+       beside it lines up with the menu labels above. Left to a plain w-8/h-8 it
+       was squashed to an oval the moment the rail narrowed, because the flex
+       row shrank it on one axis only. */
+    .profile-trigger {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        padding: 0.25rem 0.5rem;
+        background: transparent;
+        border: 0;
+        text-align: left;
+        color: inherit;
+        cursor: pointer;
+        border-radius: 10px;
+    }
+
+    .profile-trigger:hover {
+        background: var(--shell-hover);
+    }
+
+    .profile-avatar {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        flex: 0 0 36px;
+        border-radius: 9999px;
+        object-fit: cover;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--color-text-on-dark);
+        background: var(--color-ink-soft);
+        text-transform: uppercase;
+        overflow: hidden;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .profile-trigger {
+        justify-content: center;
+        padding: 0.25rem 0;
+    }
+
+    /* The avatar grows to the same square, so the rail reads as one column of
+       equal shapes from the logo at the top to the person at the bottom. */
+    html.rail-collapsed:not(.rail-peek) .profile-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        flex: 0 0 40px;
+        font-size: 0.875rem;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .profile-who,
+    html.rail-collapsed:not(.rail-peek) .profile-caret {
+        display: none;
+    }
+
+    /* ── The account, top right ────────────────────────────────────────── */
+
+    .account-trigger {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        color: var(--shell-text-strong);
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        overflow: hidden;
+        transition:
+            border-color 0.15s ease,
+            background-color 0.15s ease;
+    }
+
+    .account-trigger:hover {
+        border-color: var(--color-brand-border);
+        background: var(--shell-hover);
+    }
+
+    .account-avatar {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--radius-pill);
+        object-fit: cover;
+    }
+
+    .account-avatar-lg {
+        flex: none;
+        width: 2.25rem;
+        height: 2.25rem;
+        background: var(--color-brand-subtle);
+        color: var(--color-ink-soft);
+        font-size: 0.8125rem;
+        font-weight: 700;
+    }
+
+    /*
+     * Fixed to the header's edge, not the avatar's.
+     *
+     * It used to be `position: absolute; top: calc(100% + 0.5rem)` against the
+     * avatar button — and the avatar sits vertically centred inside a 4rem
+     * header, not flush with its bottom, so "100% of the trigger" landed
+     * partway up the header rather than clear of it. Anchoring to the header's
+     * own edge instead is what makes this line up with search and the context
+     * menu, which already do.
+     */
+    .account-menu {
+        position: fixed;
+        top: var(--header-flyout-top);
+        right: var(--sidebar-padding);
+        z-index: 120;
+        width: 15.5rem;
+        padding: 0 10px;
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.14s ease-out;
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    
+    .account-menu.is-exiting {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    @media (max-width: 879px) {
+        .account-menu {
+            top: var(--header-bottom);
+            right: 0;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            padding: 0 12px;
+            overflow-y: auto;
+            border-radius: 0;
+            border: 0;
+            border-top: 1px solid var(--color-border-light);
+        }
+    }
+
+    /* ── Notifications / Messages — small anchored flyouts ─────────────────
+       Same card as .account-menu but positioned from the trigger's own rect
+       (see HeaderPopover), since these do not live at the row's end. */
+    .header-popover {
+        position: fixed;
+        z-index: 120;
+        width: 18rem;
+        max-width: calc(100vw - 24px);
+        border-radius: var(--shell-radius);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-card-bg);
+        box-shadow: var(--shadow-lg);
+        animation: palette-rise 0.14s ease-out;
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+
+    .header-popover.is-exiting {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    .header-popover-head {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--color-border-light);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+    }
+
+    .header-popover-empty {
+        padding: 1.75rem 1rem;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--color-text-muted);
+    }
+
+    @media (max-width: 879px) {
+        .header-popover {
+            top: var(--header-bottom) !important;
+            right: 0 !important;
+            left: 0;
+            bottom: 0;
+            width: auto;
+            max-width: none;
+            border-radius: 0;
+            border: 0;
+            border-top: 1px solid var(--color-border-light);
+        }
+    }
+
+    .account-menu-who {
+        padding: 10px;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+    
+    .account-menu-who span:first-child {
+        font-size: 0.875rem;
+    }
+
+    .account-menu-group {
+        padding: 10px 0;
+    }
+
+    .account-menu-group-divided {
+        border-top: 1px solid var(--color-border-light);
+    }
+
+    .account-menu-item {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.625rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--color-text-body);
+        text-decoration: none;
+        cursor: pointer;
+        text-align: left;
+        border: 0;
+        background: transparent;
+    }
+
+    .account-menu-item:hover {
+        background: var(--shell-hover);
+        color: var(--color-text-main);
+    }
+
+    .account-menu-plan {
+        padding: 0.125rem 0.5rem;
+        border-radius: var(--radius-md);
+        background: var(--color-brand-subtle);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--color-ink-soft);
+        text-transform: capitalize;
+    }
+
+    .account-menu-tag {
+        margin-left: auto;
+        border-radius: var(--radius-pill);
+        background: var(--color-brand-subtle);
+        padding: 0.0625rem 0.4375rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--color-ink-soft);
+    }
+
+    /* ── Ask AI ────────────────────────────────────────────────────────── */
+
+    /* A pill whose border is a rotating conic sweep rather than a flat line —
+       drawn as a gradient behind the button with the button's own background
+       sitting on top, inset by a pixel. That leaves exactly one pixel of the
+       gradient showing all the way round, which is the border. Painting it
+       this way means the animation is a single transform on a pseudo-element:
+       no repaint of the label, and it composites on the GPU. */
+    .ai-pill {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        height: 2.25rem;
+        border-radius: var(--radius-pill);
+        /* Fixed at the bold thickness. The ring is thinned at rest by painting
+           over its inner edge rather than by shrinking this — changing padding
+           changes the button's size, and the whole row shifted every time a
+           pointer crossed it. */
+        padding: 2px;
+        background: var(--shell-border);
+        cursor: pointer;
+        isolation: isolate;
+        /* Fixed at the bold thickness. The ring is thinned at rest by painting
+           over its inner edge rather than by shrinking the padding — changing
+           padding changes the button's size, and the whole row shifted every
+           time a pointer crossed it. */
+        padding: 2px;
+        /* The sweep is a square large enough to cover the pill at every angle,
+           so without this it spills well outside the button as it turns. */
+        overflow: hidden;
+    }
+
+    /* ── The sweep ──────────────────────────────────────────────────────────
+       Two things have to be true for this to turn without a visible join.
+
+       It has to be square, and wider than the pill's diagonal. A rectangle
+       inset around the pill is 196x78 here: rotate that a quarter turn and it
+       presents 78px of width to an 89px pill, so the gradient stops short of
+       the left and right edges — twice per revolution. That is the pair of
+       dividers, and no amount of colour tuning fixes it, because the paint is
+       simply not there. A square of 150% the pill's width is 134px, comfortably
+       over the 96px diagonal, so every angle is covered.
+
+       And the colours have to close the loop. A single sweep from cyan round
+       to pink has to snap back to cyan somewhere, and that snap is a seam. Run
+       out and back instead and the two ends meet on the same colour travelling
+       the same direction, so there is no join to see. */
+    .ai-pill::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 150%;
+        aspect-ratio: 1;
+        z-index: -1;
+        background: conic-gradient(
+            from 0deg,
+            #00d4e8,
+            #4f7cff,
+            #a25cff,
+            #ff6fb5,
+            #a25cff,
+            #4f7cff,
+            #00d4e8
+        );
+        transform: translate(-50%, -50%) rotate(0turn);
+        animation: ai-spin 3.2s linear infinite;
+        /* Still at rest, turning on hover. The colour is the point at rest —
+           it is what marks this as the AI control before anybody touches it —
+           and the motion is the invitation once they do. Resuming rather than
+           restarting means no jump at the moment the pointer lands. */
+        animation-play-state: paused;
+    }
+
+    .ai-pill:hover::before,
+    .ai-pill:focus-visible::before {
+        animation-play-state: running;
+    }
+
+    /* At rest the inner pill wears a 1px halo of the bar's own colour, which
+       covers the inner half of the ring and leaves 1px of gradient showing.
+       On hover the halo goes and the full 2px shows. An outset shadow paints
+       outside the box without occupying space, so nothing moves. */
+    .ai-pill-inner {
+        box-shadow: 0 0 0 1px var(--shell-bg);
+        transition:
+            background-color 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    .ai-pill:hover .ai-pill-inner,
+    .ai-pill:focus-visible .ai-pill-inner {
+        box-shadow: 0 0 0 0 var(--shell-bg);
+    }
+
+    .ai-pill-inner {
+        display: inline-flex;
+        height: 100%;
+        box-sizing: border-box;
+        align-items: center;
+        gap: 0.4375rem;
+        border-radius: var(--radius-pill);
+        background: var(--shell-bg);
+        padding: 0 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--shell-text-strong);
+        transition: background-color 0.15s ease;
+    }
+
+    .ai-pill:hover .ai-pill-inner {
+        background: var(--shell-hover);
+    }
+
+    /* The icon carries the accent even at rest, so the button reads as the AI
+       one before anybody hovers it. */
+    .ai-pill-inner svg {
+        color: var(--color-brand-active);
+    }
+
+    @keyframes ai-spin {
+        to {
+            transform: translate(-50%, -50%) rotate(1turn);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ai-pill::before {
+            animation: none;
+        }
+    }
+
+    /* ── Brand ─────────────────────────────────────────────────────────── */
+
+    .brand-badge {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+        border-radius: 11px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    /* Collapsed, the badge *is* the expand control — there is no room beside it
+       for a separate button. So it says so on hover: the mark steps aside and a
+       caret takes its place, filling the whole badge rather than sitting in a
+       corner of it.
+    
+       The action is absolutely positioned over the mark rather than swapped in
+       the markup, so the badge keeps its size and nothing shifts under the
+       pointer at the moment somebody is aiming at it. */
+    /* The same treatment as .rail-toggle, because it is the same control: the
+       badge is transparent by this point, so the icon sits directly on the dark
+       rail and has to be a light colour to exist at all. It was --color-ink
+       while the badge was a filled cyan tile, which is dark-on-dark the moment
+       that fill goes. */
+    .brand-action {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        border-radius: 11px;
+        border: 1px solid var(--color-brand-border);
+        background: var(--shell-bg);
+        color: var(--shell-text-strong);
+    }
+
+    .brand-badge:hover .brand-action {
+        display: flex;
+    }
+
+    .brand-badge:hover .brand-mark {
+        opacity: 0;
+    }
+
+    /* ── Top bar ───────────────────────────────────────────────────────── */
+
+    /*
+     * The bar is a card, like the rail.
+     *
+     * It used to be a full-bleed strip with a line under it, which made the
+     * frame two different ideas at once: a floating panel down the left and a
+     * fixed band across the top, meeting at a corner where neither edge lined
+     * up with the other. Now both are cards on the page — same border, same
+     * corner, same inset — and the gap between them is the same 12px gutter
+     * that runs down the side of the rail.
+     *
+     * The left margin is --sidebar-width exactly, not width + padding. The
+     * rail is inset by --sidebar-padding on both sides, so its right edge is
+     * at (width − padding); starting the bar at `width` therefore leaves
+     * precisely one padding of gutter between them, at either rail width.
+     */
+    .topbar {
+        position: sticky;
+        top: var(--sidebar-padding);
+        height: var(--sidebar-header-height);
+        background: var(--shell-bg);
+        color: var(--shell-text-strong);
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        margin: var(--sidebar-padding) var(--sidebar-padding) 0 var(--sidebar-width);
+        transition: margin-left 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+        /* Under the rail, which has to be able to peek out over it. */
+        z-index: 55;
+    }
+
+    /* Below 880px the bar stops being a card and goes back to a plain,
+       full-width strip flush against the top of the viewport — the sidebar
+       is a drawer here, not a rail beside a gutter, and there is no second
+       card for this one to match corners with. Just the hairline it always
+       had underneath. */
+    @media (max-width: 879px) {
+        .topbar {
+            top: 0;
+            margin: 0;
+            width: 100%;
+            border: 0;
+            border-bottom: 1px solid var(--shell-border);
+            border-radius: 0;
+            z-index: 60; /* Above sidebar on mobile */
+        }
+    }
+
+    /*
+     * The column the page lives in, held clear of the rail.
+     *
+     * The rail is position: fixed and therefore out of flow entirely, so
+     * nothing below it is pushed aside by it — the bar has always carried
+     * its own margin-left to sit beside the rail, and the content area,
+     * which never did, ran underneath it. Same inset, same variable, same
+     * easing as .topbar, so the two move as one when the rail collapses
+     * rather than the page sliding a beat behind its own header.
+     *
+     * The right inset matches the gutter too, which lines the page's cards
+     * up with the bar's right edge — with .page-surface itself carrying no
+     * horizontal padding at this width, a card here starts and ends exactly
+     * where the header above it does.
+     */
+    .page-frame {
+        transition: margin-left 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    @media (min-width: 880px) {
+        .page-frame {
+            margin-left: var(--sidebar-width);
+            margin-right: var(--sidebar-padding);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .page-frame {
+            transition: none;
+        }
+    }
+
+    /* The frame is drawn with lines now, not by being a darker colour than the
+       page — so the corner mask that used to hide the join has nothing left to
+       hide, and is gone. */
+    .page-surface {
+        position: relative;
+    }
+
+    /* ── Bits ───────────────────────────────────────────────────────────── */
+
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.125rem 0.5rem;
+        border-radius: var(--radius-pill);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+    .menu-panel {
+        border-radius: var(--radius-lg);
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border-light);
+        box-shadow: var(--shadow-lg);
+        padding: 0.375rem;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        width: 100%;
+        padding: 0.5rem 0.625rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem;
+        color: var(--color-text-body);
+        text-decoration: none;
+        cursor: pointer;
+        text-align: left;
+    }
+
+    .menu-item:hover {
+        background: var(--color-brand-subtle);
+        color: var(--color-text-main);
+    }
+
+    /* Every icon button keeps its full size at every width — the overflow
+       menu is what absorbs a narrow screen, not smaller boxes. Last in the
+       layer deliberately: .ai-pill already carries a full-size rule earlier
+       in this file, and this override — same specificity — only wins by
+       coming after it.
+       Below 640px, text is already gone from Ask AI (see Topbar), so the
+       pill becomes a square icon button matching the others exactly rather
+       than an oval with nothing to justify its shape. */
+    @media (max-width: 639px) {
+        .ai-pill {
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: var(--shell-radius);
+        }
+
+        .ai-pill-inner {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            justify-content: center;
+            border-radius: calc(var(--shell-radius) - 2px);
+        }
+    }
+
+    /* Below 580px — where the wordmark drops and the bar is down to marks
+       alone — everything in it steps down a size together: the icon
+       buttons, the Ask pill and the brand mark, to one number. One size
+       for the whole row is the point; a mark that kept its own reads as a
+       different kind of thing sitting next to the buttons rather than part
+       of the same set. The overflow trigger goes with them, staying the
+       same touch shorter than the account button it sits against. */
+    @media (max-width: 579px) {
+        .topbar-icon,
+        .rail-action,
+        .account-trigger,
+        .ai-pill,
+        .topbar-logo .brand-mark {
+            width: 2rem;
+            height: 2rem;
+        }
+
+        .topbar-overflow-trigger {
+            height: 1.875rem;
+        }
+
+        /* The picker comes down with them. Its badge and padding shrink by
+           the same 4px the box does, so the mark keeps the equal breathing
+           room on all four sides it has at full size — (32 − 22) / 2 = 5px,
+           matching the 5px left/right padding. */
+        .context-trigger {
+            height: 2rem;
+        }
+
+        .context-trigger-mark,
+        .context-trigger-mark .badge-sm {
+            width: 1.375rem;
+            height: 1.375rem;
+        }
+
+        .context-trigger-mark .badge-sm {
+            font-size: 0.5rem;
+        }
+
+        .context-trigger-mark .badge-overlay {
+            width: 0.6875rem;
+            height: 0.6875rem;
+        }
+    }
+}
+
+@layer utilities {
+    .no-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* The bar Inertia drives while a page is being fetched. Deliberately thin and
+   at the very top: this app should feel like it never navigates, and a full
+   page spinner announces the opposite on every click. */
+#nav-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 90;
+    background: transparent;
+    pointer-events: none;
+}
+
+#nav-progress > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--color-brand);
+    box-shadow: 0 0 8px var(--color-brand);
+    transition:
+        width 0.2s ease,
+        opacity 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}

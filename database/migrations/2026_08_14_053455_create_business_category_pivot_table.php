@@ -1,0 +1,40 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('business_business_category', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('business_id')->constrained('businesses')->onDelete('cascade');
+            $table->foreignId('business_category_id')->constrained('business_categories')->onDelete('cascade');
+            $table->timestamps();
+            
+            // Prevent duplicate category assignments
+            $table->unique(['business_id', 'business_category_id']);
+        });
+        
+        // Migrate existing single category to pivot table
+        DB::statement("
+            INSERT INTO business_business_category (business_id, business_category_id, created_at, updated_at)
+            SELECT id, business_category_id, datetime('now'), datetime('now')
+            FROM businesses
+            WHERE business_category_id IS NOT NULL
+        ");
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('business_business_category');
+    }
+};

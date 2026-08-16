@@ -1,0 +1,52 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+
+# The live database. It holds real accounts, password hashes and every
+# business's books — none of which belongs in a repository.
+/database/*.sqlite
+/database/*.sqlite-journal
+/database/*.sqlite-shm
+/database/*.sqlite-wal
+
+# Partner ID scans, partnership deeds, signed agreements. The partner tables
+# migration puts these on the private disk precisely so they are never served
+# publicly; committing them would undo that.
+/storage/app/private/*
+!/storage/app/private/.gitignore
+/storage/app/public/*
+!/storage/app/public/.gitignore
+
+# Runtime state, not source.
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+
+# Local backup archives.
+*.zip
+
+# Third-party binaries. Developer tools, fetched per machine, not source.
+ngrok.exe
+*.exe
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+Homestead.json
+Homestead.yaml
+Thumbs.db
