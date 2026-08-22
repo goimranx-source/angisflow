@@ -448,6 +448,14 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
     // so a reload or a move to another screen does not lose sight of it.
     Route::get('orders/pushes/active', [OrdersEndpoint::class, 'activePushes'])
         ->middleware('can:sales.view')->name('orders.pushes.active');
+    /*
+     * Send one order to its shop again.
+     *
+     * Needs sales.edit rather than sales.view: nothing about the order changes
+     * here, but it does write to somebody's shop, and that is not a read.
+     */
+    Route::post('orders/{order}/retry-push', [OrdersEndpoint::class, 'retryPush'])
+        ->middleware('can:sales.edit')->name('orders.retry-push');
     Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])
         ->middleware('can:sales.view')->name('orders.bulk-progress');
     Route::post('orders/{orderId}/dispatch', [OrdersEndpoint::class, 'dispatch'])

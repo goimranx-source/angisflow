@@ -829,6 +829,49 @@ class OrdersEndpoint
         ], $failed > 0 && $updated === 0 ? 422 : 200);
     }
 
+    /**
+     * Send one order to its shop again, now.
+     *
+     * ── Why this is asked for rather than swept up ───────────────────────────
+     *
+     * The timed sweep deliberately leaves alone anything the shop refused: a
+     * rejected line, an order it will not reopen. Asking again on a timer is
+     * only being refused on a timer, and it buries a real problem under noise.
+     *
+     * But a refusal is often something a person can fix — correct the order,
+     * reconnect the shop — and having fixed it they need a way to say "try that
+     * again" without inventing a change to the order just to provoke a push.
+     * This is that.
+     */
+    public function retryPush(Request $request, string $order, PushDispatcher $pushes): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $model = Order::query()
+            ->where('business_id', $business->id)
+            ->where('public_id', $order)
+            ->firstOrFail();
+
+        $jobs = $pushes->jobsFor($model);
+
+        if ($jobs === []) {
+            return response()->json([
+                'message' => 'This order does not belong to a connected shop.',
+            ], 422);
+        }
+
+        foreach ($jobs as $job) {
+            dispatch($job);
+        }
+
+        return response()->json([
+            'message' => 'Sending this order to the shop again.',
+            'data' => ['pushes' => count($jobs)],
+        ], 202);
+    }
+
     /** Cache key holding the recent push batches for one business. */
     private static function batchKey(int $businessId): string
     {

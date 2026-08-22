@@ -182,6 +182,28 @@ final class PushIntegrationRecord implements ShouldQueue
             $link = $linker->link($integration, $this->entity, $this->localId, (string) $externalId);
             $link->recordPush($payload);
         }
+
+        /*
+         * And settled by identity, not by instance.
+         *
+         * ── Why the model above is not enough ────────────────────────────────
+         *
+         * recordPush clears the debt on the row it was handed, which is the row
+         * the linker returned — not necessarily the one loaded at the top of
+         * this method, and not necessarily the only one if a link was rebuilt
+         * while the shop was being waited on. Anything left holding a stale
+         * pending stamp would be reported for ever as a change the shop never
+         * took, when it plainly did.
+         *
+         * The debt exists to be believed. A cheap keyed write is worth more than
+         * an argument about which instance was current.
+         */
+        IntegrationLink::withoutGlobalScopes()
+            ->where('integration_id', $integration->id)
+            ->where('entity', $this->entity)
+            ->where('linkable_id', $this->localId)
+            ->whereNotNull('push_pending_at')
+            ->update(['push_pending_at' => null, 'push_error' => null]);
     }
 
     /**

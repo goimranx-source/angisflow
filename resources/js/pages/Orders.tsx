@@ -564,6 +564,22 @@ export default function Orders() {
         onError: (error: Error) => toast.error(error.message || 'Bulk update failed.'),
     });
 
+    /*
+     * Send one order to its shop again.
+     *
+     * Only ever reached from the warning on a row the shop refused — the timed
+     * sweep handles everything that merely never ran, and asking twice for the
+     * same in-flight change would push it twice.
+     */
+    const retryPush = useMutation({
+        mutationFn: (orderId: string) => api.post(`/orders/${orderId}/retry-push`, {}),
+        onSuccess: () => {
+            toast.success('Sending this order to the shop again.');
+            void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        },
+        onError: (error: Error) => toast.error(error.message || 'Could not send this order again.'),
+    });
+
     // Single order dispatch mutation
     const dispatchOrder = useMutation({
         mutationFn: (params: { orderId: string; courier_id: string; amount?: number }) =>
@@ -1134,33 +1150,42 @@ export default function Orders() {
                                                           on almost every row there
                                                           is nothing to say.
                                                         */}
-                                                        {order.unsent && (
-                                                            <span
-                                                                // On the span rather than the icon: the
-                                                                // reason is what somebody needs, and Icon
-                                                                // takes no title of its own.
-                                                                title={
-                                                                    order.unsent.error
-                                                                        ? `Not sent to the shop — ${order.unsent.error}`
-                                                                        : 'Waiting to reach the shop'
-                                                                }
-                                                                aria-label={
-                                                                    order.unsent.error
-                                                                        ? 'Not sent to the shop'
-                                                                        : 'Waiting to reach the shop'
-                                                                }
-                                                                className={
-                                                                    order.unsent.error
-                                                                        ? 'text-[var(--color-danger)]'
-                                                                        : 'text-[var(--color-text-muted)]'
-                                                                }
-                                                            >
-                                                                <Icon
-                                                                    name={order.unsent.error ? 'warning-circle' : 'cloud-arrow-up'}
-                                                                    size={14}
-                                                                />
-                                                            </span>
-                                                        )}
+                                                        {order.unsent &&
+                                                            /*
+                                                              A button when the shop refused, a mark
+                                                              when it simply has not answered yet.
+
+                                                              Something still in flight needs no
+                                                              action — offering one would invite a
+                                                              second push of the same change. A
+                                                              refusal does: it is usually something
+                                                              a person can put right, and then they
+                                                              need a way to say "try again" without
+                                                              inventing an edit to provoke one.
+                                                            */
+                                                            (order.unsent.error ? (
+                                                                <button
+                                                                    type="button"
+                                                                    title={`Not sent to the shop — ${order.unsent.error}. Click to try again.`}
+                                                                    aria-label="Not sent to the shop. Try again."
+                                                                    className="text-[var(--color-danger)] transition-opacity hover:opacity-70 disabled:opacity-40"
+                                                                    disabled={retryPush.isPending}
+                                                                    onClick={(event) => {
+                                                                        event.stopPropagation();
+                                                                        retryPush.mutate(order.id);
+                                                                    }}
+                                                                >
+                                                                    <Icon name="warning-circle" size={14} />
+                                                                </button>
+                                                            ) : (
+                                                                <span
+                                                                    title="Waiting to reach the shop"
+                                                                    aria-label="Waiting to reach the shop"
+                                                                    className="text-[var(--color-text-muted)]"
+                                                                >
+                                                                    <Icon name="cloud-arrow-up" size={14} />
+                                                                </span>
+                                                            ))}
                                                     </p>
                                                     <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
                                                         {formatDate(order.date)}
