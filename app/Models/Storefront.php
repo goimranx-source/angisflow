@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Domain\Media\Models\MediaItem;
 use App\Domain\Shared\Concerns\HasPublicId;
 use App\Domain\Shared\ValueObjects\Money;
 use App\Domain\Tenancy\Concerns\BelongsToAccount;
 use App\Domain\Tenancy\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -26,6 +28,7 @@ class Storefront extends Model
         'name',
         'slug',
         'code',
+        'logo_media_id',
         'type',
         'status',
         'title',
@@ -357,6 +360,18 @@ class Storefront extends Model
     /**
      * Scope by slug
      */
+    /**
+     * The mark that goes at the top of this shop's paperwork.
+     *
+     * Points at the media library rather than holding a path, so the file keeps
+     * its dimensions, its thumbnail and its knowledge of which disk it lives on
+     * — none of which a column of text would carry.
+     */
+    public function logo(): BelongsTo
+    {
+        return $this->belongsTo(MediaItem::class, 'logo_media_id');
+    }
+
     public function scopeBySlug($query, string $slug)
     {
         return $query->where('slug', $slug);

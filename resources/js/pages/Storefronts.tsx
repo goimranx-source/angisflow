@@ -131,6 +131,9 @@ type Storefront = {
     code: string | null;
     /** What to show — the chosen tag, or initials when none has been chosen. */
     code_display: string | null;
+    /** This shop's own mark, when it has set one. */
+    logo_url?: string | null;
+    logo_id?: string | null;
     theme: string;
     language: string;
     currency: string;
@@ -189,7 +192,52 @@ export default function Storefronts() {
         currency: '',
         type: 'online',
         status: 'active',
+        /*
+         * The chosen picture, as a media id.
+         *
+         * Three states, deliberately: undefined is "not touched" and is left
+         * out of the request entirely, null is "remove it", and a string is a
+         * new one. Collapsing the first two would clear a shop's logo every
+         * time somebody edited its name.
+         */
+        logo: undefined as string | null | undefined,
+        /** Only for the preview beside the button; never sent. */
+        logo_url: null as string | null,
     });
+
+    /** True while a chosen file is on its way to the media library. */
+    const [logoUploading, setLogoUploading] = useState(false);
+
+    /*
+     * Uploaded to the media library, then referenced.
+     *
+     * The library already stores files, records dimensions, makes thumbnails
+     * and knows how to build a URL for whichever disk is configured. Posting
+     * the image straight at the storefront would be a second, worse copy of all
+     * of that — and one that breaks the day the disk changes.
+     */
+    const uploadLogo = async (file: File): Promise<void> => {
+        setLogoUploading(true);
+
+        try {
+            const body = new FormData();
+            body.append('file', file);
+
+            const result = (await api.post('/media', body)) as {
+                data: { id: string; url: string };
+            };
+
+            setEdit((current) => ({
+                ...current,
+                logo: result.data.id,
+                logo_url: result.data.url,
+            }));
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'That image could not be uploaded.');
+        } finally {
+            setLogoUploading(false);
+        }
+    };
 
     /*
      * The drawer reads before it writes.
@@ -204,7 +252,16 @@ export default function Storefronts() {
     const queryClient = useQueryClient();
 
     const saveShop = useMutation({
-        mutationFn: () => api.patch(`/storefronts/${selectedStorefront?.id}`, edit),
+        mutationFn: () => {
+            // logo_url is for the preview only, and logo is omitted entirely
+            // unless it was touched - see the three states on the state above.
+            const { logo_url: _preview, logo, ...rest } = edit;
+
+            return api.patch(`/storefronts/${selectedStorefront?.id}`, {
+                ...rest,
+                ...(logo === undefined ? {} : { logo }),
+            });
+        },
         onSuccess: () => {
             toast.success('Saved.');
             setEditing(false);
@@ -859,6 +916,11 @@ export default function Storefronts() {
                                                     currency: selectedStorefront.currency,
                                                     type: selectedStorefront.type,
                                                     status: selectedStorefront.status,
+                                                    // undefined, not null: an
+                                                    // untouched logo must never
+                                                    // be sent as a removal.
+                                                    logo: undefined,
+                                                    logo_url: selectedStorefront.logo_url ?? null,
                                                 });
                                                 setEditing(true);
                                             }}
@@ -930,6 +992,91 @@ export default function Storefronts() {
                                                     <> Currently showing {selectedStorefront.code_display}, from the name.</>
                                                 )}
                                             </p>
+                                        </div>
+
+                                        {/*
+                                          The mark that goes on this shop's
+                                          paperwork.
+
+                                          ── Why it is offered per shop ────────
+
+                                          An invoice is issued by the shop the
+                                          order was placed in, and a business
+                                          here can run several. One logo on the
+                                          business would put the wrong brand on
+                                          every order from the second shop —
+                                          confidently wrong, in front of a
+                                          customer, which is worse than none.
+
+                                          Left blank the business logo is used,
+                                          because most people run one shop and
+                                          think of the brand as theirs.
+                                        */}
+                                        <div>
+                                            <span className="mb-1.5 block text-sm font-medium">Logo</span>
+
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)]">
+                                                    {edit.logo_url ? (
+                                                        <img
+                                                            src={edit.logo_url}
+                                                            alt=""
+                                                            className="max-h-full max-w-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <Icon
+                                                            name="image"
+                                                            size={20}
+                                                            className="text-[var(--color-text-subtle)]"
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <label className="btn btn-secondary cursor-pointer text-sm">
+                                                            {logoUploading ? 'Uploading…' : 'Choose image'}
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                className="hidden"
+                                                                disabled={logoUploading}
+                                                                onChange={(event) => {
+                                                                    const file = event.target.files?.[0];
+                                                                    // Cleared so choosing the same file twice still
+                                                                    // fires a change event.
+                                                                    event.target.value = '';
+
+                                                                    if (file) {
+                                                                        void uploadLogo(file);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </label>
+
+                                                        {edit.logo_url && (
+                                                            <button
+                                                                type="button"
+                                                                className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+                                                                onClick={() =>
+                                                                    setEdit((c) => ({
+                                                                        ...c,
+                                                                        logo: null,
+                                                                        logo_url: null,
+                                                                    }))
+                                                                }
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
+                                                        Shown on invoices for this shop&rsquo;s orders. Leave it empty
+                                                        to use the business logo.
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div className="grid gap-4 sm:grid-cols-2">

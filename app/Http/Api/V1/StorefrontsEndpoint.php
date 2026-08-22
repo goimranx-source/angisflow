@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Api\V1;
 
+use App\Domain\Media\Models\MediaItem;
 use App\Domain\Catalogue\Models\Product;
 use App\Domain\Integrations\Models\Integration;
 use App\Domain\Integrations\PlatformRegistry;
@@ -200,6 +201,7 @@ class StorefrontsEndpoint
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'code' => ['nullable', 'string', 'max:8'],
+            'logo' => ['nullable', 'string', 'max:64'],
             'custom_domain' => ['nullable', 'string', 'max:191'],
             'type' => ['nullable', Rule::in(array_keys(self::TYPES))],
             'status' => ['nullable', Rule::in(array_keys(self::STATUSES))],
@@ -224,6 +226,7 @@ class StorefrontsEndpoint
             // shop is legible from the moment it exists and the tag can be
             // chosen later by whoever cares what it says.
             'code' => $this->codeFor($validated['code'] ?? null, $businessId, null),
+            'logo_media_id' => $this->mediaIdFor($validated['logo'] ?? null),
             'type' => $validated['type'] ?? 'main',
             'status' => $status = $validated['status'] ?? 'active',
 
@@ -263,6 +266,7 @@ class StorefrontsEndpoint
             'custom_domain' => ['nullable', 'string', 'max:191'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'code' => ['sometimes', 'nullable', 'string', 'max:8'],
+            'logo' => ['sometimes', 'nullable', 'string', 'max:64'],
             'type' => ['sometimes', Rule::in(array_keys(self::TYPES))],
             'status' => ['sometimes', Rule::in(array_keys(self::STATUSES))],
             'is_active' => ['sometimes', 'boolean'],
@@ -289,6 +293,13 @@ class StorefrontsEndpoint
             $validated['currency'] = $code;
         }
 
+        if (array_key_exists('logo', $validated)) {
+            // The request names a picture by its public id; the column holds the
+            // row id. Unset either way, or fill() would try to write 'logo'.
+            $validated['logo_media_id'] = $this->mediaIdFor($validated['logo']);
+            unset($validated['logo']);
+        }
+
         if (array_key_exists('code', $validated)) {
             $validated['code'] = $this->codeFor($validated['code'], (int) $shop->business_id, (int) $shop->id);
         }
@@ -300,6 +311,27 @@ class StorefrontsEndpoint
         $shop->fill($validated)->save();
 
         return response()->json(['data' => $this->summarise($shop->fresh(), (int) $shop->business_id)]);
+    }
+
+    /**
+     * A picture from the library, named by its public id.
+     *
+     * Looked up rather than trusted: the column is a foreign key, and a client
+     * that sends an id belonging to another account must not be able to point a
+     * shop at somebody else's file. MediaItem is account-scoped, so a stranger's
+     * id simply is not found.
+     */
+    private function mediaIdFor(?string $publicId): ?int
+    {
+        if (! filled($publicId)) {
+            return null;
+        }
+
+        $media = MediaItem::query()->where('public_id', $publicId)->first();
+
+        abort_if($media === null, 422, 'That image is not in your media library.');
+
+        return (int) $media->id;
     }
 
     /**
@@ -580,6 +612,8 @@ class StorefrontsEndpoint
              * tagged with nothing.
              */
             'code' => $shop->code,
+            'logo_url' => $shop->logo?->url(),
+            'logo_id' => $shop->logo?->public_id,
             'code_display' => $codes[(int) $shop->id] ?? null,
             'created_at' => $shop->created_at?->toIso8601String(),
             'last_updated' => $shop->updated_at?->toIso8601String(),

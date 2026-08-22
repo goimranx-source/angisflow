@@ -40,6 +40,14 @@ export type PrintableOrder = {
     notes?: string | null;
     customer?: { name?: string | null; email?: string | null } | null;
     store?: { name?: string | null } | null;
+
+    /*
+     * Who the paperwork is from, resolved by the server.
+     *
+     * Shop first, then the business - a document should not have to work the
+     * fallback out, and a counter sale has no shop to ask.
+     */
+    brand?: { name?: string | null; logo_url?: string | null } | null;
     shipping_address?: {
         line1?: string | null;
         line2?: string | null;
@@ -113,6 +121,26 @@ function formatDate(value: string | null | undefined): string {
 
 function invoiceBody(order: PrintableOrder, labels: Labels): string {
     const ship = addressLines(order);
+    const paid = order.payment_status === 'paid';
+
+    const reference =
+        order.store_code && order.store_code !== 'WALK'
+            ? `${order.store_code}-${order.order_number}`
+            : order.order_number;
+
+    /*
+     * The mark, or the name set as one.
+     *
+     * A logo that fails to load must not leave the masthead empty, so the name
+     * is the alt text rather than a decorative blank — a broken image with no
+     * alt is a document that looks like it came from nobody.
+     */
+    const brandName = order.brand?.name ?? order.store?.name ?? 'Invoice';
+    const logo = order.brand?.logo_url;
+
+    const masthead = logo
+        ? `<img class="brand-logo" src="${escape(logo)}" alt="${escape(brandName)}">`
+        : `<div class="brand-name">${escape(brandName)}</div>`;
 
     const rows = order.items.length
         ? order.items
@@ -131,8 +159,8 @@ function invoiceBody(order: PrintableOrder, labels: Labels): string {
               .join('')
         : `<tr><td colspan="4" class="muted">No items were recorded against this order.</td></tr>`;
 
-    const totalRow = (label: string, value: string, strong = false) => `
-        <tr class="${strong ? 'grand' : ''}">
+    const totalRow = (label: string, value: string, cls = '') => `
+        <tr class="${cls}">
             <td class="label">${escape(label)}</td>
             <td class="num">${value}</td>
         </tr>`;
@@ -141,37 +169,41 @@ function invoiceBody(order: PrintableOrder, labels: Labels): string {
         <article class="doc">
             <header class="doc-head">
                 <div>
-                    <div class="doc-type">Invoice</div>
-                    <h1>${escape(order.store?.name ?? 'Order')}</h1>
+                    ${masthead}
+                    ${logo ? `<div class="brand-sub">${escape(brandName)}</div>` : ''}
                 </div>
-                <dl class="doc-meta">
-                    <div><dt>Order</dt><dd>${escape(
-                        order.store_code && order.store_code !== 'WALK'
-                            ? `${order.store_code}-${order.order_number}`
-                            : order.order_number,
-                    )}</dd></div>
-                    <div><dt>Date</dt><dd>${escape(formatDate(order.date))}</dd></div>
-                    <div><dt>Status</dt><dd>${escape(labels.status[order.status] ?? order.status)}</dd></div>
-                    <div><dt>Payment</dt><dd>${escape(
-                        labels.payment[order.payment_status] ?? order.payment_status,
-                    )}${order.is_cod ? ' · cash on delivery' : ''}</dd></div>
-                </dl>
+                <div class="doc-title">
+                    <div class="doc-type">Invoice</div>
+                    <div class="doc-ref">${escape(reference)}</div>
+                    <div class="doc-date">${escape(formatDate(order.date))}</div>
+                </div>
             </header>
 
             <section class="parties">
-                <div>
+                <div class="party">
                     <h2>Billed to</h2>
-                    <p>${escape(order.customer?.name ?? 'Walk-in customer')}</p>
+                    <p class="who">${escape(order.customer?.name ?? 'Walk-in customer')}</p>
                     ${order.customer?.email ? `<p class="muted">${escape(order.customer.email)}</p>` : ''}
                 </div>
+
                 ${
                     ship.length
-                        ? `<div>
+                        ? `<div class="party">
                                 <h2>Delivered to</h2>
                                 ${ship.map((line) => `<p>${escape(line)}</p>`).join('')}
                            </div>`
                         : ''
                 }
+
+                <div class="facts">
+                    <h2>Details</h2>
+                    <dl>
+                        <dt>Status</dt><dd>${escape(labels.status[order.status] ?? order.status)}</dd>
+                        <dt>Payment</dt><dd>${escape(labels.payment[order.payment_status] ?? order.payment_status)}</dd>
+                        ${order.is_cod ? '<dt>Method</dt><dd>Cash on delivery</dd>' : ''}
+                        <dt>Currency</dt><dd>${escape(order.native.currency)}</dd>
+                    </dl>
+                </div>
             </section>
 
             <table class="items">
@@ -186,15 +218,44 @@ function invoiceBody(order: PrintableOrder, labels: Labels): string {
                 <tbody>${rows}</tbody>
             </table>
 
-            <table class="totals">
-                ${totalRow('Subtotal', amount(order, order.native.subtotal))}
-                ${order.native.discount > 0 ? totalRow('Discount', `−${amount(order, order.native.discount)}`) : ''}
-                ${totalRow('Shipping', amount(order, order.native.shipping))}
-                ${totalRow('Tax', amount(order, order.native.tax))}
-                ${totalRow(`Total (${order.native.currency})`, amount(order, order.native.total), true)}
-            </table>
+            <section class="summary">
+                <div>
+                    <table class="totals">
+                        ${totalRow('Subtotal', amount(order, order.native.subtotal))}
+                        ${
+                            order.native.discount > 0
+                                ? totalRow('Discount', `−${amount(order, order.native.discount)}`)
+                                : ''
+                        }
+                        ${order.native.shipping > 0 ? totalRow('Shipping', amount(order, order.native.shipping)) : ''}
+                        ${order.native.tax > 0 ? totalRow('Tax', amount(order, order.native.tax)) : ''}
+                        ${totalRow('Total', amount(order, order.native.total), 'grand')}
+                        ${
+                            paid
+                                ? ''
+                                : totalRow('Balance due', amount(order, order.native.total), 'due')
+                        }
+                    </table>
 
-            ${order.notes ? `<section class="notes"><h2>Note</h2><p>${escape(order.notes)}</p></section>` : ''}
+                    <div class="stamp ${paid ? 'stamp-paid' : 'stamp-due'}">
+                        ${paid ? 'Paid in full' : 'Payment due'}
+                    </div>
+                </div>
+            </section>
+
+            ${
+                order.notes
+                    ? `<section class="notes">
+                            <h2>Notes</h2>
+                            <p>${escape(order.notes)}</p>
+                       </section>`
+                    : ''
+            }
+
+            <footer class="doc-foot">
+                <span>${escape(brandName)}</span>
+                <span>${escape(reference)}</span>
+            </footer>
         </article>`;
 }
 
@@ -254,34 +315,101 @@ function receiptBody(order: PrintableOrder, labels: Labels): string {
 }
 
 const INVOICE_CSS = `
-    @page { size: A4; margin: 16mm; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1b1f24; font-size: 10.5pt; }
-    .doc { page-break-after: always; }
+    @page { size: A4; margin: 14mm 16mm 18mm; }
+
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1b1f24;
+           font-size: 10pt; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    .doc { page-break-after: always; position: relative; }
     .doc:last-child { page-break-after: auto; }
-    .doc-head { display: flex; justify-content: space-between; gap: 16mm; align-items: flex-start;
-                border-bottom: 2px solid #1b1f24; padding-bottom: 6mm; margin-bottom: 8mm; }
-    .doc-type { text-transform: uppercase; letter-spacing: .18em; font-size: 8.5pt; color: #6b7280; }
-    h1 { font-size: 17pt; margin-top: 2mm; }
-    .doc-meta { display: grid; grid-template-columns: auto auto; gap: 1mm 6mm; font-size: 9.5pt; }
-    .doc-meta div { display: contents; }
-    .doc-meta dt { color: #6b7280; }
-    .doc-meta dd { text-align: right; font-weight: 600; }
-    .parties { display: flex; gap: 16mm; margin-bottom: 8mm; }
-    .parties h2 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .12em; color: #6b7280; margin-bottom: 2mm; }
-    .parties p { line-height: 1.45; }
+
+    /* ── Masthead ─────────────────────────────────────────────────────────── */
+
+    .doc-head { display: flex; justify-content: space-between; align-items: flex-start;
+                gap: 12mm; padding-bottom: 6mm; margin-bottom: 7mm;
+                border-bottom: 1px solid #e3e7ec; }
+
+    /*
+     * Constrained by height, not width: logos arrive square, wide and
+     * everything between, and a rule on width alone lets a tall one push the
+     * whole masthead down the page.
+     */
+    .brand-logo { max-height: 16mm; max-width: 55mm; display: block; }
+    .brand-name { font-size: 15pt; font-weight: 700; letter-spacing: -.01em; }
+    .brand-sub { font-size: 9pt; color: #6b7280; margin-top: 1mm; }
+
+    .doc-title { text-align: right; }
+    .doc-type { font-size: 20pt; font-weight: 700; letter-spacing: .04em;
+                text-transform: uppercase; color: #1b1f24; line-height: 1; }
+    .doc-ref { font-size: 11pt; font-weight: 600; margin-top: 2mm; font-variant-numeric: tabular-nums; }
+    .doc-date { font-size: 9pt; color: #6b7280; margin-top: 1mm; }
+
+    /* ── Parties ──────────────────────────────────────────────────────────── */
+
+    .parties { display: flex; gap: 10mm; margin-bottom: 7mm; }
+    .party { flex: 1; }
+    .party h2, .facts h2 { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .14em;
+                           color: #8a93a0; margin-bottom: 2mm; font-weight: 600; }
+    .party p { line-height: 1.45; }
+    .party .who { font-weight: 600; }
     .muted { color: #6b7280; }
+
+    /* A boxed column of the facts that decide how the invoice is treated. */
+    .facts { flex: 0 0 52mm; background: #f6f8fa; border-radius: 2mm; padding: 4mm; }
+    .facts dl { display: grid; grid-template-columns: auto auto; gap: 1.5mm 4mm; font-size: 9pt; }
+    .facts dt { color: #6b7280; }
+    .facts dd { text-align: right; font-weight: 600; }
+
+    /* ── Items ────────────────────────────────────────────────────────────── */
+
     table { width: 100%; border-collapse: collapse; }
-    .items th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .08em;
-                color: #6b7280; border-bottom: 1px solid #d5dae1; padding: 0 0 2mm; }
-    .items td { padding: 2.5mm 0; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+
+    .items { margin-bottom: 4mm; }
+    .items thead th { text-align: left; font-size: 7.5pt; text-transform: uppercase;
+                      letter-spacing: .1em; color: #8a93a0; font-weight: 600;
+                      padding: 0 2mm 2mm; border-bottom: 1.5px solid #1b1f24; }
+    .items thead th:first-child { padding-left: 0; }
+    .items thead th:last-child { padding-right: 0; }
+    .items td { padding: 2.5mm 2mm; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+    .items td:first-child { padding-left: 0; }
+    .items td:last-child { padding-right: 0; }
+    /* Rows must not be split across a page break mid-item. */
+    .items tr { page-break-inside: avoid; }
     .item-name { font-weight: 500; }
-    .item-sku { font-size: 8.5pt; color: #6b7280; margin-top: .5mm; }
+    .item-sku { font-size: 8pt; color: #8a93a0; margin-top: .5mm; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
     .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .totals { width: 70mm; margin-left: auto; margin-top: 5mm; }
-    .totals .label { color: #6b7280; padding: 1.5mm 0; }
-    .totals .grand td { border-top: 1.5px solid #1b1f24; padding-top: 2.5mm; font-size: 12pt; font-weight: 700; }
-    .notes { margin-top: 8mm; }
-    .notes h2 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .12em; color: #6b7280; margin-bottom: 2mm; }
+
+    /* ── Totals ───────────────────────────────────────────────────────────── */
+
+    .summary { display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .totals { width: 74mm; }
+    .totals td { padding: 1.5mm 0; }
+    .totals .label { color: #6b7280; }
+    .totals .grand td { border-top: 1.5px solid #1b1f24; padding-top: 3mm; font-size: 13pt; font-weight: 700; }
+    .totals .due td { color: #92400e; font-weight: 700; padding-top: 2mm; }
+
+    /*
+     * Stamped rather than merely stated.
+     *
+     * "Paid" in a list of fields is read at the same weight as the postcode.
+     * The one thing somebody picking up an invoice needs to know before
+     * anything else is whether money is still owed.
+     */
+    .stamp { display: inline-block; margin-top: 4mm; padding: 1.5mm 4mm; border-radius: 1mm;
+             font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+    .stamp-paid { color: #0f6b3f; background: #e7f6ee; border: 1px solid #b7e2c9; }
+    .stamp-due { color: #92400e; background: #fdf3e3; border: 1px solid #f0d9a8; }
+
+    /* ── Foot ─────────────────────────────────────────────────────────────── */
+
+    .notes { margin-top: 8mm; page-break-inside: avoid; }
+    .notes h2 { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .14em;
+                color: #8a93a0; margin-bottom: 2mm; font-weight: 600; }
+    .notes p { white-space: pre-line; }
+
+    .doc-foot { margin-top: 10mm; padding-top: 4mm; border-top: 1px solid #e3e7ec;
+                font-size: 8.5pt; color: #8a93a0; display: flex; justify-content: space-between; gap: 8mm; }
 `;
 
 const RECEIPT_CSS = `
@@ -308,14 +436,31 @@ const RECEIPT_CSS = `
  * shows the document being printed, and so a person can save it as a PDF —
  * which is what most of these are actually used for.
  */
+/**
+ * Print without leaving anything behind.
+ *
+ * ── Why not a new tab ────────────────────────────────────────────────────────
+ *
+ * Because nothing closes it. A tab opened for printing has served its whole
+ * purpose the moment the dialog is answered — printed or cancelled, either way
+ * — and it cannot close itself: window.close() is refused for a document the
+ * script did not open by user gesture in several browsers, and after a cancel
+ * there is no event to hang it on at all. So it sits there, and after a run of
+ * twenty invoices somebody has twenty tabs to shut by hand.
+ *
+ * A hidden iframe in the page prints exactly the same document — the print
+ * dialog belongs to the frame, not the tab — and is removed afterwards by us,
+ * because we own it. Nothing is opened, so nothing is left open.
+ *
+ * ── Why a frame at all, rather than printing this page ───────────────────────
+ *
+ * A print stylesheet on the application itself would have to hide the entire
+ * interface and then re-lay the invoice inside a screen that was never built
+ * for it. The frame gives the document its own page box, its own stylesheet and
+ * its own margins, and leaves the application untouched behind it.
+ */
 export function printOrderDocuments(orders: PrintableOrder[], kind: DocumentKind, labels: Labels): boolean {
     if (orders.length === 0) {
-        return false;
-    }
-
-    const win = window.open('', '_blank');
-
-    if (!win) {
         return false;
     }
 
@@ -323,24 +468,82 @@ export function printOrderDocuments(orders: PrintableOrder[], kind: DocumentKind
         .map((order) => (kind === 'invoice' ? invoiceBody(order, labels) : receiptBody(order, labels)))
         .join('');
 
-    win.document.write(`<!DOCTYPE html>
+    const title = `${kind === 'invoice' ? 'Invoice' : 'Receipt'} — ${
+        orders.length === 1 ? (orders[0]?.order_number ?? 'Order') : `${orders.length} orders`
+    }`;
+
+    const frame = document.createElement('iframe');
+
+    /*
+     * Off-screen rather than display:none.
+     *
+     * A frame that is not displayed is not laid out, and a frame that has never
+     * been laid out prints blank. Given a real size and moved out of sight, it
+     * renders exactly as it will on paper.
+     */
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText =
+        'position:fixed;right:0;bottom:0;width:210mm;height:297mm;border:0;visibility:hidden;';
+
+    document.body.appendChild(frame);
+
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+
+    if (!doc || !win) {
+        frame.remove();
+
+        return false;
+    }
+
+    let done = false;
+
+    /*
+     * Removed once, however the dialog ended.
+     *
+     * afterprint covers printing and cancelling in every current browser, but
+     * it does not fire everywhere and has fired twice in some. The guard makes
+     * a second call harmless, and the timeout means a browser that never fires
+     * it still does not leak a frame into the page.
+     */
+    const cleanUp = (): void => {
+        if (done) {
+            return;
+        }
+
+        done = true;
+        window.setTimeout(() => frame.remove(), 0);
+    };
+
+    win.addEventListener('afterprint', cleanUp);
+    window.setTimeout(cleanUp, 60_000);
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
         <html><head><meta charset="utf-8">
-        <title>${kind === 'invoice' ? 'Invoice' : 'Receipt'} — ${escape(
-            orders.length === 1 ? (orders[0]?.order_number ?? 'Order') : `${orders.length} orders`,
-        )}</title>
+        <title>${escape(title)}</title>
         <style>* { margin: 0; padding: 0; box-sizing: border-box; }${
             kind === 'invoice' ? INVOICE_CSS : RECEIPT_CSS
         }</style>
         </head><body>${body}</body></html>`);
+    doc.close();
 
-    win.document.close();
-    win.focus();
-
-    // The print dialog is opened once the document has actually laid out;
-    // calling it immediately prints a blank page in several browsers.
-    win.onload = () => {
+    /*
+     * Printed once the frame has actually laid out. Calling straight after
+     * close() prints a blank page in several browsers, and waiting on load
+     * rather than a timer means a document full of logos is not cut off
+     * mid-image.
+     */
+    const start = (): void => {
+        win.focus();
         win.print();
     };
+
+    if (doc.readyState === 'complete') {
+        window.setTimeout(start, 0);
+    } else {
+        win.addEventListener('load', start, { once: true });
+    }
 
     return true;
 }

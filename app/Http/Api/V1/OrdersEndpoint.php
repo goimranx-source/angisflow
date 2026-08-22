@@ -78,7 +78,11 @@ class OrdersEndpoint
         $page = (clone $query)
             ->with([
                 'customer:id,public_id,name,email',
-                'storefront:id,public_id,name',
+                // logo_media_id and its media row: the invoice is issued by the
+                // shop, so its mark travels with the order rather than being
+                // fetched per document.
+                'storefront:id,public_id,name,logo_media_id',
+                'storefront.logo:id,path,thumb_path',
                 'shipments.courierConnection.courier',
 
                 // Eager, so the drawer can show what was bought without a second
@@ -138,6 +142,16 @@ class OrdersEndpoint
         $storeCodes = StoreCode::forBusiness((int) $business->id);
 
         /*
+         * The business mark, read once for the page.
+         *
+         * Every order that belongs to a shop without its own logo shows this
+         * one, so resolving it per row would be the same lookup twenty-five
+         * times for a value that cannot change between them.
+         */
+        $businessLogo = $business->logoMedia?->url();
+        $businessName = (string) $business->name;
+
+        /*
          * Which of these orders the shop has not taken.
          *
          * ── Why it is fetched for the page rather than per order ─────────────
@@ -156,7 +170,7 @@ class OrdersEndpoint
 
         return response()->json([
             'data' => array_map(
-                fn (Order $order): array => $this->present($order, $base, $storeCodes, $unsent->get($order->id)),
+                fn (Order $order): array => $this->present($order, $base, $storeCodes, $unsent->get($order->id), $businessLogo, $businessName),
                 $page->items(),
             ),
             'summary' => $this->summary(clone $query, $base),
@@ -392,7 +406,7 @@ class OrdersEndpoint
      * @param  array<int, string>  $storeCodes  storefront id => short tag
      * @param  IntegrationLink|null  $unsent  set when the shop has not taken this order's changes
      */
-    private function present(Order $order, string $base, array $storeCodes = [], ?IntegrationLink $unsent = null): array
+    private function present(Order $order, string $base, array $storeCodes = [], ?IntegrationLink $unsent = null, ?string $businessLogo = null, string $businessName = ''): array
     {
         $from = (string) $order->currency;
 
@@ -426,8 +440,39 @@ class OrdersEndpoint
             'store' => $order->storefront === null ? null : [
                 'id' => $order->storefront->public_id,
                 'name' => $order->storefront->name,
+                /*
+                 * This shop's mark, or the business's when it has none.
+                 *
+                 * ── Why it falls back rather than showing nothing ───────────
+                 *
+                 * Most businesses here run one shop and think of the brand as
+                 * theirs, not the storefront's - so requiring a logo per shop
+                 * would leave the common case with blank paperwork for no
+                 * reason. A shop that sets its own overrides it, which is what
+                 * makes the per-shop field worth having at all.
+                 *
+                 * If neither exists the invoice prints the name, because a gap
+                 * where a mark should be reads as a fault and a name does not.
+                 */
+                'logo_url' => $order->storefront->logo?->url() ?? $businessLogo,
             ],
             'is_walk_in' => $order->storefront_id === null,
+
+            /*
+             * Who the paperwork is from.
+             *
+             * ── Why this is not read off 'store' ────────────────────────────
+             *
+             * Because a counter sale has no storefront at all, and an invoice
+             * for one still has to say who issued it. Resolved here so a
+             * document never has to work out the fallback itself - shop first,
+             * because an order belongs to the shop it was placed in, then the
+             * business, which is what most people mean by their brand.
+             */
+            'brand' => [
+                'name' => $order->storefront?->name ?? $businessName,
+                'logo_url' => $order->storefront?->logo?->url() ?? $businessLogo,
+            ],
 
             /*
              * A short tag for the shop, to sit in front of the number.
