@@ -8,10 +8,13 @@ use App\Domain\Assistant\Assistant;
 use App\Domain\Billing\Allowance;
 use App\Domain\Identity\Models\User;
 use App\Domain\Media\Models\MediaItem;
+use App\Domain\Money\Currencies;
+use App\Domain\Money\CurrencyService;
 use App\Domain\Settings\PlatformSettings;
 use App\Domain\Settings\Settings;
 use App\Domain\Tenancy\TenantContext;
 use App\Http\Api\V1\OrganiserEndpoint;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Everything the shell needs to draw itself: who is signed in, whose books they
@@ -63,6 +66,9 @@ final class BootPayload
             ],
             'auth' => self::auth($user),
             'tenant' => self::tenant($user),
+            // What every figure in the shell is counted in, and a token that
+            // changes whenever that answer would change. See money().
+            'money' => self::money($user),
             // The workspace decides which modules the rail may offer, so the
             // menu cannot be built without knowing which one is open. With
             // none open the nav falls back to core modules — see
@@ -187,6 +193,58 @@ final class BootPayload
         }
 
         return $allowances;
+    }
+
+    /**
+     * The currency the shell reports in, and a fingerprint of it.
+     *
+     * ── Why the fingerprint exists ───────────────────────────────────────────
+     *
+     * Changing the reporting currency changes what every figure in the product
+     * means, and it changes none of the URLs those figures arrive on. The
+     * dashboard's answers come back `Cache-Control: private, max-age=15`, so
+     * for fifteen seconds after the switch the browser is entitled to answer
+     * "this month's revenue" out of its own cache — in the currency just left,
+     * without the server ever hearing about it. React Query's cache has the
+     * same problem one layer up: same key, same stale answer. That is exactly
+     * the "it only corrects itself after a reload" symptom.
+     *
+     * So the scope goes in the URL of every read, the same trick and for the
+     * same reason as `_business` (see lib/api.ts). It carries two things
+     * because two different things invalidate a figure:
+     *
+     *   the base      changing what we report in
+     *   the stamp     refetching the rates we report through, which moves
+     *                 every converted figure without touching the base
+     *
+     * Cheap by construction: one indexed MAX against a table with one row per
+     * currency, on a payload that already does two cache reads.
+     *
+     * @return array<string, mixed>
+     */
+    private static function money(?User $user): array
+    {
+        $currency = app(CurrencyService::class);
+        $base = $currency->base();
+
+        $accountId = $user === null ? null : app(TenantContext::class)->accountId();
+
+        $stamp = $accountId === null
+            ? null
+            : DB::table('exchange_rates')
+                ->where('account_id', $accountId)
+                ->where('base', $base)
+                ->max('fetched_at');
+
+        return [
+            'base' => $base,
+            // The symbol, not the code. Every figure elsewhere in the product
+            // is rendered with a symbol, and a panel heading that says "MYR"
+            // beside values reading "RM 28,884" asks the reader to work out
+            // that those are the same thing.
+            'symbol' => Currencies::symbol($base),
+            'scope' => $base.'-'.($stamp === null ? 'none' : strtotime((string) $stamp)),
+        ];
     }
 
     /**

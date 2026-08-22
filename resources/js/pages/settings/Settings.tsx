@@ -14,9 +14,7 @@ import type { SettingsGroup, SettingsGroupKey } from '@/types/settings';
 // grid — which is the same reasoning as the route-level splitting, one level
 // further in.
 const panels = {
-    appearance: lazy(() => import('@/pages/settings/AppearancePanel')),
     currency: lazy(() => import('@/pages/settings/CurrencyPanel')),
-    media: lazy(() => import('@/pages/settings/MediaPanel')),
     integrations: lazy(() => import('@/pages/settings/IntegrationsPanel')),
 } as const;
 
@@ -39,7 +37,7 @@ const panels = {
  */
 export default function Settings() {
     const { group } = useParams<{ group?: string }>();
-    const active = (group ?? 'appearance') as SettingsGroupKey;
+    const active = (group ?? 'currency') as SettingsGroupKey;
 
     useDocumentTitle('Settings');
 
@@ -52,15 +50,14 @@ export default function Settings() {
     });
 
     const groups = data?.data ?? [];
-    const current = groups.find((candidate) => candidate.key === active);
-    const Panel = panels[active] ?? panels.appearance;
+    const Panel = panels[active as keyof typeof panels] ?? panels.currency;
 
     return (
         <div className="mx-auto max-w-5xl">
-            <PageHeader
-                title="Settings"
-                description="How the tool looks, what it counts in, and what it connects to."
-            />
+            {/* Title alone. The tab strip immediately below already says what
+                is in here, and a sentence restating it is a line of furniture
+                between the heading and the thing people came to change. */}
+            <PageHeader title="Settings" />
 
             <div className="mb-5 border-b border-[var(--color-border-light)]">
                 <nav className="-mb-px flex flex-wrap gap-1" aria-label="Settings sections">
@@ -69,20 +66,23 @@ export default function Settings() {
                               <span key={i} className="mb-2 h-8 w-28 animate-pulse rounded-lg bg-[var(--color-brand-subtle)]" />
                           ))
                         : groups.map((tab) => (
+                              // isActive is computed against `active` rather than
+                              // left to NavLink's own path matching. `/settings`
+                              // with no group segment renders the currency panel
+                              // (see the `active` fallback above), but its own
+                              // href is `/settings/currency` — a path NavLink
+                              // never sees you as being on, so the tab strip
+                              // showed no tab selected while the currency panel
+                              // was plainly on screen.
                               <NavLink
                                   key={tab.key}
                                   to={tab.key === 'appearance' ? '/settings' : `/settings/${tab.key}`}
-                                  // `end` on the index tab only, so /settings
-                                  // does not stay highlighted on every child.
-                                  end={tab.key === 'appearance'}
-                                  className={({ isActive }) =>
-                                      cn(
-                                          'flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
-                                          isActive
-                                              ? 'border-[var(--color-brand)] text-[var(--color-text-main)]'
-                                              : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
-                                      )
-                                  }
+                                  className={cn(
+                                      'flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
+                                      tab.key === active
+                                          ? 'border-[var(--color-brand)] text-[var(--color-text-main)]'
+                                          : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
+                                  )}
                               >
                                   <Icon name={tab.icon} size={16} weight="regular" />
                                   {tab.label}
@@ -91,9 +91,10 @@ export default function Settings() {
                 </nav>
             </div>
 
-            {current && (
-                <p className="mb-4 text-sm text-[var(--color-text-muted)]">{current.blurb}</p>
-            )}
+            {/* The tab's own blurb is gone too. Each card below now carries its
+                explanation behind an info icon, so this line was a third
+                restatement — page title, tab label, then a sentence — before
+                anything editable appeared. */}
 
             {/* Nothing while a chunk resolves. The tab strip is already on
                 screen and the panel usually arrives on the next frame; a

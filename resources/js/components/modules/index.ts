@@ -18,3 +18,4 @@ export {
 export { BulkActions, BulkActionButton, SelectCheckbox } from './BulkActions';
 export { QuickCreateModal, QuickActionButton } from './QuickCreate';
 export { KPICard, KPICardSkeleton } from './KPICard';
+export { ImportModal } from './ImportModal';

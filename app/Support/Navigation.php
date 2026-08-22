@@ -244,6 +244,124 @@ final class Navigation
     }
 
     /**
+     * Which modules this user can actually reach, as a flat set of keys.
+     *
+     * ── Why anything asking "can this business do X" comes through here ──────
+     *
+     * The menu already answers that question, and it answers it for the hard
+     * case: a business carrying several categories gets the union of what each
+     * one turns on, with subcategories resolved to the parent that holds the
+     * presets. Anything that re-derives capability from the category key instead
+     * — a match() on 'retail' somewhere in a dashboard — is a second opinion,
+     * and the two drift the first time a business is given a second category.
+     *
+     * So: the sidebar and every screen that varies by trade read the same list.
+     * If the menu will not offer a module, no screen advertises it either.
+     *
+     * `built` is deliberately not filtered here. Callers want different things
+     * — a panel needs a module that is genuinely open, while a "coming soon"
+     * strip wants the ones that are not — so both are returned and the caller
+     * says which it means.
+     *
+     * @return array{all: list<string>, built: list<string>}
+     */
+    public static function capabilitiesFor(User $user, ?Workspace $workspace = null, mixed $business = null): array
+    {
+        $items = collect(self::forUser($user, $workspace, $business))
+            ->pluck('items')
+            ->flatten(1);
+
+        return [
+            'all' => $items->pluck('key')->unique()->values()->all(),
+            'built' => $items->filter(fn ($item) => (bool) ($item['built'] ?? false))
+                ->pluck('key')
+                ->unique()
+                ->values()
+                ->all(),
+            // Keyed by the business's own category id — see
+            // capabilitiesByCategoryFor() for why this cannot be derived
+            // from build()'s 'enabled_by' the way the union above is.
+            'by_category' => self::capabilitiesByCategoryFor($user, $business),
+        ];
+    }
+
+    /**
+     * The built modules a business can reach, split out by which of *its
+     * own* categories turns each one on.
+     *
+     * ── Why this cannot reuse build()'s 'enabled_by' ─────────────────────────
+     *
+     * build() resolves a subcategory to its parent before matching against
+     * the preset table (BusinessCategory::presetSource() — a subcategory
+     * with no preset rows of its own borrows its parent's), and reports the
+     * *parent's* id in 'enabled_by' because that is what the sidebar's own
+     * grouping headers want: "Retail", not the one subcategory a business
+     * happens to carry. A dashboard chip is not a sidebar heading, though —
+     * it is labelled with the business's own category ("Online store"), and
+     * whatever it filters by has to key off the same id the chip is
+     * wearing. Keying off the parent instead would silently drop every
+     * non-core module a subcategory business has — orders, invoicing,
+     * stock — the moment somebody clicked the one chip they were shown,
+     * which is worse than the tab strip not existing at all.
+     *
+     * @return array<int, list<string>>
+     */
+    public static function capabilitiesByCategoryFor(User $user, mixed $business): array
+    {
+        if ($business === null || $business->categories->isEmpty()) {
+            return [];
+        }
+
+        // Built only, and capability-gated — the same two filters build()
+        // applies, minus the category filter it does in-line, since that is
+        // the one part this method does per-category instead.
+        $modules = Cache::remember(
+            'catalogue:all_modules',
+            3600,
+            fn () => Module::query()
+                ->with(['pillar', 'defaultCategories'])
+                ->join('module_pillars', 'module_pillars.id', '=', 'modules.pillar_id')
+                ->orderBy('module_pillars.sort_order')
+                ->orderBy('modules.sort_order')
+                ->select('modules.*')
+                ->get(),
+        )->filter(fn ($module) => $module->is_built
+            && ($module->capability === null || $user->hasCapability($module->capability)));
+
+        $byCategory = [];
+
+        foreach ($business->categories as $category) {
+            if (! $category->relationLoaded('parent') && $category->parent_id) {
+                $category->load('parent');
+            }
+
+            $sourceId = $category->presetSource()->getAttributes()['id'];
+            $businessCategoryId = $category->getAttributes()['id'];
+
+            $byCategory[$businessCategoryId] = $modules
+                ->filter(function ($module) use ($sourceId) {
+                    // Core modules are on for every category — the same rule
+                    // build() applies before it ever looks at defaultCategories.
+                    if ($module->is_core) {
+                        return true;
+                    }
+
+                    $moduleCategoryIds = $module->defaultCategories
+                        ->map(fn ($c) => $c->getAttributes()['id'])
+                        ->all();
+
+                    return in_array($sourceId, $moduleCategoryIds, true);
+                })
+                ->pluck('key')
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return $byCategory;
+    }
+
+    /**
      * The businesses the header switcher offers.
      *
      * Cached per account and dropped whenever a business is written — see the

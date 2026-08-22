@@ -50,25 +50,56 @@ class CurrencyEndpoint extends Endpoint
             'base' => ['required', 'string', 'size:3', Rule::in(array_keys(Currencies::ALL))],
         ]);
 
+        /*
+         * Written to whichever level the figures are actually read from.
+         *
+         * CurrencyService::base() resolves business first, so a save that went
+         * to the workspace while a business was open would appear to do
+         * nothing: the setting would change and every screen would carry on
+         * reading the business's own currency. The write has to follow the
+         * read, or the two drift and the screen looks broken.
+         *
+         * The same column is edited on the business's own add/edit form, and
+         * deliberately so — both write businesses.base_currency, so whichever
+         * one somebody reaches for, the other is already true.
+         */
+        $business = $this->tenant->business();
+        $workspace = $this->tenant->workspace();
         $account = $this->tenant->account();
 
-        abort_if($account === null, 404);
+        abort_if($business === null && $workspace === null && $account === null, 404);
 
-        $from = $account->base_currency;
+        $from = $this->currency->base();
         $to = strtoupper($validated['base']);
 
         if ($from === $to) {
             return response()->json(['message' => "Already counting in {$to}."]);
         }
 
-        $account->forceFill(['base_currency' => $to])->save();
+        $scope = 'account';
+
+        if ($business !== null) {
+            $business->forceFill(['base_currency' => $to])->save();
+            $scope = 'business';
+        } elseif ($workspace !== null) {
+            $workspace->forceFill(['base_currency' => $to])->save();
+            $scope = 'workspace';
+        } else {
+            $account->forceFill(['base_currency' => $to])->save();
+        }
 
         $this->settings->set('currency.rebuilt_at', now()->toIso8601String());
         $this->currency->forget();
 
+        $subject = match ($scope) {
+            'business' => $business->name,
+            'workspace' => $workspace->name,
+            default => 'This account',
+        };
+
         return response()->json([
-            'message' => "Now counting in {$to} instead of {$from}. Every figure is worked out again "
-                .'from what actually changed hands, so nothing recorded has moved.',
+            'message' => "{$subject} now counts in {$to} instead of {$from}. Every figure is worked "
+                .'out again from what actually changed hands, so nothing recorded has moved.',
             'boot' => BootPayload::build(),
         ]);
     }

@@ -11,6 +11,7 @@ import {
     KPICard,
 } from '@/components/modules';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useMoney } from '@/hooks/useMoney';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
@@ -110,13 +111,8 @@ export default function Stock() {
         });
     };
 
-    // Format currency
-    const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(amount);
-    };
+    // Money in the business currency, and inside the money scope.
+    const { format: formatMoney } = useMoney();
 
     // Status variants
     const statusVariants: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
@@ -271,7 +267,7 @@ export default function Stock() {
                                     label: 'Product',
                                     render: (item) => (
                                         <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--color-neutral-subtle)]">
+                                            <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--shell-tint)]">
                                                 {item.product.image ? (
                                                     <img
                                                         src={item.product.image}

@@ -55,6 +55,7 @@
         which on a slow connection is most of the difference in time-to-first-
         paint.
     --}}
+    @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     
     {{-- Inline preloader styles to show immediately before React loads --}}

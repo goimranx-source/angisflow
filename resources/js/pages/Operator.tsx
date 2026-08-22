@@ -134,10 +134,10 @@ function AccountDetailPanel({ id, onClose }: { id: string; onClose: () => void }
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
             <div
-                className="h-full w-full max-w-xl overflow-y-auto bg-[var(--color-surface)] shadow-xl"
+                className="h-full w-full max-w-xl overflow-y-auto bg-[var(--color-card-bg)] shadow-xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="sticky top-0 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4">
+                <div className="sticky top-0 flex items-center justify-between border-b border-[var(--color-border-light)] bg-[var(--color-card-bg)] px-5 py-4">
                     <h2 className="font-semibold">{account?.name ?? 'Loading…'}</h2>
                     <button className="btn-ghost text-sm" onClick={onClose}>Close</button>
                 </div>
@@ -352,18 +352,18 @@ export default function Operator() {
                 ) : (
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="border-b border-[var(--color-border)] text-xs text-[var(--color-text-muted)]">
+                            <tr className="border-b border-[var(--color-border-light)] text-xs text-[var(--color-text-muted)]">
                                 <th className="px-4 py-2.5 text-left font-medium">Account</th>
                                 <th className="px-4 py-2.5 text-left font-medium">Status</th>
                                 <th className="px-4 py-2.5 text-left font-medium">Plan</th>
                                 <th className="px-4 py-2.5 text-left font-medium">Joined</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-[var(--color-border-subtle)]">
+                        <tbody className="divide-y divide-[var(--color-border-light)]">
                             {accounts.map((a) => (
                                 <tr
                                     key={a.id}
-                                    className="cursor-pointer hover:bg-[var(--color-surface-raised)]"
+                                    className="cursor-pointer hover:bg-[var(--color-card-raised)]"
                                     onClick={() => setSelected(a.id)}
                                 >
                                     <td className="px-4 py-2.5">

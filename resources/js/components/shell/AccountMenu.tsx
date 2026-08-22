@@ -136,9 +136,19 @@ export function AccountMenu() {
                                 <span className="account-menu-plan">{tenant.allowance.plan}</span>
                             )}
                         </MenuItem>
-                        <MenuItem to="/settings" icon="gear-six" onGo={closeMenu}>
-                            Settings
-                        </MenuItem>
+                        {/*
+                            Settings has moved to the sidebar, under Admin &
+                            Settings. It belongs with the workspace rather than
+                            with the person: currency and integrations now
+                            resolve per workspace, so the screen genuinely says
+                            something different depending on which one is open —
+                            and this menu does not change when you switch. Left
+                            here, it would read as an account-wide screen.
+
+                            What remains in this drawer is what is true of the
+                            person however they switch: their profile, their
+                            subscription, their two-factor.
+                        */}
 
                         {!auth.user.two_factor_enabled && (
                             <MenuItem

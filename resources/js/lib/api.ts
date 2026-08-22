@@ -107,6 +107,54 @@ type RequestOptions = {
 
 const BASE = '/api/v1';
 
+/**
+ * The business every GET is answered for, written into the URL.
+ *
+ * ── Why this is here and not at the call sites ───────────────────────────────
+ *
+ * The server reads the open business from the session, so this parameter tells
+ * it nothing it does not already know and is deliberately ignored there. It is
+ * for the browser's cache, which knows only the URL.
+ *
+ * Responses are returned with `Cache-Control: private, max-age=15`, and without
+ * this the address of "this month's revenue" is the same string whichever books
+ * are open. Switch business and the refetch is a request the browser believes it
+ * has already answered — so it serves the previous business's money under the
+ * new business's name, without the server ever hearing about it, and the figures
+ * only correct themselves once the cache expires. Which is precisely the "it
+ * changes after a reload" symptom.
+ *
+ * Set from the session on every boot and switch — see SessionProvider. Kept in a
+ * module variable rather than passed through each call because the failure mode
+ * of forgetting it once is showing somebody another company's accounts, and that
+ * is not a thing to leave to whoever writes the next page.
+ */
+let scopedBusiness: string | null = null;
+
+export function setApiBusinessScope(businessId: string | null): void {
+    scopedBusiness = businessId;
+}
+
+/**
+ * The money scope every GET is answered under, written into the URL.
+ *
+ * Exactly the same device as `scopedBusiness` above and for exactly the same
+ * reason, applied to the other thing that silently changes what a figure
+ * means: the currency it is reported in, and the rates it was converted
+ * through. Switching currency in settings leaves every dashboard URL
+ * identical, so without this the browser answers the refetch out of its own
+ * fifteen-second cache — in the currency just left — and the screen only
+ * corrects itself on a reload.
+ *
+ * Ignored by the server, which reads the workspace's currency from the
+ * session. It is here for the caches, which know only the URL.
+ */
+let scopedMoney: string | null = null;
+
+export function setApiMoneyScope(scope: string | null): void {
+    scopedMoney = scope;
+}
+
 async function request<T>(
     method: string,
     path: string,
@@ -122,6 +170,17 @@ async function request<T>(
         if (value !== null && value !== undefined && value !== '') {
             url.searchParams.set(key, String(value));
         }
+    }
+
+    // Reads only. A POST is never served from cache, and adding it there would
+    // put a business id in the audit trail of every write as though it had been
+    // meaningful input.
+    if (scopedBusiness !== null && (method === 'GET' || method === 'HEAD')) {
+        url.searchParams.set('_business', scopedBusiness);
+    }
+
+    if (scopedMoney !== null && (method === 'GET' || method === 'HEAD')) {
+        url.searchParams.set('_cur', scopedMoney);
     }
 
     const isWrite = method !== 'GET' && method !== 'HEAD';

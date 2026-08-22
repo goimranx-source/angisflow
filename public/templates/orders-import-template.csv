@@ -1,0 +1,4 @@
+order_number,customer_name,customer_email,customer_phone,total,subtotal,tax,shipping,discount,currency,status,payment_status,date,shipping_name,shipping_address,shipping_city,shipping_postcode,shipping_country,notes
+ORD-001,John Doe,john@example.com,+1234567890,150.00,130.00,15.00,5.00,0.00,USD,pending,unpaid,2024-01-15,John Doe,123 Main St,New York,10001,USA,Please deliver after 5 PM
+ORD-002,Jane Smith,jane@example.com,+0987654321,250.50,230.50,20.00,0.00,0.00,USD,confirmed,paid,2024-01-16,Jane Smith,456 Oak Ave,Los Angeles,90001,USA,Gift wrap requested
+ORD-003,Bob Johnson,bob@example.com,+1122334455,99.99,89.99,10.00,0.00,0.00,USD,completed,paid,2024-01-17,Bob Johnson,789 Pine Rd,Chicago,60601,USA,

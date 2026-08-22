@@ -12,3 +12,4 @@ export { CashFlowMini } from './CashFlowMini';
 export { PendingTasks } from './PendingTasks';
 export { QuickActions } from './QuickActions';
 export { NotificationBell } from './NotificationBell';
+export { ExpenseBreakdown } from './ExpenseBreakdown';

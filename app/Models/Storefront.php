@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Domain\Shared\Concerns\HasPublicId;
+use App\Domain\Shared\ValueObjects\Money;
 use App\Domain\Tenancy\Concerns\BelongsToAccount;
 use App\Domain\Tenancy\Concerns\BelongsToBusiness;
-use App\Domain\Shared\Concerns\HasPublicId;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -24,6 +25,9 @@ class Storefront extends Model
     protected $fillable = [
         'name',
         'slug',
+        'code',
+        'type',
+        'status',
         'title',
         'description',
         'settings',
@@ -101,10 +105,12 @@ class Storefront extends Model
     {
         if ($this->custom_domain) {
             $protocol = $this->ssl_enabled ? 'https' : 'http';
+
             return "{$protocol}://{$this->custom_domain}";
         }
 
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "{$baseUrl}/store/{$this->slug}";
     }
 
@@ -153,12 +159,12 @@ class Storefront extends Model
      */
     public function allowsOrigin(?string $origin): bool
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return false;
         }
 
         // Always allow access from main domain
-        if (!$origin || str_contains($origin, config('app.url'))) {
+        if (! $origin || str_contains($origin, config('app.url'))) {
             return true;
         }
 
@@ -248,7 +254,7 @@ class Storefront extends Model
         if ($this->hasMinimumOrder()) {
             $totalMinor = $orderData['total_minor'] ?? 0;
             if ($totalMinor < $this->minimum_order_amount_minor) {
-                $minimum = new \App\Domain\Shared\ValueObjects\Money($this->minimum_order_amount_minor, $this->currency ?? 'USD');
+                $minimum = new Money($this->minimum_order_amount_minor, $this->currency ?? 'USD');
                 $errors[] = "Minimum order amount is {$minimum->toDecimalString()}";
             }
         }
@@ -256,14 +262,14 @@ class Storefront extends Model
         // Check shipping zones if provided
         if ($this->shipping_zones && isset($orderData['shipping_address'])) {
             $allowed = $this->isShippingAllowed($orderData['shipping_address']);
-            if (!$allowed) {
-                $errors[] = "Shipping is not available to this location";
+            if (! $allowed) {
+                $errors[] = 'Shipping is not available to this location';
             }
         }
 
         // Check account requirement
         if ($this->require_account && empty($orderData['customer_id'])) {
-            $errors[] = "Account registration is required for purchases";
+            $errors[] = 'Account registration is required for purchases';
         }
 
         return $errors;
@@ -297,32 +303,32 @@ class Storefront extends Model
     private function addressMatchesZone(array $address, array $zone): bool
     {
         // Check country restrictions
-        if (isset($zone['countries']) && !empty($zone['countries'])) {
-            if (!in_array($address['country'] ?? null, $zone['countries'])) {
+        if (isset($zone['countries']) && ! empty($zone['countries'])) {
+            if (! in_array($address['country'] ?? null, $zone['countries'])) {
                 return false;
             }
         }
 
         // Check state/province restrictions
-        if (isset($zone['states']) && !empty($zone['states'])) {
-            if (!in_array($address['state'] ?? null, $zone['states'])) {
+        if (isset($zone['states']) && ! empty($zone['states'])) {
+            if (! in_array($address['state'] ?? null, $zone['states'])) {
                 return false;
             }
         }
 
         // Check postal code patterns
-        if (isset($zone['postal_patterns']) && !empty($zone['postal_patterns'])) {
+        if (isset($zone['postal_patterns']) && ! empty($zone['postal_patterns'])) {
             $zip = $address['postal_code'] ?? '';
             $matched = false;
-            
+
             foreach ($zone['postal_patterns'] as $pattern) {
                 if (fnmatch($pattern, $zip)) {
                     $matched = true;
                     break;
                 }
             }
-            
-            if (!$matched) {
+
+            if (! $matched) {
                 return false;
             }
         }

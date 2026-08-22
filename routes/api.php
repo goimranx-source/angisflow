@@ -19,8 +19,13 @@ use App\Http\Api\V1\CategoryDashboardEndpoint;
 use App\Http\Api\V1\DashboardPanelsEndpoint;
 use App\Http\Api\V1\BusinessEndpoint;
 use App\Http\Api\V1\CourierEndpoint;
+use App\Http\Api\V1\CouriersEndpoint;
+use App\Http\Api\V1\IntegrationsEndpoint;
+use App\Http\Api\V1\OrdersEndpoint;
+use App\Http\Api\V1\StorefrontsEndpoint;
 use App\Http\Api\V1\CurrencyEndpoint;
 use App\Http\Api\V1\DashboardEndpoint;
+use App\Http\Api\V1\DashboardExportEndpoint;
 use App\Http\Api\V1\HealthEndpoint;
 use App\Http\Api\V1\MediaEndpoint;
 use App\Http\Api\V1\ProfileEndpoint;
@@ -30,6 +35,7 @@ use App\Http\Api\V1\WorkspaceEndpoint;
 use App\Http\Controllers\OnboardingController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Api\Webhooks\CourierWebhookController;
+use App\Http\Api\Webhooks\IntegrationWebhookController;
 use App\Http\Api\Webhooks\MessageWebhookController;
 use App\Http\Api\Webhooks\WebchatController;
 
@@ -137,6 +143,16 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
         ->name('category-dashboard');
 
     /*
+    | The dashboard as a file — PDF or spreadsheet.
+    |
+    | Outside the dashboard.* prefix group below because those are JSON panels
+    | and this returns a download; sharing their name prefix would make the
+    | route list read as though it were another panel.
+    */
+    Route::get('dashboard-export', DashboardExportEndpoint::class)
+        ->middleware('can:dashboard.view')->name('dashboard.export');
+
+    /*
     | The dashboard's panels.
     |
     | Each panel fetches its own slice so a slow one never holds up the rest.
@@ -147,6 +163,7 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
     Route::prefix('dashboard')->name('dashboard.')->middleware('can:dashboard.view')->group(function () {
         Route::get('sales-chart',   [DashboardPanelsEndpoint::class, 'salesChart'])->name('sales-chart');
         Route::get('cash-flow',     [DashboardPanelsEndpoint::class, 'cashFlow'])->name('cash-flow');
+        Route::get('expense-breakdown', [DashboardPanelsEndpoint::class, 'expenseBreakdown'])->name('expense-breakdown');
         Route::get('top-products',  [DashboardPanelsEndpoint::class, 'topProducts'])->name('top-products');
         Route::get('recent-orders', [DashboardPanelsEndpoint::class, 'recentOrders'])->name('recent-orders');
         Route::get('top-customers', [DashboardPanelsEndpoint::class, 'topCustomers'])->name('top-customers');
@@ -397,6 +414,117 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
     Route::post('businesses/{id}', [WorkspaceEndpoint::class, 'updateBusiness'])->name('businesses.update');
 
     /*
+    | Sales — the order book.
+    |
+    | Read-only for now: creating an order moves stock and posts to the ledger,
+    | and that belongs behind OrderService rather than a list endpoint.
+    */
+    /*
+    | Storefronts — the shops a business sells through, and how each one's
+    | records become ours. The mapping screens live on the shop, not in Settings.
+    */
+    Route::get('storefronts', [StorefrontsEndpoint::class, 'index'])
+        ->middleware('can:sales.view')->name('storefronts.index');
+    Route::post('storefronts', [StorefrontsEndpoint::class, 'store'])
+        ->middleware('can:sales.edit')->name('storefronts.store');
+    Route::post('storefronts/{id}/sync', [StorefrontsEndpoint::class, 'sync'])
+        ->middleware('can:sales.edit')->name('storefronts.sync');
+    Route::patch('storefronts/{id}', [StorefrontsEndpoint::class, 'update'])
+        ->middleware('can:sales.edit')->name('storefronts.update');
+    Route::delete('storefronts/{id}', [StorefrontsEndpoint::class, 'destroy'])
+        ->middleware('can:sales.edit')->name('storefronts.destroy');
+    Route::get('storefronts/{id}', [StorefrontsEndpoint::class, 'show'])
+        ->middleware('can:sales.view')->name('storefronts.show');
+
+    Route::get('orders', [OrdersEndpoint::class, 'index'])
+        ->middleware('can:sales.view')->name('orders.index');
+    Route::post('orders/bulk-update', [OrdersEndpoint::class, 'bulkUpdate'])
+        ->middleware('can:sales.edit')->name('orders.bulk-update');
+    Route::post('orders/bulk-dispatch', [OrdersEndpoint::class, 'bulkDispatch'])
+        ->middleware('can:sales.edit')->name('orders.bulk-dispatch');
+    Route::post('orders/{orderId}/dispatch', [OrdersEndpoint::class, 'dispatch'])
+        ->middleware('can:sales.edit')->name('orders.dispatch');
+    Route::post('orders/{orderId}/cancel-dispatch', [OrdersEndpoint::class, 'cancelDispatch'])
+        ->middleware('can:sales.edit')->name('orders.cancel-dispatch');
+    
+    // Courier connections management
+    Route::get('couriers', [CouriersEndpoint::class, 'index'])
+        ->middleware('can:sales.view')->name('couriers.index');
+    Route::post('couriers', [CouriersEndpoint::class, 'store'])
+        ->middleware('can:sales.edit')->name('couriers.store');
+    Route::get('couriers/{id}', [CouriersEndpoint::class, 'show'])
+        ->middleware('can:sales.view')->name('couriers.show');
+    Route::post('couriers/{id}/simulate', [CouriersEndpoint::class, 'simulate'])
+        ->middleware('can:sales.edit')->name('couriers.simulate');
+    Route::put('couriers/{id}', [CouriersEndpoint::class, 'update'])
+        ->middleware('can:sales.edit')->name('couriers.update');
+    Route::delete('couriers/{id}', [CouriersEndpoint::class, 'destroy'])
+        ->middleware('can:sales.edit')->name('couriers.destroy');
+    
+    Route::post('orders/import', [\App\Http\Api\V1\OrderImportEndpoint::class, 'import'])
+        ->middleware('can:sales.edit')->name('orders.import');
+
+    /*
+    | Integrations — the shops a business sells through.
+    |
+    | No route here names a platform either, for the same reason: the catalogue
+    | is built from the registered drivers, and the form is built from whichever
+    | driver was chosen. Adding a fifth platform adds a class, not a route.
+    |
+    | Reading a connection needs settings.view; anything that changes credentials
+    | or reaches out to a shop needs settings.edit — a connection test is a
+    | request made with this business's keys, and a sync writes records.
+    */
+    Route::prefix('settings/integrations')->name('settings.integrations.')->group(function () {
+        Route::get('catalogue', [IntegrationsEndpoint::class, 'catalogue'])
+            ->middleware('can:settings.view')->name('catalogue');
+
+        Route::get('/', [IntegrationsEndpoint::class, 'index'])
+            ->middleware('can:settings.view')->name('index');
+
+        Route::post('test', [IntegrationsEndpoint::class, 'test'])
+            ->middleware('can:settings.edit')->name('test');
+
+        Route::post('/', [IntegrationsEndpoint::class, 'store'])
+            ->middleware('can:settings.edit')->name('store');
+
+        Route::get('{id}/sample-paths', [IntegrationsEndpoint::class, 'samplePaths'])
+            ->middleware('can:settings.view')->name('sample-paths');
+        Route::post('{id}/fields', [IntegrationsEndpoint::class, 'addField'])
+            ->middleware('can:settings.edit')->name('fields.store');
+        Route::put('{id}/field-maps', [IntegrationsEndpoint::class, 'saveFieldMaps'])
+            ->middleware('can:settings.edit')->name('field-maps.save');
+
+        Route::get('{id}/status-map', [IntegrationsEndpoint::class, 'statusMap'])
+            ->middleware('can:settings.view')->name('status-map');
+        Route::put('{id}/status-map', [IntegrationsEndpoint::class, 'saveStatusMap'])
+            ->middleware('can:settings.edit')->name('status-map.save');
+
+        Route::post('{id}/statuses', [IntegrationsEndpoint::class, 'addStatus'])
+            ->middleware('can:settings.edit')->name('statuses.store');
+
+        Route::post('{id}/sync', [IntegrationsEndpoint::class, 'sync'])
+            ->middleware('can:settings.edit')->name('sync');
+
+        /*
+        | Making the shop call us, rather than telling somebody how to.
+        |
+        | Reading is a view permission and writing an edit one, because the
+        | first is a diagnosis — is this shop wired up, and to what address —
+        | and the second changes configuration on somebody's live storefront.
+        */
+        Route::get('{id}/webhooks', [IntegrationsEndpoint::class, 'webhooks'])
+            ->middleware('can:settings.view')->name('webhooks');
+        Route::post('{id}/webhooks/repair', [IntegrationsEndpoint::class, 'repairWebhooks'])
+            ->middleware('can:settings.edit')->name('webhooks.repair');
+
+        Route::patch('{id}', [IntegrationsEndpoint::class, 'update'])
+            ->middleware('can:settings.edit')->name('update');
+        Route::delete('{id}', [IntegrationsEndpoint::class, 'destroy'])
+            ->middleware('can:settings.edit')->name('destroy');
+    });
+
+    /*
     | Couriers — one dashboard for all of them.
     |
     | No route here names a courier, and none ever will: adding a tenth is a
@@ -518,6 +646,20 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'password.confirm', 'throttle
 */
 Route::any('webhooks/couriers/{connection}', CourierWebhookController::class)
     ->name('webhooks.couriers');
+
+/*
+| A connected shop, telling us an order changed.
+|
+| Outside every auth group for the same reason as the courier webhooks: a shop
+| has no session and no CSRF token. The token in the path identifies which
+| connection is being addressed; the signature, checked by that platform's own
+| driver, proves the body is genuine.
+|
+| `any` because platforms use whichever verb they like. The address is shown to
+| the subscriber on the connection's row in Settings → Integrations.
+*/
+Route::any('webhooks/integrations/{token}', IntegrationWebhookController::class)
+    ->name('webhooks.integrations');
 
 /*
 |--------------------------------------------------------------------------

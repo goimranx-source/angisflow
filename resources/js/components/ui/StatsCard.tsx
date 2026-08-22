@@ -1,13 +1,23 @@
 import { type ReactNode } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
+import { InfoHint } from '@/components/ui/InfoHint';
 import { cn } from '@/lib/utils';
 
 type StatsCardProps = {
     /** Card label/title */
     label: string;
-    /** Main value to display */
+    /** Main value to display. Keep it short — see `valueTitle`. */
     value: string | number;
+    /**
+     * The unabbreviated figure, revealed on hover.
+     *
+     * A headline is compacted to "RM 28.9K" so a row of cards stays scannable
+     * and a figure that grows into the millions does not reflow the layout.
+     * The exact amount is still the thing somebody occasionally needs, so it
+     * is a hover away rather than gone.
+     */
+    valueTitle?: string;
     /** Icon name (Phosphor icon) */
     icon?: string;
     /** Custom icon element */
@@ -20,6 +30,23 @@ type StatsCardProps = {
     riseIsGood?: boolean;
     /** Trend label/description */
     trendLabel?: string;
+    /**
+     * What the delta was measured against — "Compared with 1 Jul – 31 Jul
+     * 2026." Behind an info icon beside the title rather than printed under
+     * every card: a reader who already knows what a month-over-month
+     * comparison means does not need it stated four times on one screen, and
+     * the one who is unsure can still ask.
+     */
+    comparisonHint?: ReactNode;
+    /**
+     * The colour of the icon tile.
+     *
+     * The semantic five rather than a decorative palette, so a card's colour
+     * says something: revenue is brand, money owed is a warning, money overdue
+     * is a danger. A row of five is then scannable by shape as well as by
+     * reading every label.
+     */
+    accent?: 'brand' | 'success' | 'warning' | 'danger' | 'info';
     /** Additional class */
     className?: string;
     /** Click handler */
@@ -63,16 +90,20 @@ type StatsCardProps = {
 export function StatsCard({
     label,
     value,
+    valueTitle,
     icon,
     iconElement,
     delta,
     direction = 'flat',
     riseIsGood = true,
     trendLabel,
+    comparisonHint,
+    accent = 'brand',
     className,
     onClick,
 }: StatsCardProps) {
-    // Determine if trend is positive based on direction and whether rise is good
+    // A rise in expenses is not good news, and colouring it green because the
+    // arrow points up is how a dashboard teaches people to stop reading it.
     const isPositiveTrend =
         direction === 'flat' ? null : (direction === 'up') === riseIsGood;
 
@@ -83,55 +114,82 @@ export function StatsCard({
             type={onClick ? 'button' : undefined}
             onClick={onClick}
             className={cn(
-                'card p-5',
-                onClick && 'transition-all hover:shadow-md',
-                onClick && 'cursor-pointer',
+                'card p-4 text-left',
+                onClick && 'cursor-pointer transition-colors hover:bg-[var(--shell-hover)]',
                 className,
             )}
         >
-            <div className="flex items-center justify-between">
-                <span className="text-[0.8125rem] font-medium text-[var(--color-text-muted)]">
-                    {label}
-                </span>
-                <span className="grid size-8 place-items-center rounded-[10px] bg-[var(--color-brand-subtle)] text-[var(--color-ink-soft)]">
-                    {iconElement ? (
-                        iconElement
-                    ) : icon ? (
-                        <Icon name={icon} size={16} />
-                    ) : (
-                        <Icon name="chart-bar" size={16} />
-                    )}
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                        <p className="truncate text-[0.8125rem] font-medium text-[var(--color-text-muted)]">
+                            {label}
+                        </p>
+                        {comparisonHint && (
+                            <InfoHint label={`How ${label} is compared`}>{comparisonHint}</InfoHint>
+                        )}
+                    </div>
+
+                    <p
+                        className="mt-1.5 truncate font-[family-name:var(--font-heading)] text-[1.75rem] leading-tight font-bold text-[var(--color-text-main)] [font-variant-numeric:tabular-nums]"
+                        title={valueTitle}
+                    >
+                        {value}
+                    </p>
+                </div>
+
+                <span className={cn('stat-tile', accent !== 'brand' && `is-${accent}`)}>
+                    {iconElement ?? <Icon name={icon ?? 'chart-bar'} size={17} />}
                 </span>
             </div>
 
-            <p className="mt-3 font-[family-name:var(--font-heading)] text-2xl font-bold text-[var(--color-text-main)]">
-                {value}
-            </p>
+            {/*
+                The trend row is drawn whenever the caller says this figure
+                has one — `delta={null}` still means "compared, but the
+                change cannot be expressed", which is what a period starting
+                from zero gives you. Only `undefined` (the prop left off)
+                removes the row.
 
-            {delta !== null && delta !== undefined && (
-                <div className="mt-1 flex items-center gap-1">
-                    <p
-                        className="flex items-center gap-1 text-xs font-medium"
-                        style={{
-                            color:
-                                isPositiveTrend === null
-                                    ? 'var(--color-text-muted)'
-                                    : isPositiveTrend
-                                      ? 'var(--color-success)'
-                                      : 'var(--color-danger-text)',
-                        }}
-                    >
-                        <Icon
-                            name={direction === 'down' ? 'trend-down' : 'trend-up'}
-                            size={13}
-                            weight="bold"
-                        />
-                        {Math.abs(delta)}%
-                    </p>
-                    {trendLabel && (
+                Rendering it unconditionally is what keeps a row of cards the
+                same height, and what stops the divider appearing on some
+                cards and not others depending on whether last month happened
+                to be a trading month.
+            */}
+            {delta !== undefined && (
+                <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--shell-border)] pt-2.5">
+                    {delta === null ? (
                         <span className="text-xs text-[var(--color-text-muted)]">
-                            {trendLabel}
+                            No change to compare
                         </span>
+                    ) : (
+                        <>
+                            <span
+                                className={cn(
+                                    'stat-delta',
+                                    isPositiveTrend === true && 'is-good',
+                                    isPositiveTrend === false && 'is-bad',
+                                )}
+                            >
+                                <Icon
+                                    name={
+                                        direction === 'down'
+                                            ? 'arrow-down'
+                                            : direction === 'up'
+                                              ? 'arrow-up'
+                                              : 'minus'
+                                    }
+                                    size={11}
+                                    weight="bold"
+                                />
+                                {Math.abs(delta)}%
+                            </span>
+
+                            {trendLabel && (
+                                <span className="truncate text-xs text-[var(--color-text-muted)]">
+                                    {trendLabel}
+                                </span>
+                            )}
+                        </>
                     )}
                 </div>
             )}

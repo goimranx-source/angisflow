@@ -46,6 +46,18 @@ type DashboardPayload = {
  * - Delivery status
  * - Revenue by channel
  */
+/** `2026-08-16` for the first and last day of the current month — this view
+ *  has no picker of its own yet, so its panels are fixed to this_month. */
+function toIsoDate(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate(),
+    ).padStart(2, '0')}`;
+}
+
+const now = new Date();
+const monthFrom = toIsoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+const monthTo = toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+
 export default function ECommerceDashboard() {
     // No period selector in this view yet — fixed to this_month.
     const [period] = useState<string>('this_month');
@@ -144,13 +156,13 @@ export default function ECommerceDashboard() {
             <>
                 {/* Row 1: Main Sales Chart (Full Width) */}
                 <div className="mt-8">
-                    <SalesChart />
+                    <SalesChart from={monthFrom} to={monthTo} />
                 </div>
 
                 {/* Row 2: Cash Flow + Top Products */}
                 <div className="mt-8 grid gap-6 lg:grid-cols-3">
                     <div className="lg:col-span-2">
-                        <CashFlowMini />
+                        <CashFlowMini from={monthFrom} to={monthTo} />
                     </div>
                     <div>
                         <TopProducts limit={5} />
@@ -177,7 +189,7 @@ export default function ECommerceDashboard() {
                                     <span className="text-[var(--color-text-muted)]">Visitors</span>
                                     <span className="font-semibold text-[var(--color-text-main)]">12,450</span>
                                 </div>
-                                <div className="mt-1 h-2 w-full bg-[var(--color-surface)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
+                                <div className="mt-1 h-2 w-full bg-[var(--color-card-bg)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
                                     <div className="h-full bg-[var(--color-brand)]" style={{ width: '100%', borderRadius: 'var(--shell-radius-sm)' }} />
                                 </div>
                             </div>
@@ -186,7 +198,7 @@ export default function ECommerceDashboard() {
                                     <span className="text-[var(--color-text-muted)]">Add to Cart</span>
                                     <span className="font-semibold text-[var(--color-text-main)]">2,890</span>
                                 </div>
-                                <div className="mt-1 h-2 w-full bg-[var(--color-surface)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
+                                <div className="mt-1 h-2 w-full bg-[var(--color-card-bg)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
                                     <div className="h-full bg-[var(--color-brand)]" style={{ width: '23%', borderRadius: 'var(--shell-radius-sm)' }} />
                                 </div>
                             </div>
@@ -195,7 +207,7 @@ export default function ECommerceDashboard() {
                                     <span className="text-[var(--color-text-muted)]">Checkout</span>
                                     <span className="font-semibold text-[var(--color-text-main)]">1,245</span>
                                 </div>
-                                <div className="mt-1 h-2 w-full bg-[var(--color-surface)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
+                                <div className="mt-1 h-2 w-full bg-[var(--color-card-bg)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
                                     <div className="h-full bg-[var(--color-brand)]" style={{ width: '10%', borderRadius: 'var(--shell-radius-sm)' }} />
                                 </div>
                             </div>
@@ -204,7 +216,7 @@ export default function ECommerceDashboard() {
                                     <span className="text-[var(--color-text-muted)]">Orders</span>
                                     <span className="font-semibold text-[var(--color-text-main)]">856</span>
                                 </div>
-                                <div className="mt-1 h-2 w-full bg-[var(--color-surface)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
+                                <div className="mt-1 h-2 w-full bg-[var(--color-card-bg)]" style={{ borderRadius: 'var(--shell-radius-sm)' }}>
                                     <div className="h-full bg-emerald-600" style={{ width: '6.9%', borderRadius: 'var(--shell-radius-sm)' }} />
                                 </div>
                             </div>

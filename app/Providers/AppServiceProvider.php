@@ -7,11 +7,15 @@ namespace App\Providers;
 use App\Domain\Billing\PlanEntitlement;
 use App\Domain\Catalogue\Contracts\ModuleEntitlement;
 use App\Domain\Identity\Models\User;
+use App\Domain\Integrations\PlatformRegistry;
+use App\Domain\Integrations\QueueHeartbeat;
 use App\Models\Employee;
 use App\Models\FleetVehicle;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Queue\Events\Looping;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -29,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
         // active subscription → plan → features → module keys. Returns null
         // (unrestricted) during trial with no plan, preserving the trial UX.
         $this->app->bind(ModuleEntitlement::class, PlanEntitlement::class);
+
+        /*
+         * The platform driver lookup. A singleton because it caches the driver
+         * it resolves for each key, and drivers are stateless — a settings page
+         * listing eight connections would otherwise build eight identical
+         * objects, and a fresh registry per call would cache nothing at all.
+         */
+        $this->app->singleton(PlatformRegistry::class);
     }
 
     public function boot(): void
@@ -37,6 +49,26 @@ class AppServiceProvider extends ServiceProvider
         $this->configureModels();
         $this->configureMailLinks();
         $this->configureMorphMap();
+        $this->watchTheQueue();
+    }
+
+    /**
+     * Let the application know a worker is alive.
+     *
+     * `Looping` fires on every poll a worker makes, whether or not there is
+     * anything to do — which is what makes it a liveness signal rather than a
+     * throughput one. A worker sitting idle is still a worker, and work handed
+     * to it will run.
+     *
+     * Anything that must happen whether or not the queue is being consumed can
+     * then ask, and do the work itself when the answer is no. See
+     * PushDispatcher.
+     */
+    private function watchTheQueue(): void
+    {
+        Event::listen(Looping::class, function (): void {
+            app(QueueHeartbeat::class)->beat();
+        });
     }
 
     /**

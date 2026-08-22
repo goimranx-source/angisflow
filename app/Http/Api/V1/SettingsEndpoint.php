@@ -41,9 +41,25 @@ class SettingsEndpoint extends Endpoint
     /** The tab strip: which groups exist and which this person may open. */
     public function index(): JsonResponse
     {
+        /*
+         * Groups with no tab of their own.
+         *
+         * Their keys are still live: 'appearance' holds the brand name, logo and
+         * favicon the boot payload white-labels the shell with, and 'media' is
+         * what the logo pickers read from. Removing the keys would strip the
+         * product of its own name — so the settings remain, and only the tabs
+         * go. Filtered here rather than deleted from the registry because
+         * keysIn() and mediaKeysIn() address those groups by name.
+         */
+        $hidden = ['appearance', 'media'];
+
         $groups = [];
 
         foreach (SettingsRegistry::GROUPS as $key => $group) {
+            if (in_array($key, $hidden, true)) {
+                continue;
+            }
+
             if (! Gate::allows($group['capability'])) {
                 continue;
             }
@@ -153,11 +169,51 @@ class SettingsEndpoint extends Endpoint
             ->sortBy(fn ($code) => (in_array($code, $inUse, true) ? '0' : '1').$code)
             ->values();
 
+        /*
+         * What each set of books will actually do with what it sends.
+         *
+         * A rate table on its own is abstract — a column of numbers against
+         * currency codes. This turns it into the question the subscriber is
+         * really asking: my Berlin shop charges in euros, so what does that
+         * become in the currency I report in, and is there a rate for it at all?
+         *
+         * A hundred units is the sample rather than one, because rates below
+         * 0.01 round to nothing at a single unit and the row reads as broken.
+         */
+        $sample = 100;
+
+        $businesses = collect($this->tenant->workspace()?->businesses()->orderBy('name')->get()
+            ?? $this->tenant->account()?->businesses()->orderBy('name')->get()
+            ?? [])
+            ->map(function ($business) use ($currency, $base, $sample) {
+                $code = strtoupper($business->base_currency ?: $base);
+                $rate = $code === $base ? 1.0 : $currency->rate($code, $base);
+
+                return [
+                    'id' => $business->public_id,
+                    'name' => $business->name,
+                    'short_code' => $business->short_code,
+                    'code' => $code,
+                    'is_base' => $code === $base,
+                    'rate' => $rate,
+                    // Null, never a guess. A figure converted at par because no
+                    // rate existed is wrong by whatever the real rate is and
+                    // looks entirely plausible sitting in a table.
+                    'converted' => $rate === null
+                        ? null
+                        : round($sample * $rate, Currencies::scale($base)),
+                ];
+            })
+            ->values()
+            ->all();
+
         return [
             'currency' => [
                 'base' => $base,
                 'base_name' => Currencies::name($base),
                 'base_symbol' => Currencies::symbol($base),
+                'sample' => $sample,
+                'businesses' => $businesses,
                 'mode' => $currency->mode(),
                 'provider' => $currency->provider(),
                 'providers' => collect(CurrencyService::PROVIDERS)
@@ -169,14 +225,29 @@ class SettingsEndpoint extends Endpoint
                 'last_refreshed' => $currency->lastRefreshed()?->toIso8601String(),
                 'rebuilt_at' => $this->settings->get('currency.rebuilt_at') ?: null,
                 'options' => Currencies::options(),
-                'rates' => $listed->map(fn (string $code) => [
-                    'code' => $code,
-                    'name' => Currencies::name($code),
-                    'rate' => isset($rates[$code]) ? (float) $rates[$code]->rate : null,
-                    'source' => $rates[$code]->source ?? null,
-                    'fetched_at' => $rates[$code]->fetched_at?->toIso8601String(),
-                    'in_use' => in_array($code, $inUse, true),
-                ])->all(),
+                /*
+                 * The row is looked up once and allowed to be absent.
+                 *
+                 * A listed currency with no rate yet is the normal state — it is
+                 * exactly what the "missing" list above is for — but the three
+                 * lines here each reached into $rates separately and only two of
+                 * them guarded it, so `fetched_at` threw "Undefined array key"
+                 * and took the whole Currency tab down with a 500. Any account
+                 * whose base currency had never been given a rate could not open
+                 * the screen that exists to give it one.
+                 */
+                'rates' => $listed->map(function (string $code) use ($rates, $inUse) {
+                    $rate = $rates[$code] ?? null;
+
+                    return [
+                        'code' => $code,
+                        'name' => Currencies::name($code),
+                        'rate' => $rate !== null ? (float) $rate->rate : null,
+                        'source' => $rate?->source,
+                        'fetched_at' => $rate?->fetched_at?->toIso8601String(),
+                        'in_use' => in_array($code, $inUse, true),
+                    ];
+                })->all(),
             ],
         ];
     }

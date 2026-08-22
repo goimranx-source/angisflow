@@ -267,7 +267,7 @@ export default function AuditLog() {
                                     render: (entry) => (
                                         <div className="flex items-center gap-2">
                                             <div
-                                                className={`flex h-8 w-8 flex-none items-center justify-center rounded-md bg-[var(--color-neutral-subtle)]`}
+                                                className={`flex h-8 w-8 flex-none items-center justify-center rounded-md bg-[var(--shell-tint)]`}
                                             >
                                                 <Icon
                                                     name={actionMeta[entry.action].icon}
@@ -433,7 +433,7 @@ export default function AuditLog() {
                                     {Object.entries(selectedEntry.changes).map(([field, change]) => (
                                         <div
                                             key={field}
-                                            className="rounded-lg border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-3"
+                                            className="rounded-lg border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-3"
                                         >
                                             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                                                 {field}

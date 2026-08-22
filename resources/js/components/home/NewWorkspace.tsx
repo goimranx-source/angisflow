@@ -32,7 +32,7 @@ export function NewWorkspace({
     if (!allowance.workspaces.can_add) {
         return (
             <div className="card overflow-hidden">
-                <div className="flex items-center gap-4 border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-bg-subtle)] p-6 transition-colors">
+                <div className="flex items-center gap-4 border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-card-raised)] p-6 transition-colors">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--color-card-bg)]" style={{ borderRadius: 'var(--shell-radius)' }}>
                         <Icon name="pause-circle" size={24} className="text-[var(--color-text-subtle)]" />
                     </div>
@@ -65,7 +65,7 @@ export function NewWorkspace({
                 onClick={() => setOpen(true)}
                 className="card group overflow-hidden transition-all hover:shadow-md"
             >
-                <div className="flex items-center gap-4 border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-bg-subtle)] p-6 transition-all group-hover:border-[var(--color-brand)] group-hover:bg-[var(--color-brand-subtle)]">
+                <div className="flex items-center gap-4 border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-card-raised)] p-6 transition-all group-hover:border-[var(--color-brand)] group-hover:bg-[var(--color-brand-subtle)]">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--color-brand-subtle)] transition-colors group-hover:bg-[var(--color-brand)]" style={{ borderRadius: 'var(--shell-radius)' }}>
                         <Icon name="plus" size={24} className="text-[var(--color-brand-text)] transition-colors group-hover:text-white" />
                     </div>

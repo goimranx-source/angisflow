@@ -84,15 +84,57 @@ final class CurrencyService
     ) {}
 
     /**
-     * The one currency this subscriber counts and reports in.
+     * The currency the figures on screen are counted in.
      *
-     * Held on the account row rather than in settings because it is read on
-     * every request that formats money, and because it is a fact about the
-     * business rather than a preference.
+     * ── The business first, and why that is not arbitrary ────────────────────
+     *
+     * A business is one set of books: one general ledger, one trial balance,
+     * one tax return. Its own screens have to read in its own currency,
+     * because that is what its accounts are actually in and what its
+     * accountant works from.
+     *
+     * A shop selling through three storefronts — one taking dirhams, one taka,
+     * one dollars — still has one set of books. Each sale keeps the currency
+     * that genuinely changed hands (see orders.currency and
+     * journal_lines.currency), and each is converted into the business's own
+     * currency once, at the rate on the day, and stored there for good. That
+     * is what makes a report of last year still say what it said last year.
+     *
+     * ── When the workspace answers instead ───────────────────────────────────
+     *
+     * Only when no business is open — a genuine cross-business view, where
+     * three sets of books in three currencies have to be added up to be
+     * compared. That total is a view, not anybody's accounts, and the
+     * workspace's currency is the unit chosen to look at it in.
+     *
+     * Getting this the wrong way round is what made the dashboard show one
+     * business's money under a workspace-level label, which is the confusion
+     * this ordering exists to remove.
      */
     public function base(): string
     {
-        return strtoupper($this->tenant->account()?->base_currency ?? 'BDT');
+        return strtoupper(
+            $this->tenant->business()?->base_currency
+                ?? $this->tenant->workspace()?->base_currency
+                ?? $this->tenant->account()?->base_currency
+                ?? 'BDT',
+        );
+    }
+
+    /**
+     * The currency a cross-business roll-up is presented in.
+     *
+     * Deliberately separate from base(): a caller adding several businesses
+     * together has to say so, rather than getting the workspace currency by
+     * accident because no business happened to be open.
+     */
+    public function reportingBase(): string
+    {
+        return strtoupper(
+            $this->tenant->workspace()?->base_currency
+                ?? $this->tenant->account()?->base_currency
+                ?? 'BDT',
+        );
     }
 
     public function mode(): string

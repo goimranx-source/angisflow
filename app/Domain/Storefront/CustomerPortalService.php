@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domain\Storefront;
 
-use App\Domain\Tenancy\TenantContext;
+use App\Domain\Catalogue\Models\Product;
+use App\Domain\Catalogue\Models\ProductVariant;
 use App\Domain\Sales\CustomerDirectory;
 use App\Domain\Sales\Models\Customer;
+use App\Domain\Sales\Models\Order;
+use App\Domain\Tenancy\TenantContext;
+use App\Models\Booking;
 use App\Models\CustomerPortalSession;
 use App\Models\CustomerSupportTicket;
 use App\Models\CustomerWishlistItem;
-use App\Domain\Sales\Models\Order;
-use App\Models\Booking;
-use App\Domain\Catalogue\Models\Product;
-use App\Domain\Catalogue\Models\ProductVariant;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Customer Portal Service
@@ -42,11 +42,11 @@ class CustomerPortalService
             ->where('email', $email)
             ->first();
 
-        if (!$customer || !Hash::check($password, $customer->password)) {
+        if (! $customer || ! Hash::check($password, $customer->password)) {
             throw new \InvalidArgumentException('Invalid email or password');
         }
 
-        if (!$customer->is_active) {
+        if (! $customer->is_active) {
             throw new \InvalidArgumentException('Account is inactive');
         }
 
@@ -106,11 +106,12 @@ class CustomerPortalService
     {
         $session = $this->findSession($token);
 
-        if (!$session || !$session->isValid()) {
+        if (! $session || ! $session->isValid()) {
             return null;
         }
 
         $session->updateActivity();
+
         return $session;
     }
 
@@ -123,6 +124,7 @@ class CustomerPortalService
 
         if ($session) {
             $session->revoke();
+
             return true;
         }
 
@@ -140,6 +142,7 @@ class CustomerPortalService
         $updateData = array_intersect_key($data, array_flip($allowedFields));
 
         $customer->update($updateData);
+
         return $customer;
     }
 
@@ -148,7 +151,7 @@ class CustomerPortalService
      */
     public function changePassword(Customer $customer, string $currentPassword, string $newPassword): void
     {
-        if (!Hash::check($currentPassword, $customer->password)) {
+        if (! Hash::check($currentPassword, $customer->password)) {
             throw new \InvalidArgumentException('Current password is incorrect');
         }
 
@@ -166,6 +169,7 @@ class CustomerPortalService
     public function updateAddresses(Customer $customer, array $addresses): Customer
     {
         $customer->update(['addresses' => $addresses]);
+
         return $customer;
     }
 
@@ -185,15 +189,15 @@ class CustomerPortalService
             ->with(['lines.product', 'lines.variant']);
 
         // Apply filters
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['from_date'])) {
+        if (! empty($filters['from_date'])) {
             $query->where('created_at', '>=', $filters['from_date']);
         }
 
-        if (!empty($filters['to_date'])) {
+        if (! empty($filters['to_date'])) {
             $query->where('created_at', '<=', $filters['to_date']);
         }
 
@@ -240,15 +244,15 @@ class CustomerPortalService
             ->with(['service', 'resources']);
 
         // Apply filters
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['upcoming'])) {
+        if (! empty($filters['upcoming'])) {
             $query->where('scheduled_start', '>=', now());
         }
 
-        if (!empty($filters['past'])) {
+        if (! empty($filters['past'])) {
             $query->where('scheduled_end', '<', now());
         }
 
@@ -270,14 +274,14 @@ class CustomerPortalService
     /**
      * Cancel customer booking
      */
-    public function cancelBooking(Customer $customer, string $bookingPublicId, string $reason = null): Booking
+    public function cancelBooking(Customer $customer, string $bookingPublicId, ?string $reason = null): Booking
     {
         $booking = Booking::where('business_id', $customer->business_id)
             ->where('customer_id', $customer->id)
             ->where('public_id', $bookingPublicId)
             ->firstOrFail();
 
-        if (!in_array($booking->status, ['confirmed', 'pending'])) {
+        if (! in_array($booking->status, ['confirmed', 'pending'])) {
             throw new \InvalidArgumentException('Booking cannot be cancelled in current status');
         }
 
@@ -323,7 +327,7 @@ class CustomerPortalService
     {
         $query = CustomerSupportTicket::where('customer_id', $customer->id);
 
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
@@ -341,7 +345,7 @@ class CustomerPortalService
             ->where('public_id', $ticketPublicId)
             ->firstOrFail();
 
-        if (!$ticket->isOpen()) {
+        if (! $ticket->isOpen()) {
             throw new \InvalidArgumentException('Cannot add message to closed ticket');
         }
 
@@ -374,7 +378,7 @@ class CustomerPortalService
     public function addToWishlist(
         Customer $customer,
         string $productPublicId,
-        string $variantPublicId = null,
+        ?string $variantPublicId = null,
         string $listName = 'default'
     ): CustomerWishlistItem {
         $product = Product::where('business_id', $customer->business_id)
@@ -400,6 +404,7 @@ class CustomerPortalService
             if ($existing->list_name !== $listName) {
                 $existing->moveToList($listName);
             }
+
             return $existing;
         }
 
@@ -433,6 +438,7 @@ class CustomerPortalService
 
         if ($item) {
             $item->delete();
+
             return true;
         }
 
@@ -545,8 +551,9 @@ class CustomerPortalService
     {
         $current = $customer->preferences ?? [];
         $updated = array_merge($current, $preferences);
-        
+
         $customer->update(['preferences' => $updated]);
+
         return $customer;
     }
 

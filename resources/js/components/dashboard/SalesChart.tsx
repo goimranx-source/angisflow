@@ -1,14 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
-import { LineChart } from '@/components/ui/Charts/LineChart';
+import { ComparisonChart } from '@/components/ui/Charts/ComparisonChart';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { formatCompactNumber, formatMinorCompactNumber, formatMoneyWith } from '@/lib/money';
+import { Panel } from '@/components/ui/Panel';
+import { useBusinessScope } from '@/hooks/useBusinessScope';
+import { useMoney } from '@/hooks/useMoney';
 
 type SalesData = {
     data: {
-        period: '7d' | '30d' | '12m';
+        from: string;
+        to: string;
         currency: string;
         series: {
             revenue: Array<{ label: string; value: number }>;
@@ -22,13 +25,13 @@ type SalesData = {
     };
 };
 
-const PERIODS = [
-    { key: '7d', label: '7D' },
-    { key: '30d', label: '1M' },
-    { key: '12m', label: '1Y' },
-] as const;
-
 type SalesChartProps = {
+    /** The same range every other panel on the dashboard reads — see
+     *  Dashboard.tsx's DateRangePicker. There is no chart-local period
+     *  control here on purpose: two controls that can disagree about what
+     *  "the period" means is worse than one. */
+    from: string;
+    to: string;
     /** Additional class */
     className?: string;
 };
@@ -37,67 +40,56 @@ type SalesChartProps = {
  * Sales overview chart showing revenue and order trends.
  *
  * Features:
- * - Toggle between 7 days, 30 days, 12 months
  * - Dual series (Revenue & Orders count)
  * - Total summary
  * - Loading and error states
  * - Uses internal API endpoint
  */
-export function SalesChart({ className }: SalesChartProps) {
-    const [period, setPeriod] = useState<'7d' | '30d' | '12m'>('30d');
+export function SalesChart({ from, to, className }: SalesChartProps) {
+    const business = useBusinessScope();
+    const { symbol, scope: money } = useMoney();
 
     const { data, isPending, isError, refetch } = useQuery({
-        queryKey: ['dashboard', 'sales-chart', period],
+        queryKey: ['dashboard', 'sales-chart', business, from, to, money],
         queryFn: ({ signal }) =>
             api.get<SalesData>('/dashboard/sales-chart', {
-                params: { period },
+                params: { from, to },
                 signal,
             }),
-        // Keep previous data while loading next period
+        // Keep previous data while loading the next range
         placeholderData: (previous) => previous,
     });
 
     const chartData = data?.data;
 
     return (
-        <div className={cn('card p-6', className)}>
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h3 className="text-base font-semibold text-[var(--color-text-main)]">
-                        Sales Overview
-                    </h3>
-                    {chartData && (
-                        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                            {chartData.totals.revenue_formatted} revenue ·{' '}
+        <Panel
+            title="Sales overview"
+            // The currency, said once. Every figure below is in it, so the
+            // axis is free to be a scale rather than five repetitions of the
+            // same symbol.
+            unit={symbol}
+            // At the far end of the head rather than trailing the title. It
+            // is the panel's headline figure, not a qualifier on its name,
+            // and against the right edge it lines up with the totals every
+            // other panel puts there.
+            action={
+                chartData ? (
+                    <div className="text-right">
+                        <p className="panel-row-label">Total</p>
+                        <p
+                            className="panel-row-value"
+                            title={`${formatMoneyWith(symbol, chartData.totals.revenue_formatted)} · ${chartData.totals.orders} orders`}
+                        >
+                            {formatCompactNumber(chartData.totals.revenue_formatted)} ·{' '}
                             {chartData.totals.orders} orders
                         </p>
-                    )}
-                </div>
-
-                {/* Period selector */}
-                <div className="flex items-center gap-1 border border-[var(--color-border-light)] bg-white p-1" style={{ borderRadius: 'var(--shell-radius)' }}>
-                    {PERIODS.map((option) => (
-                        <button
-                            key={option.key}
-                            type="button"
-                            onClick={() => setPeriod(option.key)}
-                            className={cn(
-                                'px-3 py-1 text-sm font-medium transition-colors',
-                                option.key === period
-                                    ? 'bg-[var(--color-brand)] text-white'
-                                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
-                            )}
-                            style={{ borderRadius: 'var(--shell-radius-sm)' }}
-                        >
-                            {option.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Chart */}
-            <div className="mt-6">
+                    </div>
+                ) : undefined
+            }
+            className={className}
+        >
+            <div>
                 {isError ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                         <Icon
@@ -124,43 +116,37 @@ export function SalesChart({ className }: SalesChartProps) {
                         </div>
                     </div>
                 ) : chartData ? (
-                    <LineChart
+                    // Revenue and orders, each scaled to its own peak —
+                    // sharing one axis would flatten the order bars to a
+                    // sliver beside revenue's, present but unreadable. Scaled
+                    // independently the question changes from "which is
+                    // bigger" (obviously revenue) to "did they move
+                    // together", which is the one worth asking of this pair.
+                    <ComparisonChart
                         series={[
                             {
                                 name: 'Revenue',
                                 data: chartData.series.revenue,
-                                color: '#10b981',
-                                showPoints: true,
+                                // Tokens, not literals — this was an emerald
+                                // picked to look like some other product's
+                                // chart, and it stayed the same brightness on
+                                // both themes.
+                                color: 'var(--color-brand)',
+                                formatter: (v) => formatMinorCompactNumber(v, chartData.currency),
                             },
                             {
                                 name: 'Orders',
-                                data: chartData.series.orders.map((point) => ({
-                                    ...point,
-                                    // Scale orders to be visible alongside revenue
-                                    value: point.value,
-                                })),
-                                color: '#f59e0b',
-                                showPoints: true,
+                                data: chartData.series.orders,
+                                color: 'var(--color-warning)',
+                                formatter: (v) => `${v} order${v === 1 ? '' : 's'}`,
                             },
                         ]}
-                        height={350}
-                        showYAxis
-                        showLegend
-                        curved
-                        filled
-                        valueFormatter={(v) => {
-                            // Format revenue values
-                            if (v >= 1000000) {
-                                return `${chartData.currency}${(v / 1000000).toFixed(1)}M`;
-                            }
-                            if (v >= 1000) {
-                                return `${chartData.currency}${(v / 1000).toFixed(1)}k`;
-                            }
-                            return `${chartData.currency}${v.toFixed(0)}`;
-                        }}
+                        height={260}
+                        independentScale
+                        valueFormatter={(v) => formatMinorCompactNumber(v, chartData.currency)}
                     />
                 ) : null}
             </div>
-        </div>
+        </Panel>
     );
 }

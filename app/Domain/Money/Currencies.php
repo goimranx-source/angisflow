@@ -184,6 +184,18 @@ final class Currencies
         return self::ALL[strtoupper($code)][0] ?? strtoupper($code);
     }
 
+    /**
+     * Is this a currency this application can actually handle?
+     *
+     * Asked before storing one, because scale() answers 2 for anything it does
+     * not recognise — so an unknown code would not fail, it would quietly store
+     * yen a hundred times too large.
+     */
+    public static function isKnown(string $code): bool
+    {
+        return isset(self::ALL[strtoupper(trim($code))]);
+    }
+
     public static function symbol(string $code): string
     {
         return self::ALL[strtoupper($code)][1] ?? strtoupper($code).' ';

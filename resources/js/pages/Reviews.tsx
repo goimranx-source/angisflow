@@ -371,7 +371,7 @@ export default function Reviews() {
                         </DrawerSection>
 
                         <DrawerSection title="Comment">
-                            <div className="rounded-lg border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-4">
+                            <div className="rounded-lg border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-4">
                                 <p className="text-sm text-[var(--color-text-body)]">{selectedReview.comment}</p>
                             </div>
                         </DrawerSection>

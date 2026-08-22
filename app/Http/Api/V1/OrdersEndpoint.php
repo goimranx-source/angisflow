@@ -1,0 +1,949 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Api\V1;
+
+use App\Domain\Delivery\Adapters\TestCourierAdapter;
+use App\Domain\Delivery\CourierAdapterResolver;
+use App\Domain\Delivery\Models\CourierConnection;
+use App\Domain\Delivery\Models\Shipment;
+use App\Domain\Delivery\ShipmentTracker;
+use App\Domain\Integrations\PushDispatcher;
+use App\Domain\Integrations\Support\OrderStatuses;
+use App\Domain\Money\Currencies;
+use App\Domain\Money\CurrencyService;
+use App\Domain\Sales\Models\Order;
+use App\Domain\Storefront\StoreCode;
+use App\Domain\Tenancy\TenantContext;
+use App\Models\Storefront;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * The order book — what this business has sold.
+ *
+ * ── Why the summary is not computed from the page ────────────────────────────
+ *
+ * The figures above the table answer for the whole filtered set, not for the
+ * twenty-five rows being shown. Totalling the page instead is the mistake that
+ * makes a revenue figure change when somebody clicks "next" — and the version
+ * of it people notice last is the one where a filtered total is quietly a
+ * twenty-fifth of the truth.
+ *
+ * So the summary is its own aggregate over the same filters, and it is computed
+ * in SQL rather than by loading every matching order into memory: a business
+ * with forty thousand orders would otherwise pay for all of them to show four
+ * numbers.
+ *
+ * ── Money leaves here in one currency ────────────────────────────────────────
+ *
+ * An order carries the currency it was taken in. A business that sells in three
+ * reads its book in one — its own — so every figure is converted on the way out
+ * and the page never has to think about it. That conversion is the same service
+ * the dashboard uses, so the two cannot disagree.
+ */
+class OrdersEndpoint
+{
+    /** Enough to fill a screen, few enough that a slow query is felt in testing. */
+    private const PER_PAGE = 25;
+
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly CurrencyService $currency,
+    ) {}
+
+    public function index(Request $request): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open, so there is no order book to show.');
+
+        $base = $this->currency->base();
+
+        // Tab filter: all, trashed, archived
+        $tab = $request->query('tab', 'all');
+
+        $query = $this->filtered($request, (int) $business->id, $tab);
+
+        $perPage = min(100, max(5, (int) $request->integer('per_page', self::PER_PAGE)));
+
+        $sort = $this->sort($request);
+
+        $page = (clone $query)
+            ->with([
+                'customer:id,public_id,name,email',
+                'storefront:id,public_id,name',
+                'shipments.courierConnection.courier',
+
+                // Eager, so the drawer can show what was bought without a second
+                // request per order. One page is at most a few hundred lines;
+                // the count below is still done in SQL because that is what the
+                // table column needs and it is cheaper than counting in PHP.
+                'lines:id,order_id,description,sku,quantity,unit_price_minor,total_minor',
+            ])
+            // Counted in SQL rather than by loading the lines: the table shows a
+            // number, and loading four hundred line rows to count them is the
+            // classic way a list page becomes slow only in production.
+            ->withCount('lines')
+            ->orderBy($sort[0], $sort[1]);
+
+        // Add secondary sort if provided
+        if (isset($sort[2]) && isset($sort[3])) {
+            $page->orderBy($sort[2], $sort[3]);
+        }
+
+        $page = $page->paginate($perPage);
+
+        // Collect unique statuses actually used by orders in current view
+        // This shows only statuses that are mapped and in use
+        $usedStatuses = (clone $query)
+            ->select('status')
+            ->distinct()
+            ->pluck('status')
+            ->filter()
+            ->all();
+
+        $allBusinessStatuses = OrderStatuses::for($business);
+
+        // Build map of all business statuses for labels/tones
+        $statusesMap = collect($allBusinessStatuses)
+            ->map(fn (array $status, string $key): array => [
+                'value' => $key,
+                'label' => $status['label'],
+                'tone' => $status['tone'],
+                'custom' => $status['custom'] ?? false,
+            ])
+            ->all();
+
+        // For the dropdown filter, show only statuses that are in use
+        $availableStatuses = collect($usedStatuses)
+            ->map(fn (string $key) => $statusesMap[$key] ?? null)
+            ->filter()
+            ->values()
+            ->all();
+
+        // If no statuses in use, show all available (for empty state)
+        if (empty($availableStatuses)) {
+            $availableStatuses = array_values($statusesMap);
+        }
+
+        // Resolved once for the whole business: the tags are unique across the
+        // set, so they cannot be worked out one order at a time.
+        $storeCodes = StoreCode::forBusiness((int) $business->id);
+
+        return response()->json([
+            'data' => array_map(
+                fn (Order $order): array => $this->present($order, $base, $storeCodes),
+                $page->items(),
+            ),
+            'summary' => $this->summary(clone $query, $base),
+
+            /*
+             * The shops this business actually sells through, so the filter
+             * offers real options rather than a free-text box. Sent with the
+             * list rather than fetched separately: it is three rows, and a
+             * second request to populate one dropdown is a second round trip on
+             * every page load.
+             */
+            'stores' => Storefront::query()
+                ->where('business_id', $business->id)
+                ->orderBy('name')
+                ->get(['public_id', 'name'])
+                ->map(fn ($s): array => ['id' => $s->public_id, 'name' => $s->name])
+                ->all(),
+
+            // Status vocabularies - filtered list for dropdown, full map for rendering
+            'statuses' => $availableStatuses,
+            // Full status map so any status in orders can be displayed with proper color
+            'all_statuses' => array_values($statusesMap),
+
+            'payment_statuses' => [
+                ['value' => Order::UNPAID, 'label' => 'Unpaid'],
+                ['value' => Order::PAID, 'label' => 'Paid'],
+                ['value' => Order::REFUNDED, 'label' => 'Refunded'],
+            ],
+            'fulfilment_statuses' => [
+                ['value' => Order::UNFULFILLED, 'label' => 'Unfulfilled'],
+                ['value' => Order::PARTIAL, 'label' => 'Partial'],
+                ['value' => Order::FULFILLED, 'label' => 'Fulfilled'],
+            ],
+
+            // Connected couriers for dispatch
+            'couriers' => CourierConnection::query()
+                ->where('business_id', $business->id)
+                ->usable()
+                ->with('courier:id,name,slug')
+                ->orderBy('label')
+                ->get()
+                ->map(fn ($conn): array => [
+                    'id' => $conn->public_id,
+                    'label' => $conn->label ?? $conn->courier?->name,
+                    'slug' => $conn->courier?->slug,
+                ])
+                ->all(),
+
+            'meta' => [
+                'total' => $page->total(),
+                'per_page' => $page->perPage(),
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+            ],
+        ]);
+    }
+
+    /**
+     * The filters the page offers, and nothing it does not.
+     *
+     * Every one of them is an exact match or a bounded range except the search,
+     * which is the only place user text reaches the query — and it is bound as a
+     * parameter rather than interpolated.
+     */
+    private function filtered(Request $request, int $businessId, string $tab = 'all'): Builder
+    {
+        $query = Order::query()->where('business_id', $businessId);
+
+        // Apply tab filter
+        switch ($tab) {
+            case 'trashed':
+                $query->onlyTrashed();
+                break;
+            case 'archived':
+                $query->where(function (Builder $q): void {
+                    $q->whereNotNull('archived_at')
+                        ->orWhereIn('status', [Order::COMPLETED, Order::CANCELLED]);
+                });
+                break;
+            case 'all':
+            default:
+                // The active book excludes explicit archives and terminal orders.
+                $query->whereNull('archived_at')
+                    ->whereNotIn('status', [Order::COMPLETED, Order::CANCELLED]);
+                break;
+        }
+
+        if ($search = trim((string) $request->query('search', ''))) {
+            $query->where(function (Builder $q) use ($search): void {
+                $like = '%'.$search.'%';
+
+                $q->where('number', 'like', $like)
+                    ->orWhere('shipping_name', 'like', $like)
+                    ->orWhere('shipping_phone', 'like', $like)
+                    ->orWhereHas('customer', fn (Builder $c) => $c
+                        ->where('name', 'like', $like)
+                        ->orWhere('email', 'like', $like));
+            });
+        }
+
+        foreach (['status' => 'status', 'payment_status' => 'payment_status', 'channel' => 'channel'] as $param => $column) {
+            if ($value = trim((string) $request->query($param, ''))) {
+                $query->where($column, $value);
+            }
+        }
+
+        /*
+         * Which shop, or the counter.
+         *
+         * 'walk_in' is its own value rather than an empty one, because "no
+         * store" is a real answer here and an empty parameter already means
+         * "any". Conflating them would make the walk-in filter impossible to
+         * express.
+         */
+        if ($store = trim((string) $request->query('store', ''))) {
+            if ($store === 'walk_in') {
+                $query->whereNull('storefront_id');
+            } else {
+                $query->whereHas('storefront', fn (Builder $s) => $s->where('public_id', $store));
+            }
+        }
+
+        if ($from = trim((string) $request->query('date_from', ''))) {
+            $query->whereDate('ordered_on', '>=', $from);
+        }
+
+        if ($to = trim((string) $request->query('date_to', ''))) {
+            $query->whereDate('ordered_on', '<=', $to);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Sorting, from an allowlist.
+     *
+     * A column name arriving from a query string and going into an ORDER BY is
+     * an injection waiting to happen, and "the frontend only sends four values"
+     * is not a control — the frontend is not what sends the request.
+     *
+     * When sorting by date, adds created_at as secondary sort to ensure orders
+     * on the same day appear in chronological order (newest first by default).
+     *
+     * @return array<int, string>
+     */
+    private function sort(Request $request): array
+    {
+        $columns = [
+            'date' => 'ordered_on',
+            'number' => 'number',
+            'total' => 'total_minor',
+            'status' => 'status',
+            'created_at' => 'created_at',
+        ];
+
+        $by = $columns[(string) $request->query('sort_by', 'date')] ?? 'ordered_on';
+        $direction = strtolower((string) $request->query('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // When sorting by date, add created_at as secondary sort for same-day ordering
+        if ($by === 'ordered_on') {
+            return [$by, $direction, 'created_at', $direction];
+        }
+
+        return [$by, $direction];
+    }
+
+    /**
+     * The figures above the table, for the whole filtered set.
+     *
+     * ── Why this groups by currency ──────────────────────────────────────────
+     *
+     * Summing total_minor across currencies would add yen to euros and produce a
+     * number that is not wrong so much as meaningless. Grouped first, converted
+     * after, the total is a real figure in one currency.
+     *
+     * @return array<string, mixed>
+     */
+    private function summary(Builder $query, string $base): array
+    {
+        $rows = (clone $query)
+            ->select('currency')
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('SUM(total_minor) as total')
+            ->groupBy('currency')
+            ->get();
+
+        $orders = 0;
+        $revenueMinor = 0;
+
+        foreach ($rows as $row) {
+            $orders += (int) $row->orders;
+
+            $converted = $this->currency->convertMinor((int) $row->total, (string) $row->currency, $base);
+
+            // A currency with no rate is counted but not totalled. Treating a
+            // missing rate as zero would understate revenue silently; leaving
+            // the order out of the count would make the two figures disagree.
+            $revenueMinor += $converted ?? 0;
+        }
+
+        $awaiting = (clone $query)->where('payment_status', 'unpaid')->count();
+
+        $scale = 10 ** Currencies::scale($base);
+
+        return [
+            'total_orders' => $orders,
+            'total_revenue' => round($revenueMinor / $scale, 2),
+            'avg_order_value' => $orders > 0 ? round($revenueMinor / $orders / $scale, 2) : 0.0,
+            'pending_count' => $awaiting,
+            'currency' => $base,
+        ];
+    }
+
+    /**
+     * One order, in the shape the page reads.
+     *
+     * @return array<string, mixed>
+     */
+    /**
+     * Minor units as a plain number in that currency's own scale.
+     *
+     * Not formatted — the browser decides how to render a figure for whoever is
+     * reading it. Scaled here because the scale belongs to the currency, and
+     * dividing by a hundred in JavaScript is wrong for the currencies that are
+     * not decimal in that way.
+     */
+    private static function plain(?int $minor, string $currency): float
+    {
+        return round(((int) $minor) / (10 ** Currencies::scale($currency)), 2);
+    }
+
+    /**
+     * @param  array<int, string>  $storeCodes  storefront id => short tag
+     */
+    private function present(Order $order, string $base, array $storeCodes = []): array
+    {
+        $from = (string) $order->currency;
+
+        $money = function (?int $minor) use ($from, $base): float {
+            $converted = $this->currency->convertMinor((int) $minor, $from, $base);
+
+            return round(($converted ?? 0) / (10 ** Currencies::scale($base)), 2);
+        };
+
+        return [
+            'id' => $order->public_id,
+            'order_number' => $order->number,
+
+            // Null rather than a placeholder name: a walk-in sale genuinely has
+            // no customer, and inventing "Guest" here would make it impossible
+            // to tell one from a customer actually called that.
+            'customer' => $order->customer === null ? null : [
+                'id' => $order->customer->public_id,
+                'name' => $order->customer->name,
+                'email' => $order->customer->email,
+            ],
+
+            /*
+             * Which shop it came through, or null for a walk-in.
+             *
+             * A business selling through two websites and a counter needs to
+             * see which is which on the row itself — "where did this come from"
+             * is the first question asked of any order, and a channel of
+             * 'online' does not answer it once there is more than one shop.
+             */
+            'store' => $order->storefront === null ? null : [
+                'id' => $order->storefront->public_id,
+                'name' => $order->storefront->name,
+            ],
+            'is_walk_in' => $order->storefront_id === null,
+
+            /*
+             * A short tag for the shop, to sit in front of the number.
+             *
+             * Order numbers come from each platform's own sequence, so a
+             * business selling in three places can hold three different
+             * orders numbered 1043. On a list that mixes them the number
+             * alone identifies nothing, and 'WALK' rather than null for a
+             * counter sale keeps the column one shape instead of two.
+             */
+            'store_code' => $order->storefront_id === null
+                ? 'WALK'
+                : ($storeCodes[(int) $order->storefront_id] ?? null),
+
+            'date' => $order->ordered_on?->toDateString(),
+            'status' => $order->status,
+            'payment_status' => $order->payment_status,
+            'fulfilment_status' => $order->fulfilment_status,
+            'channel' => $order->channel,
+            'is_cod' => (bool) $order->is_cod,
+            'items_count' => (int) ($order->lines_count ?? 0),
+
+            'subtotal' => $money($order->subtotal_minor),
+            'tax' => $money($order->tax_minor),
+            'shipping' => $money($order->shipping_minor),
+            'discount' => $money($order->discount_minor),
+            'total' => $money($order->total_minor),
+            'paid' => $money($order->paid_minor),
+
+            /*
+             * The same breakdown in the currency the sale was actually taken in.
+             *
+             * ── Why both are returned ────────────────────────────────────────
+             *
+             * Because a breakdown and its total have to be in one currency or
+             * they do not add up. The figures above are converted for the books,
+             * which is right for totalling a column across shops and wrong for
+             * showing somebody one order: subtotal, tax and shipping in one
+             * currency under a total in another is not a rounding difference,
+             * it is arithmetic that visibly fails.
+             *
+             * Unscaled here rather than in the browser so there is one place
+             * that knows a currency's scale — yen has no minor unit and dinars
+             * have three.
+             */
+            'native' => [
+                'currency' => $from,
+                'symbol' => Currencies::symbol($from),
+                /*
+                 * Derived from the figures the shop is authoritative about,
+                 * rather than read from our own column.
+                 *
+                 * The shop states the total, the tax, the shipping and the
+                 * discount; the subtotal is what those imply, and it is the only
+                 * value that makes the block add up to the amount the customer
+                 * was actually charged. Our stored subtotal is computed from the
+                 * lines we hold, so any disagreement between the two shows up
+                 * here as arithmetic that visibly fails — which is exactly what
+                 * a summary must never do.
+                 */
+                'subtotal' => self::plain(
+                    (int) $order->total_minor + (int) $order->discount_minor
+                        - (int) $order->shipping_minor - (int) $order->tax_minor,
+                    $from,
+                ),
+                'discount' => self::plain($order->discount_minor, $from),
+                'tax' => self::plain($order->tax_minor, $from),
+                'shipping' => self::plain($order->shipping_minor, $from),
+                'total' => self::plain($order->total_minor, $from),
+                'paid' => self::plain($order->paid_minor, $from),
+            ],
+
+            /*
+             * What was actually bought.
+             *
+             * Loaded with the order rather than fetched per row when a drawer
+             * opens, because the list already has the order in memory and a
+             * second round trip to show four lines is a spinner nobody needs.
+             */
+            'items' => $order->relationLoaded('lines')
+                ? $order->lines->map(fn ($line): array => [
+                    'description' => (string) $line->description,
+                    'sku' => $line->sku,
+                    'quantity' => (float) $line->quantity,
+                    'unit_price' => self::plain($line->unit_price_minor, $from),
+                    'total' => self::plain($line->total_minor, $from),
+                ])->all()
+                : [],
+
+            /*
+             * The figure as the shop actually charged it, alongside the
+             * converted one.
+             *
+             * A business selling through a dirham shop and a taka shop reads its
+             * book in one currency, but the dirham order was a dirham order —
+             * and when somebody checks a row against the shop's own admin, or
+             * against what the customer paid, the converted figure will not
+             * match and there is nothing on screen to explain why. So both
+             * travel: the converted one for totals, the original for the row.
+             */
+            'total_native' => round((int) $order->total_minor / (10 ** Currencies::scale($from)), 2),
+            'source_currency' => $from,
+            'source_symbol' => Currencies::symbol($from),
+            'is_converted' => $from !== $base,
+            'currency' => $base,
+
+            'dispatch' => ($shipment = $order->shipments->first()) === null ? null : [
+                'shipment_number' => $shipment->number,
+                'courier' => [
+                    'id' => $shipment->courierConnection?->public_id,
+                    'label' => $shipment->courierConnection?->label
+                        ?? $shipment->courierConnection?->courier?->name,
+                ],
+                'amount' => round($shipment->cod_amount_minor / (10 ** Currencies::scale($from)), 2),
+                'currency' => $from,
+                'tracking_number' => $shipment->tracking_number,
+                'status' => $shipment->status,
+            ],
+
+            'shipping_address' => $order->shipping_address === null ? null : [
+                'line1' => $order->shipping_address,
+                'city' => $order->shipping_city,
+                'postal_code' => $order->shipping_postcode,
+                'country' => $order->shipping_country,
+            ],
+
+            'notes' => $order->notes,
+            'created_at' => $order->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Update multiple orders at once.
+     *
+     * Supports bulk status changes, which is the most common bulk operation.
+     * Each order is updated independently so one failure doesn't stop the rest.
+     */
+    public function bulkUpdate(Request $request, PushDispatcher $pushes): JsonResponse
+    {
+        $business = $this->tenant->business();
+        if ($business === null) {
+            return response()->json(['message' => 'No business context.'], 422);
+        }
+
+        // Get valid status keys for this business
+        $validStatuses = array_keys(OrderStatuses::for($business));
+
+        $validated = $request->validate([
+            'order_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'order_ids.*' => ['required', 'string'],
+            'action' => ['required', 'string', 'in:update_status,mark_paid,cancel,trash,restore,unarchive,delete_permanently'],
+            'status' => ['nullable', 'string', 'in:'.implode(',', $validStatuses)],
+            'payment_status' => ['nullable', 'string', 'in:'.implode(',', [
+                Order::UNPAID,
+                Order::PAID,
+                Order::REFUNDED,
+            ])],
+            'fulfilment_status' => ['nullable', 'string', 'in:'.implode(',', [
+                Order::UNFULFILLED,
+                Order::PARTIAL,
+                Order::FULFILLED,
+            ])],
+        ]);
+
+        $orderIds = $validated['order_ids'];
+        $action = $validated['action'];
+
+        // Fetch orders (include trashed for restore/delete actions)
+        $query = Order::query()->where('business_id', $business->id);
+
+        if (in_array($action, ['restore', 'delete_permanently'])) {
+            $query->onlyTrashed();
+        }
+
+        $orders = $query->whereIn('public_id', $orderIds)->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json(['message' => 'No orders found.'], 404);
+        }
+
+        $updated = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($orders as $order) {
+            try {
+                $changes = [];
+
+                switch ($action) {
+                    case 'update_status':
+                        if (isset($validated['status'])) {
+                            $changes['status'] = $validated['status'];
+
+                            // Auto-set timestamps based on status
+                            if ($validated['status'] === Order::CONFIRMED && $order->confirmed_at === null) {
+                                $changes['confirmed_at'] = now();
+                            } elseif ($validated['status'] === Order::FULFILLED && $order->fulfilled_at === null) {
+                                $changes['fulfilled_at'] = now();
+                            } elseif ($validated['status'] === Order::CANCELLED && $order->cancelled_at === null) {
+                                $changes['cancelled_at'] = now();
+                            }
+
+                            /*
+                             * Archiving follows the status, in both directions.
+                             *
+                             * Completing or cancelling files an order away, which
+                             * is right: it is finished and does not belong in a
+                             * working list. But the rule only ever ran one way,
+                             * and that made the commonest mistake unrecoverable —
+                             * mark an order completed by accident and it vanished
+                             * into the archive, where the status could not be
+                             * changed back.
+                             *
+                             * So a status that is not final brings it back. An
+                             * order being worked on again is an active order, and
+                             * leaving it filed away would mean a live order nobody
+                             * can see on the screen they work from.
+                             */
+                            $isFinal = in_array($validated['status'], [Order::COMPLETED, Order::CANCELLED], true);
+
+                            if ($isFinal && $order->archived_at === null) {
+                                $changes['archived_at'] = now();
+                            }
+
+                            if (! $isFinal && $order->archived_at !== null) {
+                                $changes['archived_at'] = null;
+                            }
+                        }
+                        if (isset($validated['payment_status'])) {
+                            $changes['payment_status'] = $validated['payment_status'];
+                        }
+                        if (isset($validated['fulfilment_status'])) {
+                            $changes['fulfilment_status'] = $validated['fulfilment_status'];
+                        }
+                        break;
+
+                    case 'mark_paid':
+                        $changes['payment_status'] = Order::PAID;
+                        $changes['paid_minor'] = $order->total_minor;
+                        break;
+
+                    case 'cancel':
+                        $changes['status'] = Order::CANCELLED;
+                        $changes['archived_at'] = now(); // Auto-archive cancelled orders
+                        if ($order->cancelled_at === null) {
+                            $changes['cancelled_at'] = now();
+                        }
+                        break;
+
+                    case 'trash':
+                        $order->delete(); // Soft delete
+                        $updated++;
+
+                        continue 2; // Skip the update logic below
+
+                    case 'restore':
+                        $order->restore();
+                        // Unarchive when restoring
+                        $order->update(['archived_at' => null]);
+                        $updated++;
+
+                        continue 2;
+
+                    case 'unarchive':
+                        $changes['archived_at'] = null;
+                        break;
+
+                    case 'delete_permanently':
+                        $order->forceDelete();
+                        $updated++;
+
+                        continue 2;
+                }
+
+                if (! empty($changes)) {
+                    $order->update($changes);
+                    $pushes->order($order->fresh());
+                    $updated++;
+
+                }
+            } catch (\Throwable $e) {
+                $failed++;
+                $errors[] = "Order {$order->number}: ".$e->getMessage();
+            }
+        }
+
+        $message = "{$updated} order".($updated === 1 ? '' : 's').' updated';
+        if ($failed > 0) {
+            $message .= ", {$failed} failed";
+        }
+
+        return response()->json([
+            'message' => $message,
+            'data' => [
+                'updated' => $updated,
+                'failed' => $failed,
+                'errors' => $errors,
+            ],
+        ], $failed > 0 && $updated === 0 ? 422 : 200);
+    }
+
+    /**
+     * Dispatch a single order to a courier.
+     *
+     * Creates a shipment record linking the order to the courier connection.
+     * If amount is not provided, uses the order total.
+     */
+    public function dispatch(Request $request, string $orderId): JsonResponse
+    {
+        $validated = $request->validate([
+            'courier_id' => ['required', 'string'],
+            'amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $business = $this->tenant->business();
+        if ($business === null) {
+            return response()->json(['message' => 'No business context.'], 422);
+        }
+
+        // Find the order
+        $order = Order::query()
+            ->where('business_id', $business->id)
+            ->where('public_id', $orderId)
+            ->first();
+
+        if ($order === null) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
+
+        if ($order->archived_at !== null || in_array($order->status, [Order::COMPLETED, Order::CANCELLED], true)) {
+            return response()->json(['message' => 'Archived, completed, and cancelled orders cannot be dispatched.'], 422);
+        }
+
+        // Find the courier connection
+        $courier = CourierConnection::query()
+            ->where('business_id', $business->id)
+            ->where('public_id', $validated['courier_id'])
+            ->usable()
+            ->first();
+
+        if ($courier === null) {
+            return response()->json(['message' => 'Courier connection not found or not usable.'], 404);
+        }
+
+        // Determine COD amount (use provided amount or order total)
+        $scale = 10 ** Currencies::scale($order->currency);
+        $codAmountMinor = isset($validated['amount'])
+            ? (int) round((float) $validated['amount'] * $scale)
+            : (int) $order->total_minor;
+
+        // Create shipment
+        $shipment = Shipment::create([
+            'account_id' => $business->account_id,
+            'business_id' => $business->id,
+            'order_id' => $order->id,
+            'courier_connection_id' => $courier->id,
+            'status' => 'draft',
+            'is_cod' => (bool) $order->is_cod,
+            'currency' => $order->currency,
+            'cod_amount_minor' => $codAmountMinor,
+            'recipient_name' => $order->shipping_name ?? $order->customer?->name,
+            'recipient_phone' => $order->shipping_phone ?? $order->customer?->phone,
+            'address' => $order->shipping_address,
+            'city' => $order->shipping_city,
+            'postcode' => $order->shipping_postcode,
+            'country' => $order->shipping_country,
+        ]);
+
+        if ($courier->courier?->adapter === 'test') {
+            $booked = app(TestCourierAdapter::class)->book($courier, $shipment);
+            $shipment->forceFill([
+                'tracking_number' => $booked['tracking_number'],
+                'external_id' => $booked['external_id'],
+                'status' => 'booked',
+                'raw_status' => 'booked',
+                'booked_at' => now(),
+            ])->save();
+        }
+
+        // Update order fulfillment status
+        if ($order->fulfilment_status === Order::UNFULFILLED) {
+            $order->update(['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]);
+        } else {
+            $order->update(['status' => 'shipped']);
+        }
+
+        return response()->json([
+            'message' => "Order dispatched to {$courier->label}.",
+            'data' => ['shipment_id' => $shipment->public_id],
+        ]);
+    }
+
+    /** Cancel the latest active shipment and notify the courier adapter. */
+    public function cancelDispatch(string $orderId, CourierAdapterResolver $adapters): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business context.');
+
+        $order = Order::query()
+            ->where('business_id', $business->id)
+            ->where('public_id', $orderId)
+            ->with(['shipments.courierConnection.courier'])
+            ->firstOrFail();
+
+        $shipment = $order->shipments
+            ->first(fn (Shipment $candidate): bool => ! $candidate->status()->isFinal());
+
+        if ($shipment === null) {
+            return response()->json(['message' => 'This order has no active shipment to cancel.'], 422);
+        }
+
+        $connection = $shipment->courierConnection;
+        $adapter = $connection === null ? null : $adapters->for($connection);
+
+        if ($connection === null || $adapter === null || ! $adapter->cancel($connection, $shipment)) {
+            return response()->json([
+                'message' => 'This courier does not support cancellation through its API.',
+            ], 422);
+        }
+
+        app(ShipmentTracker::class)->record(
+            $shipment,
+            'cancelled',
+            ['source' => 'dashboard'],
+            ['source' => 'dashboard', 'description' => 'Cancelled from the order book'],
+        );
+
+        return response()->json([
+            'message' => "Shipment cancelled with {$connection->label}.",
+            'data' => ['shipment_id' => $shipment->public_id],
+        ]);
+    }
+
+    /**
+     * Dispatch multiple orders to a courier.
+     *
+     * Each order is dispatched independently so one failure doesn't stop the rest.
+     */
+    public function bulkDispatch(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'order_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'order_ids.*' => ['required', 'string'],
+            'courier_id' => ['required', 'string'],
+        ]);
+
+        $business = $this->tenant->business();
+        if ($business === null) {
+            return response()->json(['message' => 'No business context.'], 422);
+        }
+
+        // Find the courier connection
+        $courier = CourierConnection::query()
+            ->where('business_id', $business->id)
+            ->where('public_id', $validated['courier_id'])
+            ->usable()
+            ->first();
+
+        if ($courier === null) {
+            return response()->json(['message' => 'Courier connection not found or not usable.'], 404);
+        }
+
+        // Fetch orders
+        $orders = Order::query()
+            ->where('business_id', $business->id)
+            ->whereIn('public_id', $validated['order_ids'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json(['message' => 'No orders found.'], 404);
+        }
+
+        $dispatched = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($orders as $order) {
+            try {
+                if ($order->archived_at !== null || in_array($order->status, [Order::COMPLETED, Order::CANCELLED], true)) {
+                    throw new \RuntimeException('Archived, completed, and cancelled orders cannot be dispatched.');
+                }
+
+                // Use order total for COD amount in bulk dispatch
+                $shipment = Shipment::create([
+                    'account_id' => $business->account_id,
+                    'business_id' => $business->id,
+                    'order_id' => $order->id,
+                    'courier_connection_id' => $courier->id,
+                    'status' => 'draft',
+                    'is_cod' => (bool) $order->is_cod,
+                    'currency' => $order->currency,
+                    'cod_amount_minor' => (int) $order->total_minor,
+                    'recipient_name' => $order->shipping_name ?? $order->customer?->name,
+                    'recipient_phone' => $order->shipping_phone ?? $order->customer?->phone,
+                    'address' => $order->shipping_address,
+                    'city' => $order->shipping_city,
+                    'postcode' => $order->shipping_postcode,
+                    'country' => $order->shipping_country,
+                ]);
+
+                if ($courier->courier?->adapter === 'test') {
+                    $booked = app(TestCourierAdapter::class)->book($courier, $shipment);
+                    $shipment->forceFill([
+                        'tracking_number' => $booked['tracking_number'],
+                        'external_id' => $booked['external_id'],
+                        'status' => 'booked',
+                        'raw_status' => 'booked',
+                        'booked_at' => now(),
+                    ])->save();
+                }
+
+                // Update order fulfillment status
+                if ($order->fulfilment_status === Order::UNFULFILLED) {
+                    $order->update(['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]);
+                } else {
+                    $order->update(['status' => 'shipped']);
+                }
+
+                $dispatched++;
+            } catch (\Throwable $e) {
+                $failed++;
+                $errors[] = "Order {$order->number}: ".$e->getMessage();
+            }
+        }
+
+        $message = "{$dispatched} order".($dispatched === 1 ? '' : 's').' dispatched';
+        if ($failed > 0) {
+            $message .= ", {$failed} failed";
+        }
+
+        return response()->json([
+            'message' => $message,
+            'data' => [
+                'dispatched' => $dispatched,
+                'failed' => $failed,
+                'errors' => $errors,
+            ],
+        ], $failed > 0 && $dispatched === 0 ? 422 : 200);
+    }
+}

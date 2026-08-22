@@ -447,7 +447,7 @@ export default function UsersRoles() {
                                                         {role.name}
                                                     </p>
                                                     {role.is_system && (
-                                                        <span className="rounded bg-[var(--color-neutral-subtle)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                                                        <span className="rounded bg-[var(--shell-tint)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                                                             System
                                                         </span>
                                                     )}
@@ -606,7 +606,7 @@ export default function UsersRoles() {
                                 {selectedRole.permissions.map((permission) => (
                                     <span
                                         key={permission}
-                                        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-main)]"
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-main)]"
                                     >
                                         <Icon name="key" size={12} />
                                         {permission}

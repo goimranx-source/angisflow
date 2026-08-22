@@ -36,7 +36,11 @@
     --color-ink-soft: #1e2f6b;
     --color-ink-mid: #2a4080;
 
-    --color-text-main: #0d1b2a;
+    /* Headings and figures. A neutral graphite rather than the near-black
+       navy this was: against a page whose accents are cyan, a blue-tinted
+       heading reads as faintly coloured, and a row of KPI figures in it
+       looks like it is trying to be a link. */
+    --color-text-main: #313438;
     --color-text-body: #2e3d52;
     --color-text-muted: #7a8fa6;
     --color-text-subtle: #a8bed4;
@@ -62,6 +66,14 @@
     --color-warning-subtle: #fffbeb;
     --color-link: #3b5ba5;
 
+    /* The fourth status tone: in flight. Sent, scheduled, in transit, awaiting
+       reply — a state that is neither a problem nor finished, which the other
+       three cannot say. Deliberately indigo rather than a second cyan: on a
+       page whose primary colour is already cyan, a cyan status pill reads as a
+       brand accent rather than a fact about the record. */
+    --color-info: #4059ad;
+    --color-info-subtle: #eef2fb;
+
     /* ── The shell ───────────────────────────────────────────────────────────
        The rail and the top bar, named separately from the page's own colours.
        Every shell rule reads these rather than a literal, so switching the
@@ -81,6 +93,28 @@
        out of it. Three of them had picked their own (5px, 12px, 16px), so a
        flyout never looked like it came from the sidebar it was attached to. */
     --shell-radius: 5px;
+
+    /*
+     * ── What sits on top of what ─────────────────────────────────────────────
+     *
+     * Stacking was decided one component at a time and drifted: menus attached
+     * to the shell had climbed to 130 while modals were still on 100 and
+     * drawers on 50, so a dialog opened *underneath* the sidebar it was
+     * launched from.
+     *
+     * The scale below is deliberately gapped rather than consecutive, so a new
+     * layer can be slotted between two without renumbering everything after it
+     * — which is how the drift started.
+     *
+     * Nothing in the shell may exceed --z-shell-menu, and nothing may exceed
+     * --z-toast: a message telling somebody what just happened has to be
+     * readable over whatever is on screen, including a modal.
+     */
+    --z-shell: 60; /* topbar, sidebar */
+    --z-shell-menu: 130; /* menus and flyouts belonging to the shell */
+    --z-overlay: 200; /* the dimmed backdrop behind a dialog */
+    --z-modal: 210; /* the dialog or drawer itself */
+    --z-toast: 300; /* above everything, always */
     /* For anything small enough that 5px reads as a circle rather than a
        rounded corner — the 24px marks in a list, a badge, a chip. */
     --shell-radius-sm: 4px;
@@ -195,10 +229,17 @@
     --color-brand-text-hover: #67e8f9;
     --color-brand-subtle: #0e2a30;
 
+    /* Light mode's success is a deep bottle green, which is right on white and
+       nearly invisible here — dark green text on a dark green ground. It is the
+       only status colour that had no dark value of its own, so a "Paid" pill and
+       a rising trend figure both came out unreadable. */
+    --color-success: #4ade80;
     --color-success-subtle: #123320;
     --color-danger-subtle: #3a1414;
     --color-danger-text: #ff8a8a;
     --color-warning-subtle: #332a10;
+    --color-info: #8fa4e8;
+    --color-info-subtle: #1a2340;
     --color-link: #7fa3e8;
 
     --shell-bg: #111d2e;
@@ -281,11 +322,15 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 }
 
+/* The travelling highlight was a hard-coded #d6eaf8 — light mode's
+   --color-border-light, written as a literal. In dark mode that is a near-white
+   band sweeping across a navy card, so every loading table flashed brighter than
+   the content it was standing in for. Same colour in light, correct in dark. */
 .animate-pulse {
     background: linear-gradient(
         90deg,
         var(--color-brand-subtle) 0%,
-        #d6eaf8 20%,
+        var(--color-border-light) 20%,
         var(--color-brand-subtle) 40%,
         var(--color-brand-subtle) 100%
     );
@@ -331,8 +376,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 
     :focus-visible {
-        outline: none;
-        box-shadow: var(--focus-ring);
+        outline: 2px solid var(--color-brand);
+        outline-offset: 2px;
         border-radius: var(--radius-sm);
     }
 
@@ -347,6 +392,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     input:focus-visible,
     textarea:focus-visible,
     select:focus-visible {
+        outline: none;
         box-shadow: none;
     }
 
@@ -3953,8 +3999,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         font-size: 0.875rem;
         color: var(--color-text-main);
         transition:
-            border-color 0.15s ease,
-            box-shadow 0.15s ease;
+            border-color 0.15s ease;
     }
 
     .field::placeholder {
@@ -3963,8 +4008,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
 
     .field:focus {
         outline: none;
-        border-color: var(--color-brand-border);
-        box-shadow: var(--focus-ring);
+        border-color: var(--color-brand);
     }
 
     .field[aria-invalid='true'] {
@@ -3977,13 +4021,50 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         cursor: not-allowed;
     }
 
+    /* Select elements with field styling */
+    select.field {
+        padding-right: 2.5rem !important;
+        appearance: none !important;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%232e3d52' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.75rem center !important;
+        background-size: 12px 8px !important;
+    }
+
+    select.field:disabled {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%237a8fa6' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        select.field {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c3d2e0' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+        }
+
+        select.field:disabled {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238296ab' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+        }
+    }
+
+    :root[data-theme='dark'] select.field {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c3d2e0' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+    }
+
+    :root[data-theme='dark'] select.field:disabled {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238296ab' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+    }
+
     .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        border-radius: var(--radius-md);
-        padding: 0.625rem 1.125rem;
+        /* --shell-radius, not the legacy --radius-md. A button sits directly
+           beside a .field in every toolbar, and .field settled on 5px — so a
+           12px button next to it read as two different design languages
+           sharing a row. */
+        border-radius: var(--shell-radius);
+        min-height: 2.25rem;
+        padding: 0.375rem 1.125rem;
         font-size: 0.9375rem;
         font-weight: 600;
         line-height: 1.25rem;
@@ -4042,6 +4123,396 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
 
     .btn-danger:hover:not(:disabled) {
         background: var(--color-danger-hover);
+    }
+
+    /* ── Panels ─────────────────────────────────────────────────────────────
+     *
+     * A titled box on a dashboard. Every panel wears the same head — name on the
+     * left, whatever controls it has on the right — so a screen of eight of them
+     * reads as one instrument rather than eight widgets that arrived separately.
+     *
+     * The head keeps its height whether or not it has a control in it, which is
+     * what stops a row of panels sitting at different heights depending on
+     * whether somebody gave that one a period selector.
+     */
+
+    .panel {
+        display: flex;
+        flex-direction: column;
+        background: var(--shell-bg);
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        overflow: hidden;
+    }
+
+    .panel-head {
+        display: flex;
+        flex: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        min-height: 3.25rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--shell-border);
+    }
+
+    .panel-title {
+        font-family: var(--font-heading);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+    }
+
+    /* The count or period a panel is showing, sat beside its name rather than
+       inside the body — "last 30 days" is a property of the panel, not a row. */
+    .panel-note {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-muted);
+    }
+
+    .panel-body {
+        flex: 1;
+        min-height: 0;
+        padding: 1rem;
+    }
+
+    /* A body that is a list of rows carries no padding of its own — the rows
+       run to the panel's edges and bring their own. */
+    .panel-body.is-flush {
+        padding: 0;
+    }
+
+    .panel-link {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: 0.25rem;
+        border-radius: var(--shell-radius-sm);
+        border: 1px solid var(--shell-border);
+        padding: 0.25rem 0.625rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--shell-text-strong);
+        transition:
+            border-color 0.12s ease,
+            color 0.12s ease,
+            background-color 0.12s ease;
+    }
+
+    .panel-link:hover {
+        border-color: var(--color-brand);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    /* ── A row inside a panel ───────────────────────────────────────────────
+     *
+     * Leading mark, then the thing itself, then whatever is being reported
+     * about it at the far end. The label above each value rather than beside
+     * it: a column of bare figures needs a heading, and a panel is too narrow
+     * to carry a table header row for three of them.
+     */
+
+    .panel-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.6875rem 1rem;
+        border-bottom: 1px solid var(--shell-border);
+        transition: background-color 0.12s ease;
+    }
+
+    .panel-row:last-child {
+        border-bottom: 0;
+    }
+
+    a.panel-row:hover {
+        background: var(--shell-hover);
+    }
+
+    .panel-row-mark {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius-sm);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        overflow: hidden;
+    }
+
+    .panel-row-label {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--color-text-muted);
+    }
+
+    .panel-row-value {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-text-main);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ── The tile on a figure card ──────────────────────────────────────────
+     *
+     * Each headline number gets its own colour, so a row of five is scannable
+     * by shape as well as by reading it. The accents are the semantic five
+     * rather than a decorative palette: revenue is brand, anything owed is a
+     * warning, anything overdue is a danger. A card's colour therefore says
+     * something, instead of being the next one along in a list.
+     */
+
+    .stat-tile {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--shell-radius-sm);
+        background: var(--color-brand-subtle);
+        color: var(--color-brand-text);
+    }
+
+    .stat-tile.is-success {
+        background: var(--color-success-subtle);
+        color: var(--color-success);
+    }
+
+    .stat-tile.is-warning {
+        background: var(--color-warning-subtle);
+        color: var(--color-warning);
+    }
+
+    .stat-tile.is-danger {
+        background: var(--color-danger-subtle);
+        color: var(--color-danger-text);
+    }
+
+    .stat-tile.is-info {
+        background: var(--color-info-subtle);
+        color: var(--color-info);
+    }
+
+    /* The change against the previous period. Reads as a small chip so it does
+       not compete with the figure it is qualifying. */
+    .stat-delta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.125rem;
+        border-radius: var(--shell-radius-sm);
+        padding: 0.0625rem 0.3125rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+    }
+
+    .stat-delta.is-good {
+        background: var(--color-success-subtle);
+        color: var(--color-success);
+    }
+
+    .stat-delta.is-bad {
+        background: var(--color-danger-subtle);
+        color: var(--color-danger-text);
+    }
+
+    /* ── Status ─────────────────────────────────────────────────────────────
+     *
+     * Five tones, and every state in the product maps onto one of them. The
+     * mapping itself lives in StatusBadge.tsx — this only says what a tone
+     * looks like, so "paid" in Invoicing and "delivered" in Orders are the
+     * same green rather than two greens that happen to be near each other.
+     *
+     * A 4px corner rather than a pill: it sits in a table cell beside text,
+     * and a pill at this size reads as a button somebody forgot to make
+     * clickable.
+     */
+
+    .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3125rem;
+        border-radius: var(--shell-radius-sm);
+        padding: 0.125rem 0.4375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1.25rem;
+        white-space: nowrap;
+    }
+
+    /* The dot carries the tone at a glance for anyone scanning a column of
+       them without reading the words. currentColor, so it never falls out of
+       step with the text beside it. */
+    .status-dot {
+        width: 0.375rem;
+        height: 0.375rem;
+        flex: none;
+        border-radius: var(--radius-pill);
+        background: currentColor;
+    }
+
+    .status-success {
+        background: var(--color-success-subtle);
+        color: var(--color-success);
+    }
+
+    .status-warning {
+        background: var(--color-warning-subtle);
+        color: var(--color-warning);
+    }
+
+    .status-danger {
+        background: var(--color-danger-subtle);
+        color: var(--color-danger-text);
+    }
+
+    .status-info {
+        background: var(--color-info-subtle);
+        color: var(--color-info);
+    }
+
+    .status-neutral {
+        background: var(--shell-tint);
+        color: var(--color-text-muted);
+    }
+
+    /* ── Tables ─────────────────────────────────────────────────────────────
+     *
+     * The record list is the most common screen in the product — orders,
+     * invoices, customers, stock — so this is the one block that decides what
+     * most of the tool looks like.
+     *
+     * It lives inside a .card, which owns the border and the 5px corner. The
+     * table draws no outer edge of its own: two borders one pixel apart is a
+     * seam, not a frame. Table.tsx wraps this in an overflow-x-auto, so wide
+     * tables scroll inside the card rather than pushing the page sideways.
+     */
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+        color: var(--color-text-body);
+    }
+
+    /* The header is a label strip, not a row of data — quieter type, and the
+       shell's own tint rather than a colour of its own, so it reads as part of
+       the card's chrome. */
+    .table thead th {
+        padding: 0.625rem 1rem;
+        background: var(--shell-tint);
+        border-bottom: 1px solid var(--shell-border);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-text-muted);
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    /* Framed, for a table sitting well clear of its card's own edge — with
+       enough padding around it that the card's border and the table's would
+       never meet, "two borders, one seam" does not apply, and a table with no
+       edge of its own just reads as unfinished next to every other bordered,
+       rounded surface in the shell. overflow: hidden clips the header's square
+       corners to the frame's round ones — border-collapse must be separate
+       for a table element's own radius to actually clip its children in every
+       engine. */
+    .table-framed {
+        border-collapse: separate;
+        border-spacing: 0;
+        border: 1px solid var(--shell-border);
+        border-radius: var(--shell-radius);
+        overflow: hidden;
+    }
+
+    .table-framed thead th {
+        border-top: 0;
+    }
+
+    .table-framed tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    /* Hairlines between rows, nothing under the last one — the card's own
+       bottom edge is already there and a second line beside it reads as a
+       misprint. */
+    .table tbody td {
+        padding: 0.6875rem 1rem;
+        border-bottom: 1px solid var(--shell-border);
+        vertical-align: middle;
+    }
+
+    .table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .table tbody tr:hover {
+        background: var(--shell-hover);
+    }
+
+    /* The first cell is the one you read to know which record this is, so it
+       carries the weight — the rest of the row stays body text. */
+    .table tbody td:first-child {
+        font-weight: 500;
+        color: var(--color-text-main);
+    }
+
+    /* Figures line up on the decimal only if they are tabular; proportional
+       digits make a column of money look ragged however well it is aligned. */
+    .table td[class*='text-right'],
+    .table th[class*='text-right'] {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* A sortable header is a control, so it says so under the pointer. The
+       caret itself is drawn by Table.tsx and only reserves space once sorted. */
+    .table thead th.is-sortable {
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.12s ease;
+    }
+
+    .table thead th.is-sortable:hover {
+        color: var(--color-text-main);
+    }
+
+    .table thead th.is-sorted {
+        color: var(--color-brand-text);
+    }
+
+    /* A whole row that navigates somewhere. Focus is visible because the
+       global :focus-visible ring applies — it does not need one here. */
+    .table tbody tr.is-clickable {
+        cursor: pointer;
+    }
+
+    /* Denser, for panels and side-by-side tables where a full-height row would
+       push the interesting part below the fold. */
+    .table-compact thead th {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .table-compact tbody td {
+        padding: 0.4375rem 0.75rem;
+        font-size: 0.8125rem;
+    }
+
+    /* Banding is for tables read across rather than down — a wide row of
+       figures where the eye has to travel. Off by default: on a list with
+       hairlines already, it is one texture too many. */
+    .table-striped tbody tr:nth-child(even) {
+        background: var(--shell-tint);
+    }
+
+    .table-striped tbody tr:nth-child(even):hover {
+        background: var(--shell-hover);
     }
 
     /* ─────────────────────────────────────────────────────────────────────────

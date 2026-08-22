@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { api, setUnauthenticatedHandler } from '@/lib/api';
+import { api, setApiBusinessScope, setApiMoneyScope, setUnauthenticatedHandler } from '@/lib/api';
 import { readBootPayload } from '@/lib/boot';
 import { queryClient } from '@/lib/query';
 import type { BootPayload, Capability } from '@/types';
@@ -36,9 +36,27 @@ const SessionContext = createContext<SessionValue | null>(null);
  * happen unless something actually changed.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
-    const [boot, setBoot] = useState<BootPayload>(readBootPayload);
+    const [boot, setBoot] = useState<BootPayload>(() => {
+        const initial = readBootPayload();
 
-    const apply = useCallback((next: BootPayload) => setBoot(next), []);
+        // Before the first request rather than in an effect after it. An effect
+        // runs after the first render, and the first render is what fires the
+        // dashboard's queries — so those would go out unscoped and be cached
+        // against a URL with no business in it.
+        setApiBusinessScope(initial.tenant?.business?.id ?? null);
+        setApiMoneyScope(initial.money?.scope ?? null);
+
+        return initial;
+    });
+
+    const apply = useCallback((next: BootPayload) => {
+        // Ahead of the state change, so the re-render this triggers already has
+        // the new scope to make its requests with. The other order leaves one
+        // render's worth of queries pointed at the business just left.
+        setApiBusinessScope(next.tenant?.business?.id ?? null);
+        setApiMoneyScope(next.money?.scope ?? null);
+        setBoot(next);
+    }, []);
 
     const refresh = useCallback(async () => {
         try {

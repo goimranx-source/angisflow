@@ -109,7 +109,7 @@ export function Modal({
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4"
             onClick={handleBackdropClick}
             role="dialog"
             aria-modal="true"

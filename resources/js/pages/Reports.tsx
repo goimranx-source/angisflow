@@ -66,7 +66,7 @@ function pct(v: number | null) {
 function SectionLines({ lines }: { lines: Line[] }) {
     if (lines.length === 0) return <p className="py-2 text-sm text-[var(--color-text-muted)]">No activity.</p>;
     return (
-        <div className="divide-y divide-[var(--color-border-subtle)]">
+        <div className="divide-y divide-[var(--color-border-light)]">
             {lines.map((l) => (
                 <div key={l.code} className="flex items-center justify-between py-2 text-sm">
                     <span className="text-[var(--color-text-body)]">
@@ -83,7 +83,7 @@ function SectionLines({ lines }: { lines: Line[] }) {
 function Subtotal({ label, value, highlight = false }: { label: string; value: Money; highlight?: boolean }) {
     return (
         <div className={cn(
-            'flex items-center justify-between border-t border-[var(--color-border)] py-2.5 text-sm font-semibold',
+            'flex items-center justify-between border-t border-[var(--color-border-light)] py-2.5 text-sm font-semibold',
             highlight && 'text-[var(--color-text-main)]',
         )}>
             <span>{label}</span>
@@ -196,16 +196,16 @@ function TrialBalanceReport({ from, to }: { from: string; to: string }) {
             )}
             <table className="w-full text-sm">
                 <thead>
-                    <tr className="border-b border-[var(--color-border)] text-left text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                    <tr className="border-b border-[var(--color-border-light)] text-left text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
                         <th className="px-4 py-3">Account</th>
                         <th className="px-4 py-3 text-right">Debit</th>
                         <th className="px-4 py-3 text-right">Credit</th>
                         <th className="px-4 py-3 text-right">Balance</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--color-border-subtle)]">
+                <tbody className="divide-y divide-[var(--color-border-light)]">
                     {tb.rows.map((row) => (
-                        <tr key={row.code} className="hover:bg-[var(--color-surface-raised)]">
+                        <tr key={row.code} className="hover:bg-[var(--color-card-raised)]">
                             <td className="px-4 py-2.5">
                                 <span className="mr-2 text-[var(--color-text-muted)]">{row.code}</span>
                                 {row.name}
@@ -220,7 +220,7 @@ function TrialBalanceReport({ from, to }: { from: string; to: string }) {
                     ))}
                 </tbody>
                 <tfoot>
-                    <tr className="border-t-2 border-[var(--color-border)] font-semibold">
+                    <tr className="border-t-2 border-[var(--color-border-light)] font-semibold">
                         <td className="px-4 py-3">Totals</td>
                         <td className="px-4 py-3 text-right tabular-nums">{fmt(tb.debit)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{fmt(tb.credit)}</td>
@@ -251,7 +251,7 @@ function ReportSkeleton() {
     return (
         <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-                <div key={i} className="card h-32 animate-pulse bg-[var(--color-surface-raised)]" />
+                <div key={i} className="card h-32 animate-pulse bg-[var(--color-card-raised)]" />
             ))}
         </div>
     );

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigation } from 'react-router';
 
 import { AccountNotice } from '@/components/shell/AccountNotice';
+import { AppFooter } from '@/components/shell/AppFooter';
 import { PovaPanel } from '@/components/pova/PovaPanel';
 import { usePovaLayout } from '@/hooks/usePovaLayout';
 import { PovaProvider } from '@/providers/PovaProvider';
@@ -311,6 +312,8 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
                                 {children}
                             </>
                         )}
+
+                        <AppFooter />
                     </main>
                 )}
 

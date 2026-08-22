@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
+import { InfoHint } from '@/components/ui/InfoHint';
 import { useApiForm } from '@/hooks/useApiForm';
 import { api, ApiError } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -26,10 +27,28 @@ import { SettingsCard } from './SettingsCard';
  * is usually the whole answer.
  */
 export default function CurrencyPanel() {
-    const { apply } = useSession();
+    const { apply, refresh: refreshSession } = useSession();
     const queryClient = useQueryClient();
     const [showAll, setShowAll] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
+
+    /**
+     * Make the rest of the product agree with what just changed here.
+     *
+     * The boot payload carries the money scope — the reporting currency and a
+     * stamp of the rates behind it — and every money-bearing query is keyed on
+     * it, with the same token in the URL so the browser's own cache is scoped
+     * too (see hooks/useMoney and lib/api). Refreshing the session is
+     * therefore what actually re-points the whole shell: new scope, new keys,
+     * new URLs, and nothing anywhere can answer out of a cache filled while a
+     * different currency was in force.
+     *
+     * The invalidate is belt and braces for anything keyed without the scope.
+     */
+    const republishMoney = async () => {
+        await refreshSession();
+        await queryClient.invalidateQueries();
+    };
 
     const { data, isPending, refetch } = useQuery({
         queryKey: ['settings', 'currency'],
@@ -37,8 +56,22 @@ export default function CurrencyPanel() {
     });
 
     const panel = data?.data.currency;
+    // A sibling of `currency` in the payload, not a child of it — this is where
+    // the raw stored values live, including the API key.
+    const storedKey = (data?.data.values?.provider_key as string | undefined) ?? '';
 
     const serviceOwns = panel?.mode === 'auto';
+    const providerNeedsKey =
+        panel?.providers.find((candidate) => candidate.key === panel.provider)?.needs_key ?? false;
+
+    // Local, so the field can be typed into before it is saved. Re-seeded
+    // whenever the server's copy changes — switching provider, or a refetch —
+    // so it never shows the key belonging to a provider no longer selected.
+    const [apiKey, setApiKey] = useState(storedKey);
+
+    useEffect(() => {
+        setApiKey(storedKey);
+    }, [storedKey]);
     const visible = useMemo(
         () => (showAll ? (panel?.rates ?? []) : (panel?.rates ?? []).slice(0, 12)),
         [panel?.rates, showAll],
@@ -58,7 +91,10 @@ export default function CurrencyPanel() {
                 base: code,
             });
 
+            // The boot that came back with the save already carries the new
+            // scope, so this re-points the shell without a second round trip.
             apply(result.boot);
+            await queryClient.invalidateQueries();
             await refetch();
             toast.success(result.message);
         } catch (error) {
@@ -89,6 +125,10 @@ export default function CurrencyPanel() {
 
         try {
             const result = await api.post<{ message: string }>('/currency/refresh');
+            // New rates mean every converted figure in the product moved,
+            // even though the currency did not. The scope's stamp is what
+            // says so — and only a fresh boot carries it.
+            await republishMoney();
             await refetch();
             toast.success(result.message);
         } catch (error) {
@@ -108,8 +148,8 @@ export default function CurrencyPanel() {
         void addForm.post<{ message: string }>('/currency/rates', {
             onSuccess: async (result) => {
                 addForm.reset();
+                await republishMoney();
                 await refetch();
-                await queryClient.invalidateQueries({ queryKey: ['settings', 'currency'] });
                 toast.success(result.message);
             },
         });
@@ -120,6 +160,7 @@ export default function CurrencyPanel() {
 
         try {
             const result = await api.post<{ message: string }>('/currency/rates', { code, rate });
+            await republishMoney();
             await refetch();
             toast.success(result.message);
         } catch (error) {
@@ -136,6 +177,7 @@ export default function CurrencyPanel() {
 
         try {
             await api.delete('/currency/rates', { code });
+            await republishMoney();
             await refetch();
             toast.success('Rate removed.');
         } catch {
@@ -166,48 +208,35 @@ export default function CurrencyPanel() {
     return (
         <div className="space-y-5">
             <SettingsCard
-                title="Tool currency"
-                blurb="What every total is counted and shown in. Each storefront keeps charging in its own currency; anything arriving in another one is converted into this."
+                title="Business currency"
+                hint="The currency this business keeps its books in. Every total on its screens is shown in it, and every sale — whichever store or currency it came in through — is converted into it once, at the rate on the day, and kept that way. Changing it after trading has started is an accounting decision, not a display preference."
             >
-                <div className="flex flex-wrap items-end gap-3">
-                    <label className="min-w-0 flex-1" style={{ flexBasis: '16rem' }}>
-                        <span className="mb-1.5 block text-[0.8125rem] font-semibold text-[var(--color-text-main)]">
-                            Count and show everything in
-                        </span>
-                        <select
-                            className="field"
-                            value={panel.base}
-                            disabled={busy === 'base'}
-                            onChange={(event) => void changeBase(event.target.value)}
-                        >
-                            {panel.options.map((option) => (
-                                <option key={option.code} value={option.code}>
-                                    {option.name} ({option.symbol}) — {option.code}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                </div>
-
-                <div className="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-brand-subtle)] px-3 py-2.5 text-xs text-[var(--color-text-body)]">
-                    <Icon name="shield-check" size={14} className="mt-0.5 flex-none" />
-                    <span>
-                        Change this whenever you like. Every order, payment and transaction keeps the amount
-                        and the currency it actually happened in; the totals are worked out from those again
-                        each time. A ৳300 expense stays ৳300 — in dollar mode it reads as its dollar value,
-                        and back in taka mode it reads ৳300 again.
-                        {panel.rebuilt_at && (
-                            <span className="mt-1 block">
-                                Last recalculated {new Date(panel.rebuilt_at).toLocaleString()}.
-                            </span>
-                        )}
-                    </span>
-                </div>
+                {/* The card's title is the label. A second heading above the
+                    only control in it said the same thing twice. */}
+                <select
+                    className="w-full min-h-[2.25rem] px-3 py-1.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] text-[0.875rem] text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-brand)] transition-colors appearance-none pr-10"
+                    style={{
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%232e3d52' d='M1 1l5 5 5-5'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 0.75rem center',
+                        backgroundSize: '12px 8px'
+                    }}
+                    aria-label="Business currency"
+                    value={panel.base}
+                    disabled={busy === 'base'}
+                    onChange={(event) => void changeBase(event.target.value)}
+                >
+                    {panel.options.map((option) => (
+                        <option key={option.code} value={option.code}>
+                            {option.name} ({option.symbol}) — {option.code}
+                        </option>
+                    ))}
+                </select>
             </SettingsCard>
 
             <SettingsCard
-                title="Where rates come from"
-                blurb="On automatic the service owns every rate and they cannot be edited by hand."
+                title="How rates are kept up to date"
+                hint="On automatic the service owns every rate. Switch to manual to set one yourself."
             >
                 <div className="flex flex-wrap items-end gap-3">
                     <label className="min-w-0 flex-1" style={{ flexBasis: '14rem' }}>
@@ -215,14 +244,23 @@ export default function CurrencyPanel() {
                             Rates
                         </span>
                         <select
-                            className="field"
+                            className="w-full min-h-[2.25rem] px-3 py-1.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] text-[0.875rem] text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-brand)] transition-colors appearance-none pr-10"
+                            style={{
+                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%232e3d52' d='M1 1l5 5 5-5'/%3E%3C/svg%3E")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 0.75rem center',
+                                backgroundSize: '12px 8px'
+                            }}
                             value={panel.mode}
                             disabled={busy === 'mode'}
                             onChange={(event) =>
                                 void saveMode({
                                     'mode': event.target.value,
                                     'provider': panel.provider,
-                                    'provider_key': '',
+                                    // The stored key, not a blank. Sending ''
+                                    // here wiped the subscriber's API key every
+                                    // time they touched an unrelated dropdown.
+                                    'provider_key': apiKey,
                                 })
                             }
                         >
@@ -238,14 +276,20 @@ export default function CurrencyPanel() {
                                     Service
                                 </span>
                                 <select
-                                    className="field"
+                                    className="w-full min-h-[2.25rem] px-3 py-1.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] text-[0.875rem] text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-brand)] transition-colors appearance-none pr-10"
+                                    style={{
+                                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%232e3d52' d='M1 1l5 5 5-5'/%3E%3C/svg%3E")`,
+                                        backgroundRepeat: 'no-repeat',
+                                        backgroundPosition: 'right 0.75rem center',
+                                        backgroundSize: '12px 8px'
+                                    }}
                                     value={panel.provider}
                                     disabled={busy === 'mode'}
                                     onChange={(event) =>
                                         void saveMode({
                                             'mode': 'auto',
                                             'provider': event.target.value,
-                                            'provider_key': '',
+                                            'provider_key': apiKey,
                                         })
                                     }
                                 >
@@ -256,6 +300,53 @@ export default function CurrencyPanel() {
                                     ))}
                                 </select>
                             </label>
+
+                            {/*
+                                Only for services that need one — the free ones
+                                do not, and an empty box labelled "API key" on a
+                                provider that never asks for one reads as a
+                                required step somebody is missing.
+                            */}
+                            {providerNeedsKey && (
+                                <label className="min-w-0 flex-1" style={{ flexBasis: '18rem' }}>
+                                    <span className="mb-1.5 flex items-center gap-1.5 text-[0.8125rem] font-semibold text-[var(--color-text-main)]">
+                                        API key
+                                        <InfoHint label="About the API key">
+                                            Issued by the rate service when you sign up with them.
+                                            Stored against this workspace and sent only to that
+                                            service.
+                                        </InfoHint>
+                                    </span>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="password"
+                                            className="field font-mono text-xs"
+                                            value={apiKey}
+                                            placeholder="not needed for the free services"
+                                            autoComplete="off"
+                                            spellCheck={false}
+                                            disabled={busy === 'mode'}
+                                            onChange={(event) => setApiKey(event.target.value)}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            busy={busy === 'mode'}
+                                            disabled={apiKey === storedKey}
+                                            onClick={() =>
+                                                void saveMode({
+                                                    'mode': 'auto',
+                                                    'provider': panel.provider,
+                                                    'provider_key': apiKey,
+                                                })
+                                            }
+                                            className="flex-none"
+                                        >
+                                            Save
+                                        </Button>
+                                    </div>
+                                </label>
+                            )}
 
                             <Button
                                 type="button"
@@ -282,7 +373,7 @@ export default function CurrencyPanel() {
 
             <SettingsCard
                 title={`Conversion to ${panel.base}`}
-                blurb={`What one unit of each currency is worth in ${panel.base}.`}
+                hint={`What one unit of each currency is worth in ${panel.base}. Anything without a rate is left out of totals rather than guessed at.`}
             >
                 {panel.missing.length > 0 && (
                     <div className="mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs"
@@ -300,14 +391,20 @@ export default function CurrencyPanel() {
                 {!serviceOwns && addable.length > 0 && (
                     <form
                         onSubmit={addRate}
-                        className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-[var(--color-brand-subtle)] p-3"
+                        className="mb-4 flex flex-wrap items-end gap-2 rounded-[var(--shell-radius)] bg-[var(--color-brand-subtle)] p-3"
                     >
                         <label className="min-w-0" style={{ flex: '1 1 12rem' }}>
                             <span className="mb-1.5 block text-[0.8125rem] font-semibold text-[var(--color-text-main)]">
                                 Add a currency
                             </span>
                             <select
-                                className="field"
+                                className="w-full min-h-[2.25rem] px-3 py-1.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] text-[0.875rem] text-[var(--color-text-main)] focus:outline-none focus:border-[var(--color-brand)] transition-colors appearance-none pr-10"
+                                style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%232e3d52' d='M1 1l5 5 5-5'/%3E%3C/svg%3E")`,
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundPosition: 'right 0.75rem center',
+                                    backgroundSize: '12px 8px'
+                                }}
                                 value={addForm.data.code}
                                 onChange={(event) => addForm.set('code', event.target.value)}
                                 required
@@ -342,7 +439,7 @@ export default function CurrencyPanel() {
                 )}
 
                 {visible.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[var(--color-border-light)] px-4 py-10 text-center">
+                    <div className="rounded-[var(--shell-radius)] border border-dashed border-[var(--shell-border)] px-4 py-10 text-center">
                         <Icon name="currency-circle-dollar" size={26} className="mx-auto text-[var(--color-text-subtle)]" />
                         <p className="mt-2 text-sm text-[var(--color-text-muted)]">No conversions yet.</p>
                         <p className="mx-auto mt-1 max-w-sm text-xs text-[var(--color-text-subtle)]">
@@ -377,6 +474,89 @@ export default function CurrencyPanel() {
                     </button>
                 )}
             </SettingsCard>
+
+            {/*
+                The rate table made concrete.
+
+                A column of codes against numbers is abstract; this is the
+                question actually being asked — my Berlin shop charges euros, so
+                what does that become in what I report in, and is there a rate
+                for it at all. A hundred units rather than one, because rates
+                below 0.01 round to nothing at a single unit and the row reads
+                as broken.
+            */}
+            {/*
+                Kept as a workspace-level overview rather than removed: it is
+                the one place that answers "do I have a rate for every currency
+                my other books are kept in", which is what stops a cross-
+                business total quietly leaving one of them out. It is not a
+                claim that those businesses report here — each keeps its own.
+            */}
+            <SettingsCard
+                title="Other books in this workspace"
+                hint={`Each business keeps its own books in its own currency. This is what one of theirs is worth in this one — the rate a workspace-level comparison would use. A row without a rate is a business that would be left out of that comparison rather than guessed at.`}
+            >
+                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
+                    <table className="table table-framed">
+                        <thead>
+                            <tr>
+                                <th>Business</th>
+                                <th>Trades in</th>
+                                <th className="text-right">{panel.sample} becomes</th>
+                                <th>Rate in force</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {panel.businesses.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="text-center text-[var(--color-text-muted)]">
+                                        No businesses yet.
+                                    </td>
+                                </tr>
+                            ) : (
+                                panel.businesses.map((business) => (
+                                    <tr key={business.id}>
+                                        <td>
+                                            {business.name}
+                                            {business.short_code && (
+                                                <span className="ml-1.5 font-mono text-xs text-[var(--color-text-subtle)]">
+                                                    {business.short_code}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td>{business.code}</td>
+                                        <td className="text-right">
+                                            {business.is_base ? (
+                                                <span className="text-[var(--color-text-muted)]">
+                                                    {panel.sample} {panel.base}
+                                                </span>
+                                            ) : business.converted !== null ? (
+                                                <>
+                                                    {panel.sample} {business.code} →{' '}
+                                                    <strong>
+                                                        {business.converted} {panel.base}
+                                                    </strong>
+                                                </>
+                                            ) : (
+                                                <span className="text-[var(--color-danger-text)]">
+                                                    cannot convert
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="text-xs text-[var(--color-text-muted)]">
+                                            {business.is_base
+                                                ? 'this workspace’s own currency'
+                                                : business.rate !== null
+                                                  ? `1 ${business.code} = ${business.rate} ${panel.base}`
+                                                  : `add a rate for ${business.code} above`}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </SettingsCard>
         </div>
     );
 }
@@ -402,7 +582,7 @@ function RateRow({
     return (
         <div
             className={cn(
-                'rounded-xl border border-[var(--color-border-light)] px-3 py-2.5',
+                'rounded-[var(--shell-radius)] border border-[var(--shell-border)] px-3 py-2.5',
                 readOnly && 'opacity-75',
             )}
         >
@@ -437,7 +617,7 @@ function RateRow({
                             min="0"
                             value={value}
                             onChange={(event) => setValue(event.target.value)}
-                            className="field w-36 px-2 py-1 text-sm"
+                            className="field w-36 text-sm"
                             aria-label={`Rate for ${rate.code}`}
                         />
                         <Button

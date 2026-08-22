@@ -10,6 +10,7 @@ import {
     KPICard,
 } from '@/components/modules';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useMoney } from '@/hooks/useMoney';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
@@ -90,9 +91,8 @@ export default function Loyalty() {
 
     const hasFilters = search || tierFilter;
 
-    const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-    };
+    // Money in the business currency, and inside the money scope.
+    const { format: formatMoney } = useMoney();
 
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('en-US', {
@@ -182,7 +182,7 @@ export default function Loyalty() {
                                         className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
                                             tierFilter === tier
                                                 ? 'bg-[var(--color-brand)] text-white'
-                                                : 'bg-[var(--color-neutral-subtle)] text-[var(--color-text-main)] hover:bg-[var(--color-neutral-hover)]'
+                                                : 'bg-[var(--shell-tint)] text-[var(--color-text-main)] hover:bg-[var(--shell-hover)]'
                                         }`}
                                     >
                                         {tier}

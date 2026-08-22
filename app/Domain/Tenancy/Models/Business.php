@@ -6,12 +6,14 @@ namespace App\Domain\Tenancy\Models;
 
 use App\Domain\Billing\Allowance;
 use App\Domain\Catalogue\Models\BusinessCategory;
+use App\Domain\Media\Models\MediaItem;
 use App\Domain\Shared\Concerns\HasPublicId;
 use App\Domain\Tenancy\Concerns\BelongsToAccount;
 use App\Support\Navigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -35,6 +37,8 @@ class Business extends Model
         'short_code',
         'logo_media_id',
         'base_currency',
+        'order_statuses',
+        'custom_fields',
         'country',
         'timezone',
         'address',
@@ -47,6 +51,10 @@ class Business extends Model
     {
         return [
             'is_active' => 'boolean',
+            // The statuses this business added to the built-in ten. Null means
+            // it uses the built-ins only — see OrderStatuses.
+            'order_statuses' => 'array',
+            'custom_fields' => 'array',
         ];
     }
 
@@ -63,7 +71,7 @@ class Business extends Model
             // Soft-delete: append timestamp to short_code to avoid unique constraint
             // violation when creating a new business with the same code later.
             if ($business->short_code !== null) {
-                $business->short_code = $business->short_code . '_' . time();
+                $business->short_code = $business->short_code.'_'.time();
                 $business->saveQuietly();
             }
         });
@@ -102,17 +110,34 @@ class Business extends Model
     {
         return $this->belongsTo(BusinessCategory::class, 'business_category_id');
     }
-    
-    /** The business categories (many-to-many relationship). */
-    public function categories(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+
+    /**
+     * The business categories (many-to-many relationship).
+     *
+     * ── Why the ordering is part of the relation ─────────────────────────────
+     *
+     * Ordered by the pivot's own id, which is the order the subscriber picked
+     * them in — so the first row is the trade they named first, and stays that
+     * way. Several screens want a single category to speak in and reach for
+     * ->first() to get one; unordered, that is whatever the join happened to
+     * return, and a bakery with a café attached could be greeted as a shop on
+     * one request and a restaurant on the next having changed nothing.
+     *
+     * businesses.business_category_id would be the more obvious primary, but it
+     * is null on nearly every set of books on the system — it predates the pivot
+     * and only the rows migrated into it carry a value. So the pivot's order has
+     * to be the dependable answer rather than the fallback nobody checked.
+     */
+    public function categories(): BelongsToMany
     {
-        return $this->belongsToMany(BusinessCategory::class, 'business_business_category');
+        return $this->belongsToMany(BusinessCategory::class, 'business_business_category')
+            ->orderBy('business_business_category.id');
     }
 
     /** Business logo media item. */
     public function logoMedia(): BelongsTo
     {
-        return $this->belongsTo(\App\Domain\Media\Models\MediaItem::class, 'logo_media_id');
+        return $this->belongsTo(MediaItem::class, 'logo_media_id');
     }
 
     public function label(): string

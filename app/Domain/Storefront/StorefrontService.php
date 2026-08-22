@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Domain\Storefront;
 
-use App\Domain\Tenancy\TenantContext;
-use App\Domain\Sales\OrderService;
-use App\Domain\Sales\CustomerDirectory;
-use App\Domain\Shared\ValueObjects\Money;
-use App\Models\Storefront;
-use App\Models\StorefrontPage;
 use App\Domain\Catalogue\Models\Product;
 use App\Domain\Catalogue\Models\ProductCategory;
 use App\Domain\Catalogue\Models\ProductVariant;
+use App\Domain\Sales\CustomerDirectory;
 use App\Domain\Sales\Models\Customer;
 use App\Domain\Sales\Models\Order;
+use App\Domain\Sales\OrderService;
+use App\Domain\Shared\ValueObjects\Money;
+use App\Domain\Tenancy\TenantContext;
+use App\Models\Storefront;
+use App\Models\StorefrontPage;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -48,6 +48,11 @@ class StorefrontService
             $storefront = Storefront::create([
                 'name' => $data['name'],
                 'slug' => $data['slug'] ?? Str::slug($data['name']),
+
+                // What kind of shop and what state it is in. Defaulted rather
+                // than required, so every existing caller keeps working.
+                'type' => $data['type'] ?? 'main',
+                'status' => $data['status'] ?? 'active',
                 'title' => $data['title'] ?? $data['name'],
                 'description' => $data['description'] ?? null,
                 'settings' => $data['settings'] ?? [],
@@ -89,6 +94,7 @@ class StorefrontService
     {
         $storefront = Storefront::findOrFail($storefrontId);
         $storefront->update($data);
+
         return $storefront;
     }
 
@@ -102,7 +108,7 @@ class StorefrontService
             ->where('custom_domain', $identifier)
             ->first();
 
-        if (!$storefront) {
+        if (! $storefront) {
             // Try slug
             $storefront = Storefront::active()
                 ->where('slug', $identifier)
@@ -132,15 +138,15 @@ class StorefrontService
             ->with(['variants', 'media', 'category']);
 
         // Apply filters
-        if (!empty($filters['category'])) {
+        if (! empty($filters['category'])) {
             $query->where('category_id', $filters['category']);
         }
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -148,21 +154,21 @@ class StorefrontService
         // product itself — see Product::priceRange(). A product qualifies for a
         // price filter if any of its active variants falls in range, the same
         // "from / to" idea the product page uses to show a single price.
-        if (!empty($filters['price_min'])) {
+        if (! empty($filters['price_min'])) {
             $priceMinMinor = (int) round($filters['price_min'] * 100);
             $query->whereHas('variants', function ($q) use ($priceMinMinor) {
                 $q->where('is_active', true)->where('price_minor', '>=', $priceMinMinor);
             });
         }
 
-        if (!empty($filters['price_max'])) {
+        if (! empty($filters['price_max'])) {
             $priceMaxMinor = (int) round($filters['price_max'] * 100);
             $query->whereHas('variants', function ($q) use ($priceMaxMinor) {
                 $q->where('is_active', true)->where('price_minor', '<=', $priceMaxMinor);
             });
         }
 
-        if (!empty($filters['in_stock']) && $storefront->show_inventory_levels) {
+        if (! empty($filters['in_stock']) && $storefront->show_inventory_levels) {
             $query->where('available_quantity', '>', 0);
         }
 
@@ -241,11 +247,11 @@ class StorefrontService
                 'category',
                 'reviews' => function ($query) {
                     $query->approved()->with('customer');
-                }
+                },
             ])
             ->first();
 
-        if (!$product) {
+        if (! $product) {
             return null;
         }
 
@@ -253,7 +259,7 @@ class StorefrontService
         $product->loadMissing([
             'relatedProducts' => function ($query) {
                 $query->where('status', 'active')->limit(4);
-            }
+            },
         ]);
 
         return $product;
@@ -276,7 +282,7 @@ class StorefrontService
             ->with('variants')
             ->first();
 
-        if (!$product) {
+        if (! $product) {
             throw new \InvalidArgumentException('Product not found or not available');
         }
 
@@ -287,7 +293,7 @@ class StorefrontService
             ? $product->variants->firstWhere('public_id', $variantId)
             : $product->defaultVariant();
 
-        if (!$variant) {
+        if (! $variant) {
             throw new \InvalidArgumentException('This product has nothing to sell yet — no variant is set up for it.');
         }
 
@@ -313,7 +319,7 @@ class StorefrontService
         }
 
         // Create cart item key
-        $itemKey = $productId . ($variantId ? ":{$variantId}" : '');
+        $itemKey = $productId.($variantId ? ":{$variantId}" : '');
 
         // Check if item already exists in cart
         $existingIndex = null;
@@ -456,19 +462,19 @@ class StorefrontService
         return DB::transaction(function () use ($storefront, $checkoutData) {
             // Validate storefront rules
             $validationErrors = $storefront->validateOrder($checkoutData);
-            if (!empty($validationErrors)) {
+            if (! empty($validationErrors)) {
                 throw new \InvalidArgumentException(implode(', ', $validationErrors));
             }
 
             // Find or create customer
             $customer = null;
-            if (!empty($checkoutData['customer_id'])) {
+            if (! empty($checkoutData['customer_id'])) {
                 $customer = Customer::findOrFail($checkoutData['customer_id']);
-            } elseif (!$storefront->allow_guest_checkout) {
+            } elseif (! $storefront->allow_guest_checkout) {
                 throw new \InvalidArgumentException('Account required for checkout');
             } else {
                 // Create guest customer if email provided
-                if (!empty($checkoutData['customer_email'])) {
+                if (! empty($checkoutData['customer_email'])) {
                     $customer = $this->customerDirectory->findOrCreateByEmail(
                         $checkoutData['customer_email'],
                         [
@@ -501,7 +507,7 @@ class StorefrontService
                     ->firstOrFail();
 
                 $variant = null;
-                if (!empty($item['variant_id'])) {
+                if (! empty($item['variant_id'])) {
                     $variant = $product->variants()
                         ->where('public_id', $item['variant_id'])
                         ->firstOrFail();
@@ -582,7 +588,7 @@ class StorefrontService
      */
     public function savePage(Storefront $storefront, array $pageData): StorefrontPage
     {
-        if (!empty($pageData['id'])) {
+        if (! empty($pageData['id'])) {
             $page = $storefront->pages()->where('public_id', $pageData['id'])->firstOrFail();
             $page->update($pageData);
         } else {
@@ -615,8 +621,8 @@ class StorefrontService
             ->sellable()
             ->where(function ($q) use ($query) {
                 $q->where('name', 'like', "%{$query}%")
-                  ->orWhere('description', 'like', "%{$query}%")
-                  ->orWhere('sku', 'like', "%{$query}%");
+                    ->orWhere('description', 'like', "%{$query}%")
+                    ->orWhere('sku', 'like', "%{$query}%");
             })
             ->with(['media', 'category'])
             ->limit($limit)
@@ -630,7 +636,7 @@ class StorefrontService
     {
         // Simple recommendation based on popular products
         // TODO: Implement more sophisticated recommendations based on customer behavior
-        
+
         return Product::where('business_id', $storefront->business_id)
             ->where('status', 'active')
             ->sellable()

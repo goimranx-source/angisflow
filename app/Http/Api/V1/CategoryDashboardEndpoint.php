@@ -31,30 +31,70 @@ class CategoryDashboardEndpoint extends Endpoint
             return response()->json(['message' => 'No business selected'], 400);
         }
 
-        $category = $business->categories->first();
+        $business->loadMissing(['categories.parent', 'category.parent']);
+
+        /*
+         * Which category this screen speaks in.
+         *
+         * The one chosen when the books were opened, not categories->first() —
+         * that is whatever order the join returned, so a business carrying two
+         * trades could be greeted as a café one day and a shop the next having
+         * changed nothing. The pivot is the fallback for books created straight
+         * into the many-to-many with no primary ever recorded.
+         */
+        $category = $business->category ?? $business->categories->first();
 
         if (!$category) {
             return response()->json(['message' => 'Business has no category'], 400);
         }
 
         /*
-         * Which category's presets apply.
+         * Which categories' presets apply.
          *
-         * Subscribers pick a subcategory — "Studio & freelance", not
+         * Every one the business carries, not just the primary. A bakery with a
+         * café attached should be offered the café's modules too — showing it
+         * only the retail half of its own product is how somebody concludes the
+         * booking screen they were sold does not exist.
+         *
+         * Subscribers also pick a subcategory — "Studio & freelance", not
          * "Professional services" — and subcategories carry no presets of their
          * own. Reading presets straight off the chosen category therefore finds
          * nothing at all, and the screen falls back to a generic welcome for
          * every business on the system. presetSource() walks up to the parent
          * that actually holds the decisions, exactly as the sidebar does.
          */
-        $category->loadMissing('parent');
+        $sourceIds = $business->categories
+            ->map(fn ($cat) => $cat->presetSource()->getAttributes()['id'])
+            ->unique()
+            ->values()
+            ->all();
+
         $source = $category->presetSource();
-        $sourceId = $source->getAttributes()['id'];
         $sourceKey = $source->key;
 
+        /*
+         * The trades this screen offers things to do for, primary first.
+         *
+         * Order matters: the first action rendered is the prominent one, so the
+         * trade the subscriber named for themselves gets it, and the second
+         * trade's suggestions follow rather than displace them.
+         */
+        $sourceKeys = array_values(array_unique([
+            $sourceKey,
+            ...$business->categories->map(fn ($cat) => $cat->presetSource()->key)->all(),
+        ]));
+
+        // The primary's own source is what the wording below keys off, so it has
+        // to be in the set even if the pivot somehow does not carry it.
+        $sourceIds = array_values(array_unique([
+            ...$sourceIds,
+            $source->getAttributes()['id'],
+        ]));
+
         $enabledModuleIds = DB::table('category_module_presets')
-            ->where('business_category_id', $sourceId)
+            ->whereIn('business_category_id', $sourceIds)
             ->where('enabled_by_default', 1)
+            ->distinct()
             ->pluck('module_id')
             ->all();
 
@@ -110,8 +150,8 @@ class CategoryDashboardEndpoint extends Endpoint
                     'enabled' => $enabledModules,
                     'coming_soon' => $comingSoonModules,
                 ],
-                'quick_actions' => $this->getQuickActions($sourceKey, $modules),
-                'setup_progress' => $this->getSetupProgress($business->id, $sourceKey, $modules),
+                'quick_actions' => $this->getQuickActions($sourceKeys, $modules),
+                'setup_progress' => $this->getSetupProgress($business->id, $sourceKeys, $modules),
             ],
         ]);
     }
@@ -143,12 +183,70 @@ class CategoryDashboardEndpoint extends Endpoint
      * address and whether it has one, so the catalogue decides: a module that is
      * not built is dropped rather than offered as a link to a 404.
      *
+     * A business carrying two trades gets both sets, primary first, with
+     * anything they share appearing once — "Add a customer" is the same errand
+     * however many categories asked for it.
+     *
+     * @param  list<string>  $categoryKeys  preset source keys, primary first
      * @param  array<string, array{path: ?string, built: bool}>  $modules
      * @return array<int, array<string, string>>
      */
-    private function getQuickActions(string $categoryKey, array $modules): array
+    private function getQuickActions(array $categoryKeys, array $modules): array
     {
-        $specs = match ($categoryKey) {
+        $specs = [];
+        $seen = [];
+
+        foreach ($categoryKeys as $categoryKey) {
+            foreach ($this->quickActionSpecs($categoryKey) as $spec) {
+                if (isset($seen[$spec[0]])) {
+                    continue;
+                }
+
+                $seen[$spec[0]] = true;
+                $specs[] = $spec;
+            }
+        }
+
+        $actions = [];
+
+        foreach ($specs as [$key, $label, $description, $icon]) {
+            $module = $modules[$key] ?? null;
+
+            if ($module === null || !$module['built'] || $module['path'] === null) {
+                continue;
+            }
+
+            $actions[] = [
+                'label' => $label,
+                'description' => $description,
+                'icon' => $icon,
+                'href' => $module['path'],
+                'action_type' => $actions === [] ? 'primary' : 'secondary',
+            ];
+        }
+
+        // The dashboard is always reachable, so it is the honest fallback for a
+        // trade whose own modules have not shipped yet. Better one live link
+        // than three dead ones.
+        if ($actions === []) {
+            $actions[] = [
+                'label' => 'View dashboard',
+                'description' => 'See where the business stands',
+                'icon' => 'chart-bar',
+                'href' => '/dashboard',
+                'action_type' => 'primary',
+            ];
+        }
+
+        return $actions;
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    private function quickActionSpecs(string $categoryKey): array
+    {
+        return match ($categoryKey) {
             'retail' => [
                 ['catalogue.products', 'Add a product', 'Build out your catalogue', 'package'],
                 ['revenue.orders', 'View orders', 'Check what has sold', 'shopping-cart'],
@@ -189,39 +287,6 @@ class CategoryDashboardEndpoint extends Endpoint
                 ['revenue.customers', 'Add a customer', 'Build your customer list', 'user-plus'],
             ],
         };
-
-        $actions = [];
-
-        foreach ($specs as [$key, $label, $description, $icon]) {
-            $module = $modules[$key] ?? null;
-
-            if ($module === null || !$module['built'] || $module['path'] === null) {
-                continue;
-            }
-
-            $actions[] = [
-                'label' => $label,
-                'description' => $description,
-                'icon' => $icon,
-                'href' => $module['path'],
-                'action_type' => $actions === [] ? 'primary' : 'secondary',
-            ];
-        }
-
-        // The dashboard is always reachable, so it is the honest fallback for a
-        // trade whose own modules have not shipped yet. Better one live link
-        // than three dead ones.
-        if ($actions === []) {
-            $actions[] = [
-                'label' => 'View dashboard',
-                'description' => 'See where the business stands',
-                'icon' => 'chart-bar',
-                'href' => '/dashboard',
-                'action_type' => 'primary',
-            ];
-        }
-
-        return $actions;
     }
 
     /**
@@ -232,32 +297,32 @@ class CategoryDashboardEndpoint extends Endpoint
      * does the work from elsewhere in the product, and it cannot drift out of
      * step with a flag nobody remembered to set.
      *
+     * Two trades on one set of books means both checklists, deduplicated on the
+     * thing being asked for: a café attached to a shop is not asked to add its
+     * first customer twice.
+     *
+     * @param  list<string>  $categoryKeys  preset source keys, primary first
      * @param  array<string, array{path: ?string, built: bool}>  $modules
      * @return array{completed: int, total: int, steps: array<int, array<string, mixed>>}
      */
-    private function getSetupProgress(int $businessId, string $categoryKey, array $modules): array
+    private function getSetupProgress(int $businessId, array $categoryKeys, array $modules): array
     {
-        $specs = match ($categoryKey) {
-            'retail' => [
-                ['products', 'catalogue.products', 'Add your first product', 'Build out the catalogue'],
-                ['customers', 'revenue.customers', 'Add your first customer', 'Start your customer list'],
-                ['orders', 'revenue.orders', 'Record your first sale', 'Put a sale through the books'],
-            ],
-            'hospitality' => [
-                ['products', 'catalogue.products', 'Create your menu', 'Add dishes and prices'],
-                ['employees', 'people.employees', 'Add your staff', 'Set up the team'],
-                ['customers', 'revenue.customers', 'Add your first guest', 'Start your guest list'],
-            ],
-            'professional' => [
-                ['employees', 'people.employees', 'Add your team', 'Who does the work'],
-                ['customers', 'revenue.customers', 'Add your first client', 'Start your client list'],
-                ['products', 'catalogue.products', 'Set your rates', 'What you charge for'],
-            ],
-            default => [
-                ['customers', 'revenue.customers', 'Add your first customer', 'Start your customer list'],
-                ['products', 'catalogue.products', 'Add what you sell', 'Products or services'],
-            ],
-        };
+        $specs = [];
+        $seen = [];
+
+        foreach ($categoryKeys as $categoryKey) {
+            foreach ($this->setupSpecs($categoryKey) as $spec) {
+                // Keyed on the step id, not the module: "add your first
+                // customer" and "add your first guest" are one errand wearing
+                // two words, and asking for both would be asking twice.
+                if (isset($seen[$spec[0]])) {
+                    continue;
+                }
+
+                $seen[$spec[0]] = true;
+                $specs[] = $spec;
+            }
+        }
 
         $steps = [];
         $completed = 0;
@@ -286,6 +351,34 @@ class CategoryDashboardEndpoint extends Endpoint
             'total' => count($steps),
             'steps' => $steps,
         ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    private function setupSpecs(string $categoryKey): array
+    {
+        return match ($categoryKey) {
+            'retail' => [
+                ['products', 'catalogue.products', 'Add your first product', 'Build out the catalogue'],
+                ['customers', 'revenue.customers', 'Add your first customer', 'Start your customer list'],
+                ['orders', 'revenue.orders', 'Record your first sale', 'Put a sale through the books'],
+            ],
+            'hospitality' => [
+                ['products', 'catalogue.products', 'Create your menu', 'Add dishes and prices'],
+                ['employees', 'people.employees', 'Add your staff', 'Set up the team'],
+                ['customers', 'revenue.customers', 'Add your first guest', 'Start your guest list'],
+            ],
+            'professional' => [
+                ['employees', 'people.employees', 'Add your team', 'Who does the work'],
+                ['customers', 'revenue.customers', 'Add your first client', 'Start your client list'],
+                ['products', 'catalogue.products', 'Set your rates', 'What you charge for'],
+            ],
+            default => [
+                ['customers', 'revenue.customers', 'Add your first customer', 'Start your customer list'],
+                ['products', 'catalogue.products', 'Add what you sell', 'Products or services'],
+            ],
+        };
     }
 
     /** Whether the business has any of the thing a setup step asks for. */

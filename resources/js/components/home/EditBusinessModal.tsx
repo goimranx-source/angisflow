@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Form/Input';
@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { useSession } from '@/providers/SessionProvider';
 
 type Category = {
     id: number;
@@ -72,6 +73,9 @@ export function EditBusinessModal({
     const [busy, setBusy] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [showCategorySelector, setShowCategorySelector] = useState(false);
+
+    const { refresh: refreshSession } = useSession();
+    const queryClient = useQueryClient();
 
     // Fetch business categories
     const { data: categoriesData } = useQuery({
@@ -165,18 +169,31 @@ export function EditBusinessModal({
                 formData.append('remove_logo', '1');
             }
 
-            console.log('Sending update with category IDs:', selectedCategoryIds);
-
             const result = await api.post<{ message: string }>(
                 `/businesses/${business.id}`,
                 formData,
             );
 
+            /*
+             * The books currency can change here, and it is the same column
+             * Settings › Currency writes — so whichever of the two somebody
+             * reaches for, the other is already true.
+             *
+             * But the client has to be told. Every money figure is keyed and
+             * cached on the money scope in the boot payload (see
+             * hooks/useMoney), so without a refresh the column changes and
+             * every screen carries on drawing the currency just left until a
+             * reload. Refreshing the session republishes the scope, which
+             * changes the keys and the URLs, and the stale answers become
+             * unreachable rather than merely out of date.
+             */
+            await refreshSession();
+            await queryClient.invalidateQueries();
+
             toast.success(result.message);
             onClose();
             onUpdated();
         } catch (problem) {
-            console.error('Update failed:', problem);
             const error = problem as { message?: string; errors?: Record<string, string[]> };
 
             if (error.errors) {

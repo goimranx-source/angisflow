@@ -118,7 +118,7 @@ export default function MessageTemplates() {
         support: { label: 'Support', icon: 'lifebuoy', color: 'text-[var(--color-brand)]' },
         sales: { label: 'Sales', icon: 'shopping-bag', color: 'text-[var(--color-success)]' },
         followup: { label: 'Follow-up', icon: 'arrows-clockwise', color: 'text-[var(--color-warning)]' },
-        notification: { label: 'Notification', icon: 'bell', color: 'text-[var(--color-neutral)]' },
+        notification: { label: 'Notification', icon: 'bell', color: 'text-[var(--color-text-muted)]' },
         feedback: { label: 'Feedback', icon: 'star', color: 'text-[var(--color-warning)]' },
         other: { label: 'Other', icon: 'dots-three', color: 'text-[var(--color-text-muted)]' },
     };
@@ -272,7 +272,7 @@ export default function MessageTemplates() {
                                     render: (template) => (
                                         <div className="flex items-center gap-3">
                                             <div
-                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--color-neutral-subtle)] ${categoryMeta[template.category].color}`}
+                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--shell-tint)] ${categoryMeta[template.category].color}`}
                                             >
                                                 <Icon name={categoryMeta[template.category].icon} size={20} />
                                             </div>
@@ -441,7 +441,7 @@ export default function MessageTemplates() {
 
                         {selectedTemplate.subject && (
                             <DrawerSection title="Subject">
-                                <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-3">
+                                <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-3">
                                     <p className="text-sm font-medium text-[var(--color-text-main)]">
                                         {selectedTemplate.subject}
                                     </p>
@@ -450,7 +450,7 @@ export default function MessageTemplates() {
                         )}
 
                         <DrawerSection title="Message Body">
-                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-4">
+                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-4">
                                 <p className="whitespace-pre-wrap text-sm text-[var(--color-text-body)]">
                                     {selectedTemplate.body}
                                 </p>

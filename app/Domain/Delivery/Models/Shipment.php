@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 /**
  * A parcel, in the one shape the whole tool understands.
@@ -45,6 +46,15 @@ class Shipment extends Model
         'booked_at', 'picked_up_at', 'delivered_at', 'returned_at', 'attempt_count',
         'created_by',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Shipment $shipment): void {
+            if ($shipment->number === null || $shipment->number === '') {
+                $shipment->number = 'SHP-'.strtoupper((string) Str::ulid());
+            }
+        });
+    }
 
     protected function casts(): array
     {

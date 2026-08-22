@@ -120,7 +120,7 @@ export default function Automations() {
         keyword: { label: 'Keyword Match', icon: 'text-aa', color: 'text-[var(--color-brand)]' },
         schedule: { label: 'Schedule', icon: 'clock', color: 'text-[var(--color-warning)]' },
         event: { label: 'Event', icon: 'lightning', color: 'text-[var(--color-success)]' },
-        condition: { label: 'Condition', icon: 'funnel', color: 'text-[var(--color-neutral)]' },
+        condition: { label: 'Condition', icon: 'funnel', color: 'text-[var(--color-text-muted)]' },
     };
 
     // Action type labels
@@ -271,7 +271,7 @@ export default function Automations() {
                                     render: (automation) => (
                                         <div className="flex items-center gap-3">
                                             <div
-                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--color-neutral-subtle)] ${triggerMeta[automation.trigger.type].color}`}
+                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--shell-tint)] ${triggerMeta[automation.trigger.type].color}`}
                                             >
                                                 <Icon name={triggerMeta[automation.trigger.type].icon} size={20} />
                                             </div>
@@ -339,7 +339,7 @@ export default function Automations() {
                                     sortable: true,
                                     render: (automation) => (
                                         <div className="flex items-center justify-end gap-2">
-                                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--color-neutral-subtle)]">
+                                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--shell-tint)]">
                                                 <div
                                                     className={`h-full ${
                                                         automation.success_rate >= 80
@@ -441,7 +441,7 @@ export default function Automations() {
                                 label="Success Rate"
                                 value={
                                     <div className="flex items-center gap-2">
-                                        <div className="h-2 w-24 overflow-hidden rounded-full bg-[var(--color-neutral-subtle)]">
+                                        <div className="h-2 w-24 overflow-hidden rounded-full bg-[var(--shell-tint)]">
                                             <div
                                                 className={`h-full ${
                                                     selectedAutomation.success_rate >= 80
@@ -463,7 +463,7 @@ export default function Automations() {
                         </DrawerSection>
 
                         <DrawerSection title="Trigger">
-                            <div className="rounded-lg border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-4">
+                            <div className="rounded-lg border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-4">
                                 <div className="flex items-start gap-3">
                                     <div
                                         className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-white ${triggerMeta[selectedAutomation.trigger.type].color}`}
@@ -487,7 +487,7 @@ export default function Automations() {
                                 {selectedAutomation.actions.map((action, idx) => (
                                     <div
                                         key={idx}
-                                        className="flex items-start gap-3 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-3"
+                                        className="flex items-start gap-3 rounded-lg border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-3"
                                     >
                                         <div className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-[var(--color-brand-subtle)] text-xs font-semibold text-[var(--color-brand)]">
                                             {idx + 1}

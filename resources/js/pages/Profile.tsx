@@ -883,7 +883,7 @@ function DangerZoneCard() {
                         </div>
 
                         {/* Footer */}
-                        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-[var(--color-border-light)] bg-[var(--color-bg-subtle)] px-8 py-5">
+                        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-[var(--color-border-light)] bg-[var(--color-card-raised)] px-8 py-5">
                             <Button
                                 variant="ghost"
                                 size="lg"

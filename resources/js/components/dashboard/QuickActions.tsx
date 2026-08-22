@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
+import { Panel } from '@/components/ui/Panel';
+import { useBusinessScope } from '@/hooks/useBusinessScope';
 import { cn } from '@/lib/utils';
 
 type QuickAction = {
@@ -35,8 +37,10 @@ type QuickActionsProps = {
  * - Backend-driven (adapts to business category)
  */
 export function QuickActions({ className }: QuickActionsProps) {
+    const business = useBusinessScope();
+
     const { data, isPending, isError } = useQuery({
-        queryKey: ['dashboard', 'quick-actions'],
+        queryKey: ['dashboard', 'quick-actions', business],
         queryFn: ({ signal }) =>
             api.get<QuickActionsData>('/dashboard/quick-actions', { signal }),
     });
@@ -44,28 +48,25 @@ export function QuickActions({ className }: QuickActionsProps) {
     const actions = data?.data.actions ?? [];
 
     const variantStyles = {
-        default: 'bg-[var(--color-brand-subtle)] text-[var(--color-ink-soft)]',
+        default: 'bg-[var(--color-brand-subtle)] text-[var(--color-brand-text)]',
         primary: 'bg-[var(--color-brand)] text-[var(--color-text-on-accent)]',
-        success: 'bg-green-100 text-green-700',
+        success: 'bg-[var(--color-success-subtle)] text-[var(--color-success)]',
     };
 
     return (
-        <div className={cn('card p-6', className)}>
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-[var(--color-text-main)]">
-                    Quick Actions
-                </h3>
+        <Panel
+            title="Quick actions"
+            action={
                 <Icon
                     name="lightning"
-                    size={16}
+                    size={15}
                     weight="fill"
-                    className="text-amber-500"
+                    className="text-[var(--color-warning)]"
                 />
-            </div>
-
-            {/* Content */}
-            <div className="mt-4">
+            }
+            className={className}
+        >
+            <div>
                 {isError ? (
                     <div className="py-8 text-center">
                         <p className="text-sm text-[var(--color-text-muted)]">
@@ -79,10 +80,10 @@ export function QuickActions({ className }: QuickActionsProps) {
                                 key={i}
                                 className="flex items-start gap-3 rounded-lg border border-[var(--color-border-light)] p-3 animate-pulse"
                             >
-                                <div className="h-10 w-10 rounded-lg bg-[var(--color-surface)]" />
+                                <div className="h-10 w-10 rounded-lg bg-[var(--color-card-bg)]" />
                                 <div className="flex-1">
-                                    <div className="h-4 w-24 rounded bg-[var(--color-surface)]" />
-                                    <div className="mt-1 h-3 w-32 rounded bg-[var(--color-surface)]" />
+                                    <div className="h-4 w-24 rounded bg-[var(--color-card-bg)]" />
+                                    <div className="mt-1 h-3 w-32 rounded bg-[var(--color-card-bg)]" />
                                 </div>
                             </div>
                         ))}
@@ -137,6 +138,6 @@ export function QuickActions({ className }: QuickActionsProps) {
                     </div>
                 )}
             </div>
-        </div>
+        </Panel>
     );
 }

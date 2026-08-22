@@ -76,6 +76,18 @@ export type CurrencyPanel = {
     mode: 'manual' | 'auto';
     provider: string;
     providers: { key: string; label: string; needs_key: boolean }[];
+    /** Units used for the "100 becomes" column, so the client never guesses. */
+    sample: number;
+    businesses: {
+        id: string;
+        name: string;
+        short_code: string | null;
+        code: string;
+        is_base: boolean;
+        /** Null when no rate exists — never a par guess. */
+        rate: number | null;
+        converted: number | null;
+    }[];
     in_use: string[];
     missing: string[];
     last_refreshed: string | null;

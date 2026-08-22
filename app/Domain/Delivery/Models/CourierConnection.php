@@ -35,7 +35,7 @@ class CourierConnection extends Model
     ];
 
     protected $fillable = [
-        'public_id', 'account_id', 'business_id', 'courier_id', 'label',
+        'public_id', 'account_id', 'business_id', 'courier_id', 'integration_id', 'label',
         'credential_ref', 'base_url', 'webhook_path', 'webhook_secret',
         'settings', 'settlement_days', 'cod_fee_percent',
         'status', 'last_seen_at', 'last_error', 'unmapped_count',
@@ -56,6 +56,11 @@ class CourierConnection extends Model
     public function courier(): BelongsTo
     {
         return $this->belongsTo(Courier::class);
+    }
+
+    public function integration(): BelongsTo
+    {
+        return $this->belongsTo(\App\Domain\Integrations\Models\Integration::class);
     }
 
     public function mappings(): HasMany

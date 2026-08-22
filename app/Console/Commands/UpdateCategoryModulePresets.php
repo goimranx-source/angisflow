@@ -2,14 +2,15 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Catalogue\Models\Module;
 use App\Domain\Catalogue\Models\BusinessCategory;
+use App\Domain\Catalogue\Models\Module;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class UpdateCategoryModulePresets extends Command
 {
     protected $signature = 'category:update-modules';
+
     protected $description = 'Update category module presets based on business requirements research';
 
     public function handle()
@@ -35,8 +36,9 @@ class UpdateCategoryModulePresets extends Command
     {
         $category = BusinessCategory::where('key', $categoryKey)->first();
 
-        if (!$category) {
+        if (! $category) {
             $this->error("❌ Category not found: $categoryKey");
+
             return;
         }
 
@@ -47,7 +49,7 @@ class UpdateCategoryModulePresets extends Command
 
         foreach ($modules as $moduleKey => $enabled) {
             $module = Module::where('key', $moduleKey)->first();
-            if (!$module) {
+            if (! $module) {
                 continue;
             }
 
@@ -108,8 +110,14 @@ class UpdateCategoryModulePresets extends Command
             'people.shifts' => 1, 'work.dashboard' => 1,
         ];
         $ecom = [
-            'web.store' => 1, 'web.storefronts' => 1, 'web.payment_links' => 1,
+            // web.store is deliberately absent. It was the single online-store
+            // page, and a business with two shops had no rule for which one it
+            // showed; a storefront is now opened from the Storefronts list and
+            // edited there. Left here, running this command would put the menu
+            // entry back that its migration removed.
+            'web.storefronts' => 1, 'web.payment_links' => 1,
         ];
+
         return $this->fillDefaults(array_merge($retail, $ecom));
     }
 
@@ -122,9 +130,9 @@ class UpdateCategoryModulePresets extends Command
             'work.dashboard' => 1, 'people.employees' => 1, 'intelligence.dashboards' => 1,
             'platform.integrations' => 1,
         ];
+
         return $this->fillDefaults($universal);
     }
-
 
     private function getHospitalityModules()
     {
@@ -138,6 +146,7 @@ class UpdateCategoryModulePresets extends Command
             'documents.store' => 1, 'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1,
             'work.dashboard' => 1, 'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -151,6 +160,7 @@ class UpdateCategoryModulePresets extends Command
             'people.employees' => 1, 'intelligence.dashboards' => 1, 'platform.integrations' => 1,
             'platform.settings' => 1, 'platform.users' => 1, 'work.dashboard' => 1, 'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -166,6 +176,7 @@ class UpdateCategoryModulePresets extends Command
             'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1, 'work.dashboard' => 1,
             'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -180,6 +191,7 @@ class UpdateCategoryModulePresets extends Command
             'documents.store' => 1, 'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1,
             'work.dashboard' => 1, 'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -194,6 +206,7 @@ class UpdateCategoryModulePresets extends Command
             'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1, 'work.dashboard' => 1,
             'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -209,6 +222,7 @@ class UpdateCategoryModulePresets extends Command
             'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1, 'work.dashboard' => 1,
             'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 
@@ -224,6 +238,7 @@ class UpdateCategoryModulePresets extends Command
             'platform.integrations' => 1, 'platform.settings' => 1, 'platform.users' => 1, 'work.dashboard' => 1,
             'documents.audit' => 1,
         ];
+
         return $this->fillDefaults($core);
     }
 

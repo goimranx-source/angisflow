@@ -46,6 +46,12 @@ export function readBootPayload(): BootPayload {
         },
         auth: null,
         tenant: null,
+        // A scope of 'none' rather than a guessed currency: this shape only
+        // exists when the real payload failed to parse, and the revalidation
+        // that follows replaces it. Keying caches on 'none' meanwhile means
+        // nothing fetched under it is mistaken for an answer in a real
+        // currency once the truth arrives.
+        money: { base: 'USD', symbol: '$', scope: 'none' },
         nav: [],
         todo_marks: {},
     };

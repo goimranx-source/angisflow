@@ -7,11 +7,14 @@ namespace App\Domain\Sales\Models;
 use App\Domain\Shared\Concerns\HasPublicId;
 use App\Domain\Shared\ValueObjects\Money;
 use App\Domain\Stock\Models\StockLocation;
+use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Tenancy\Concerns\BelongsToBusiness;
+use App\Models\Storefront;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Something a customer asked for.
@@ -22,7 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Order extends Model
 {
-    use BelongsToBusiness, HasPublicId;
+    use BelongsToBusiness, HasPublicId, SoftDeletes;
 
     public const DRAFT = 'draft';
 
@@ -62,13 +65,13 @@ class Order extends Model
     protected $fillable = [
         'public_id', 'account_id', 'business_id', 'customer_id',
         'number', 'ordered_on', 'status', 'fulfilment_status', 'payment_status',
-        'channel', 'external_ref', 'is_cod', 'currency',
+        'channel', 'external_ref', 'is_cod', 'currency', 'storefront_id',
         'subtotal_minor', 'discount_minor', 'shipping_minor', 'tax_minor',
         'total_minor', 'paid_minor', 'cost_minor',
         'stock_location_id', 'invoice_id', 'till_session_id', 'idempotency_key',
         'shipping_name', 'shipping_phone', 'shipping_address',
         'shipping_city', 'shipping_postcode', 'shipping_country',
-        'notes', 'cancelled_reason',
+        'notes', 'cancelled_reason', 'archived_at',
         'confirmed_at', 'fulfilled_at', 'cancelled_at', 'created_by',
     ];
 
@@ -80,6 +83,7 @@ class Order extends Model
             'confirmed_at' => 'datetime',
             'fulfilled_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'archived_at' => 'datetime',
             'subtotal_minor' => 'integer',
             'discount_minor' => 'integer',
             'shipping_minor' => 'integer',
@@ -100,9 +104,27 @@ class Order extends Model
         return $this->hasMany(OrderLine::class)->orderBy('line_no');
     }
 
+    /**
+     * The shop this order came through, where it came through one.
+     *
+     * Null is meaningful rather than missing: an order taken at the counter or
+     * over the phone belongs to no storefront, and that is what makes it a
+     * walk-in. Filling it in with a default shop would hide the distinction the
+     * business actually cares about — which of its channels is selling.
+     */
+    public function storefront(): BelongsTo
+    {
+        return $this->belongsTo(Storefront::class);
+    }
+
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class)->latest('id');
     }
 
     public function location(): BelongsTo

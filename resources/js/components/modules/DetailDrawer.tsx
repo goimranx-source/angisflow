@@ -118,7 +118,7 @@ export function DetailDrawer({
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 z-40 bg-black/30 transition-opacity"
+                className="fixed inset-0 z-[var(--z-overlay)] bg-black/30 transition-opacity"
                 onClick={onClose}
                 aria-hidden="true"
             />
@@ -126,7 +126,7 @@ export function DetailDrawer({
             {/* Drawer */}
             <div
                 className={cn(
-                    'fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl',
+                    'fixed inset-y-0 right-0 z-[var(--z-modal)] flex w-full flex-col bg-[var(--color-card-bg)] shadow-2xl',
                     sizeClasses[size],
                 )}
                 role="dialog"
@@ -251,9 +251,18 @@ export function DrawerField({
                 <p className="text-xs font-medium text-[var(--color-text-muted)]">
                     {label}
                 </p>
-                <p className="mt-0.5 text-sm text-[var(--color-text-main)]">
+                {/*
+                  A div, not a paragraph.
+
+                  Callers pass rendered values as often as strings — an address
+                  over several lines, a badge, a figure with a note beside it —
+                  and a block element inside a <p> is invalid HTML. The browser
+                  silently restructures it, which broke hydration and logged an
+                  error on every drawer that showed one.
+                */}
+                <div className="mt-0.5 text-sm text-[var(--color-text-main)]">
                     {value || <span className="text-[var(--color-text-subtle)]">—</span>}
-                </p>
+                </div>
             </div>
         </div>
     );

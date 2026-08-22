@@ -142,7 +142,7 @@ function RevealModal({ id, label, onClose }: { id: string; label: string; onClos
                 )}
 
                 {data && (
-                    <pre className="overflow-x-auto rounded bg-[var(--color-surface-raised)] p-3 text-xs">
+                    <pre className="overflow-x-auto rounded bg-[var(--color-card-raised)] p-3 text-xs">
                         {JSON.stringify(data.data.payload, null, 2)}
                     </pre>
                 )}
@@ -191,7 +191,7 @@ export default function Credentials() {
 
                 {isPending
                     ? Array.from({ length: 3 }, (_, i) => (
-                          <div key={i} className="card h-16 animate-pulse bg-[var(--color-surface-raised)]" />
+                          <div key={i} className="card h-16 animate-pulse bg-[var(--color-card-raised)]" />
                       ))
                     : credentials.length === 0 && !adding
                     ? (

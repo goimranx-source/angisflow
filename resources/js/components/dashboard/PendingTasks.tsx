@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { Panel } from '@/components/ui/Panel';
+import { useBusinessScope } from '@/hooks/useBusinessScope';
 
 type Task = {
     id: string;
@@ -35,36 +36,35 @@ type PendingTasksProps = {
  * - Loading and empty states
  */
 export function PendingTasks({ className }: PendingTasksProps) {
+    const business = useBusinessScope();
+
     const { data, isPending, isError, refetch } = useQuery({
-        queryKey: ['dashboard', 'pending-tasks'],
+        queryKey: ['dashboard', 'pending-tasks', business],
         queryFn: ({ signal }) =>
             api.get<PendingTasksData>('/dashboard/pending-tasks', { signal }),
     });
 
     const tasks = data?.data.tasks ?? [];
 
+    // Tokens rather than Tailwind's palette: these were a red, an amber and a
+    // grey that keep their light-mode brightness on a dark card.
     const priorityColors = {
-        high: 'text-red-600',
-        medium: 'text-amber-600',
-        low: 'text-gray-500',
+        high: 'text-[var(--color-danger-text)]',
+        medium: 'text-[var(--color-warning)]',
+        low: 'text-[var(--color-text-muted)]',
     };
 
     return (
-        <div className={cn('card p-6', className)}>
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-[var(--color-text-main)]">
-                    Pending Tasks
-                </h3>
-                {tasks.length > 0 && (
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-xs font-semibold text-red-600">
-                        {tasks.length}
-                    </span>
-                )}
-            </div>
-
-            {/* Content */}
-            <div className="mt-4">
+        <Panel
+            title="Needs attention"
+            action={
+                tasks.length > 0 ? (
+                    <span className="status status-warning">{tasks.length}</span>
+                ) : undefined
+            }
+            className={className}
+        >
+            <div>
                 {isError ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                         <Icon
@@ -90,10 +90,10 @@ export function PendingTasks({ className }: PendingTasksProps) {
                                 key={i}
                                 className="flex items-start gap-3 animate-pulse"
                             >
-                                <div className="mt-0.5 h-8 w-8 rounded-lg bg-[var(--color-surface)]" />
+                                <div className="mt-0.5 h-8 w-8 rounded-lg bg-[var(--color-card-bg)]" />
                                 <div className="flex-1">
-                                    <div className="h-4 w-32 rounded bg-[var(--color-surface)]" />
-                                    <div className="mt-1 h-3 w-48 rounded bg-[var(--color-surface)]" />
+                                    <div className="h-4 w-32 rounded bg-[var(--color-card-bg)]" />
+                                    <div className="mt-1 h-3 w-48 rounded bg-[var(--color-card-bg)]" />
                                 </div>
                             </div>
                         ))}
@@ -104,7 +104,7 @@ export function PendingTasks({ className }: PendingTasksProps) {
                             name="check-circle"
                             size={32}
                             weight="fill"
-                            className="mx-auto text-green-500"
+                            className="mx-auto text-[var(--color-success)]"
                         />
                         <p className="mt-2 text-sm font-medium text-[var(--color-text-main)]">
                             All caught up!
@@ -119,7 +119,7 @@ export function PendingTasks({ className }: PendingTasksProps) {
                             <a
                                 key={task.id}
                                 href={task.href}
-                                className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[var(--color-surface)]"
+                                className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[var(--color-card-bg)]"
                             >
                                 {/* Icon */}
                                 <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-brand-subtle)]">
@@ -154,6 +154,6 @@ export function PendingTasks({ className }: PendingTasksProps) {
                     </div>
                 )}
             </div>
-        </div>
+        </Panel>
     );
 }

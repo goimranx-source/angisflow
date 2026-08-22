@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { KPICard } from '@/components/modules';
+import { useMoney } from '@/hooks/useMoney';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -107,18 +108,13 @@ export default function PointOfSale() {
         clearCart();
     };
 
-    // Format currency
-    const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(amount);
-    };
+    // Money in the business currency, and inside the money scope.
+    const { format: formatMoney } = useMoney();
 
     const categories = ['all', 'electronics', 'clothing', 'food', 'accessories'];
 
     return (
-        <div className="flex h-full flex-col bg-[var(--color-surface)]">
+        <div className="flex h-full flex-col bg-[var(--color-card-bg)]">
             {/* Header */}
             <div className="border-b border-[var(--color-border-light)] bg-white px-6 py-4">
                 <PageHeader
@@ -201,7 +197,7 @@ export default function PointOfSale() {
                                     className={`flex-none rounded-md px-4 py-2 text-sm font-medium capitalize transition-colors ${
                                         selectedCategory === cat
                                             ? 'bg-[var(--color-brand)] text-white'
-                                            : 'bg-[var(--color-neutral-subtle)] text-[var(--color-text-main)] hover:bg-[var(--color-neutral-hover)]'
+                                            : 'bg-[var(--shell-tint)] text-[var(--color-text-main)] hover:bg-[var(--shell-hover)]'
                                     }`}
                                 >
                                     {cat}
@@ -220,7 +216,7 @@ export default function PointOfSale() {
                                     disabled={product.stock === 0}
                                     className="group relative flex flex-col rounded-lg border border-[var(--color-border-light)] bg-white p-3 text-left transition-all hover:border-[var(--color-brand)] hover:shadow-md disabled:opacity-50"
                                 >
-                                    <div className="mb-2 aspect-square overflow-hidden rounded-md bg-[var(--color-neutral-subtle)]">
+                                    <div className="mb-2 aspect-square overflow-hidden rounded-md bg-[var(--shell-tint)]">
                                         {product.image ? (
                                             <img
                                                 src={product.image}
@@ -292,7 +288,7 @@ export default function PointOfSale() {
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                                                className="flex h-7 w-7 items-center justify-center rounded bg-[var(--color-neutral-subtle)] text-[var(--color-text-main)] hover:bg-[var(--color-neutral-hover)]"
+                                                className="flex h-7 w-7 items-center justify-center rounded bg-[var(--shell-tint)] text-[var(--color-text-main)] hover:bg-[var(--shell-hover)]"
                                             >
                                                 <Icon name="minus" size={14} />
                                             </button>
@@ -301,7 +297,7 @@ export default function PointOfSale() {
                                             </span>
                                             <button
                                                 onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                                                className="flex h-7 w-7 items-center justify-center rounded bg-[var(--color-neutral-subtle)] text-[var(--color-text-main)] hover:bg-[var(--color-neutral-hover)]"
+                                                className="flex h-7 w-7 items-center justify-center rounded bg-[var(--shell-tint)] text-[var(--color-text-main)] hover:bg-[var(--shell-hover)]"
                                             >
                                                 <Icon name="plus" size={14} />
                                             </button>

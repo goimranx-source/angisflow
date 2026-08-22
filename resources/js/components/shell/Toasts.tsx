@@ -11,19 +11,29 @@ const ICONS: Record<ToastTone, string> = {
     info: 'info',
 };
 
+// The same four tones .stat-tile and .notice already use, so a toast reads as
+// the same status language as the rest of the shell rather than inventing its
+// own palette out of raw Tailwind greens and reds.
+const TONE_VARS: Record<ToastTone, { accent: string; subtle: string }> = {
+    success: { accent: 'var(--color-success)', subtle: 'var(--color-success-subtle)' },
+    error: { accent: 'var(--color-danger-text)', subtle: 'var(--color-danger-subtle)' },
+    warning: { accent: 'var(--color-warning)', subtle: 'var(--color-warning-subtle)' },
+    info: { accent: 'var(--color-info)', subtle: 'var(--color-info-subtle)' },
+};
+
 /**
- * Messages, in the corner.
+ * Messages, bottom-left.
  *
  * Rendered by the shell rather than by each page, so a message survives the
  * navigation that produced it — a redirect after a save would otherwise unmount
  * whatever was showing it before anybody read it.
  *
- * Enhanced with:
- * - Professional styling matching the design system
- * - Smooth animations (slide-in, fade-out)
- * - Progress bar showing time remaining
- * - Better contrast and spacing
- * - Theme-aware colors (light/dark compatible)
+ * Bottom-left rather than top-right: nothing else in the shell anchors there,
+ * so a toast never competes with the header's own popovers (search, the
+ * account menu, notifications) for the same corner of the screen. Stacked in
+ * reverse — the newest arrival sits at the bottom, nearest the corner it slid
+ * in from — so an unread message never gets pushed upward, out from under the
+ * pointer, by the next one arriving.
  */
 export function Toasts() {
     const toasts = useToasts();
@@ -34,7 +44,7 @@ export function Toasts() {
 
     return (
         <div
-            className="pointer-events-none fixed top-4 right-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3"
+            className="pointer-events-none fixed bottom-4 left-4 z-[var(--z-toast)] flex w-[min(22rem,calc(100vw-2rem))] flex-col-reverse gap-2.5"
             // Announced by a screen reader without stealing focus, which is
             // what a status message should do and what an alert should not.
             role="status"
@@ -87,108 +97,99 @@ function Toast({ toast }: ToastProps) {
         }
     };
 
+    const { accent, subtle } = TONE_VARS[toast.tone] ?? TONE_VARS.info;
+
     return (
         <div
             className={cn(
-                'pointer-events-auto relative overflow-hidden rounded-xl border shadow-lg',
-                'bg-[var(--color-card-bg)] backdrop-blur-sm',
+                'pointer-events-auto relative overflow-hidden',
+                'rounded-[var(--shell-radius)] border',
                 'transition-all duration-200 ease-out',
-                // Enter animation
-                isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0',
-                // Exit animation
-                isExiting && 'translate-x-full opacity-0',
-                // Tone-specific border colors
-                toast.tone === 'success' && 'border-green-200',
-                toast.tone === 'error' && 'border-red-200',
-                toast.tone === 'warning' && 'border-amber-200',
-                toast.tone === 'info' && 'border-blue-200',
+                // Slides in from the left — the corner it lives in — rather
+                // than the top-right entrance a right-hand toast would use.
+                isVisible ? 'translate-x-0 opacity-100' : '-translate-x-6 opacity-0',
+                isExiting && '-translate-x-6 opacity-0',
             )}
+            style={{
+                background: 'var(--shell-bg)',
+                borderColor: 'var(--shell-border)',
+                boxShadow: 'var(--shadow-lg)',
+            }}
         >
-            {/* Progress bar - only show if not persistent */}
+            {/* The one bit of colour: a bar down the leading edge, same
+                treatment .notice uses for its tone — drawn as the border
+                itself so it cannot add width and shift the contents. */}
+            <div
+                className="absolute inset-y-0 left-0 w-[3px]"
+                style={{ background: accent }}
+            />
+
+            {/* Progress bar — only while it is still going to auto-dismiss. */}
             {!toast.persistent && (
-                <div className="absolute top-0 left-0 right-0 h-1 overflow-hidden">
+                <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden" style={{ background: subtle }}>
                     <div
-                        className={cn(
-                            'h-full',
-                            toast.tone === 'success' && 'bg-green-500',
-                            toast.tone === 'error' && 'bg-red-500',
-                            toast.tone === 'warning' && 'bg-amber-500',
-                            toast.tone === 'info' && 'bg-blue-500',
-                        )}
+                        className="h-full origin-right"
                         style={{
+                            background: accent,
                             animation: `toast-progress ${toast.tone === 'error' ? '8000ms' : '4000ms'} linear forwards`,
                         }}
                     />
                 </div>
             )}
 
-            <div className="flex items-start gap-3 px-4 py-3.5">
-                {/* Icon */}
+            <div className="flex items-start gap-3 py-3 pl-4 pr-3">
+                {/* Icon, in the same subtle-tile treatment as a stat card. */}
                 <div
-                    className={cn(
-                        'flex-none rounded-lg p-1.5',
-                        toast.tone === 'success' && 'bg-green-100 text-green-700',
-                        toast.tone === 'error' && 'bg-red-100 text-red-700',
-                        toast.tone === 'warning' && 'bg-amber-100 text-amber-700',
-                        toast.tone === 'info' && 'bg-blue-100 text-blue-700',
-                    )}
+                    className="mt-0.5 grid flex-none place-items-center rounded-[var(--shell-radius-sm)]"
+                    style={{ background: subtle, color: accent, width: '1.75rem', height: '1.75rem' }}
                 >
-                    <Icon name={ICONS[toast.tone] ?? 'info'} size={18} weight="fill" />
+                    <Icon name={ICONS[toast.tone] ?? 'info'} size={16} weight="fill" />
                 </div>
 
-                {/* Message & Action */}
-                <div className="flex-1 min-w-0 space-y-2 pt-1">
-                    <p className="text-sm font-medium leading-5 text-[var(--color-text-main)]">
+                {/* Message & action */}
+                <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+                    <p className="text-sm leading-5 font-medium text-[var(--color-text-main)]">
                         {toast.message}
                     </p>
-                    
-                    {/* Action button */}
+
                     {toast.action && (
                         <button
                             type="button"
                             onClick={handleAction}
-                            className={cn(
-                                'text-xs font-semibold underline underline-offset-2',
-                                'transition-colors',
-                                toast.tone === 'success' && 'text-green-700 hover:text-green-800',
-                                toast.tone === 'error' && 'text-red-700 hover:text-red-800',
-                                toast.tone === 'warning' && 'text-amber-700 hover:text-amber-800',
-                                toast.tone === 'info' && 'text-blue-700 hover:text-blue-800',
-                            )}
+                            className="text-xs font-semibold underline underline-offset-2 transition-colors"
+                            style={{ color: accent }}
                         >
                             {toast.action.label}
                         </button>
                     )}
                 </div>
 
-                {/* Dismiss button */}
+                {/* Dismiss */}
                 <button
                     type="button"
                     onClick={handleDismiss}
-                    className={cn(
-                        'flex-none rounded-lg p-1 transition-colors',
-                        'text-[var(--color-text-muted)]',
-                        'hover:bg-[var(--color-brand-subtle)] hover:text-[var(--color-text-main)]',
-                    )}
+                    className="flex-none rounded-[var(--shell-radius-sm)] p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
                     aria-label="Dismiss"
                 >
-                    <Icon name="x" size={16} weight="bold" />
+                    <Icon name="x" size={14} weight="bold" />
                 </button>
             </div>
         </div>
     );
 }
 
-// Add keyframe animation for progress bar
-if (typeof document !== 'undefined') {
+// The progress bar's keyframe — injected once, module-scope, rather than
+// duplicated on every toast instance.
+if (typeof document !== 'undefined' && !document.getElementById('toast-progress-keyframes')) {
     const style = document.createElement('style');
+    style.id = 'toast-progress-keyframes';
     style.textContent = `
         @keyframes toast-progress {
             from {
-                transform: translateX(-100%);
+                transform: scaleX(1);
             }
             to {
-                transform: translateX(0%);
+                transform: scaleX(0);
             }
         }
     `;

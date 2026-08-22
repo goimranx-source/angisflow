@@ -38,6 +38,7 @@ class Workspace extends Model
         'slug',
         'icon',
         'is_active',
+        'base_currency',
     ];
 
     protected function casts(): array

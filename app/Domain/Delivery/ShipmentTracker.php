@@ -7,6 +7,7 @@ namespace App\Domain\Delivery;
 use App\Domain\Delivery\Models\CourierConnection;
 use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Delivery\Models\ShipmentEvent;
+use App\Domain\Sales\Models\Order;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -166,6 +167,33 @@ final class ShipmentTracker
         }
 
         $shipment->forceFill($changes)->save();
+
+        $orderChanges = match (true) {
+            $status === ShipmentStatus::DELIVERED => [
+                'status' => Order::COMPLETED,
+                'fulfilment_status' => Order::FULFILLED,
+                'fulfilled_at' => $shipment->order?->fulfilled_at ?? $at,
+                'payment_status' => $shipment->is_cod ? Order::PAID : $shipment->order?->payment_status,
+            ],
+            in_array($status, [
+                ShipmentStatus::BOOKED,
+                ShipmentStatus::PICKED_UP,
+                ShipmentStatus::IN_TRANSIT,
+                ShipmentStatus::OUT_FOR_DELIVERY,
+                ShipmentStatus::ATTEMPTED,
+                ShipmentStatus::RETURNING,
+            ], true) => ['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL],
+            $status === ShipmentStatus::RETURNED => ['status' => 'failed'],
+            $status === ShipmentStatus::CANCELLED => ['status' => Order::CANCELLED],
+            default => [],
+        };
+
+        if ($orderChanges !== [] && $shipment->order !== null) {
+            $shipment->order->forceFill(array_filter(
+                $orderChanges,
+                static fn (mixed $value): bool => $value !== null,
+            ))->save();
+        }
     }
 
     /**

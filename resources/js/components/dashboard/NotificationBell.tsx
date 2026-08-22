@@ -55,10 +55,10 @@ export function NotificationBell({ className }: NotificationBellProps) {
     const unreadCount = data?.data.unread_count ?? 0;
 
     const typeConfig = {
-        info: { color: 'text-blue-600', bg: 'bg-blue-100' },
-        success: { color: 'text-green-600', bg: 'bg-green-100' },
-        warning: { color: 'text-amber-600', bg: 'bg-amber-100' },
-        error: { color: 'text-red-600', bg: 'bg-red-100' },
+        info: { color: 'text-[var(--color-info)]', bg: 'bg-[var(--color-info-subtle)]' },
+        success: { color: 'text-[var(--color-success)]', bg: 'bg-[var(--color-success-subtle)]' },
+        warning: { color: 'text-[var(--color-warning)]', bg: 'bg-[var(--color-warning-subtle)]' },
+        error: { color: 'text-[var(--color-danger-text)]', bg: 'bg-[var(--color-danger-subtle)]' },
     };
 
     return (
@@ -72,7 +72,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
             >
                 <Icon name="bell" size={20} />
                 {unreadCount > 0 && (
-                    <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[0.625rem] font-semibold text-white">
+                    <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[var(--color-danger)] px-1 text-[0.625rem] font-semibold text-white">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                 )}
@@ -89,7 +89,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
                     />
 
                     {/* Dropdown Panel */}
-                    <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-[var(--color-border-light)] bg-white shadow-lg">
+                    <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
                             <h3 className="font-semibold text-[var(--color-text-main)]">
@@ -111,10 +111,10 @@ export function NotificationBell({ className }: NotificationBellProps) {
                                             key={i}
                                             className="flex gap-3 animate-pulse"
                                         >
-                                            <div className="h-8 w-8 rounded-lg bg-[var(--color-surface)]" />
+                                            <div className="h-8 w-8 rounded-lg bg-[var(--color-card-bg)]" />
                                             <div className="flex-1">
-                                                <div className="h-4 w-32 rounded bg-[var(--color-surface)]" />
-                                                <div className="mt-1 h-3 w-48 rounded bg-[var(--color-surface)]" />
+                                                <div className="h-4 w-32 rounded bg-[var(--color-card-bg)]" />
+                                                <div className="mt-1 h-3 w-48 rounded bg-[var(--color-card-bg)]" />
                                             </div>
                                         </div>
                                     ))}
@@ -142,8 +142,8 @@ export function NotificationBell({ className }: NotificationBellProps) {
                                                 href={notification.href}
                                                 className={cn(
                                                     'flex gap-3 p-4 transition-colors',
-                                                    notification.href && 'hover:bg-[var(--color-surface)]',
-                                                    !notification.read && 'bg-blue-50',
+                                                    notification.href && 'hover:bg-[var(--color-card-bg)]',
+                                                    !notification.read && 'bg-[var(--color-brand-subtle)]',
                                                 )}
                                             >
                                                 {/* Icon */}

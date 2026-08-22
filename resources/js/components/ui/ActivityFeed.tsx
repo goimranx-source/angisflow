@@ -173,7 +173,7 @@ function ActivityItem({ item }: { item: ActivityItem }) {
                 </div>
 
                 {item.content && (
-                    <div className="mt-2 rounded-lg bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text-main)]">
+                    <div className="mt-2 rounded-lg bg-[var(--color-card-bg)] p-3 text-sm text-[var(--color-text-main)]">
                         {item.content}
                     </div>
                 )}

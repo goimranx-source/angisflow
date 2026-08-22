@@ -354,7 +354,7 @@ export default function Inbox() {
                                                 className={`flex h-10 w-10 flex-none items-center justify-center rounded-full ${
                                                     conv.unread_count > 0
                                                         ? 'bg-[var(--color-brand)] text-white'
-                                                        : 'bg-[var(--color-neutral-subtle)] text-[var(--color-text-muted)]'
+                                                        : 'bg-[var(--shell-tint)] text-[var(--color-text-muted)]'
                                                 }`}
                                             >
                                                 <Icon name="user" size={20} />
@@ -588,7 +588,7 @@ export default function Inbox() {
                         </DrawerSection>
 
                         <DrawerSection title="Last Message">
-                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-4">
+                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-4">
                                 <p className="text-sm text-[var(--color-text-body)]">
                                     {selectedConversation.last_message}
                                 </p>

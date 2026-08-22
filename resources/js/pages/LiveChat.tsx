@@ -323,7 +323,7 @@ export default function LiveChat() {
                                                         ? 'bg-[var(--color-success)] text-white'
                                                         : session.status === 'waiting'
                                                           ? 'bg-[var(--color-warning)] text-white'
-                                                          : 'bg-[var(--color-neutral-subtle)] text-[var(--color-text-muted)]'
+                                                          : 'bg-[var(--shell-tint)] text-[var(--color-text-muted)]'
                                                 }`}
                                             >
                                                 <Icon name="user" size={20} />
@@ -589,7 +589,7 @@ export default function LiveChat() {
                         )}
 
                         <DrawerSection title="Last Message">
-                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] p-4">
+                            <div className="rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] p-4">
                                 <p className="text-sm text-[var(--color-text-body)]">
                                     {selectedSession.last_message}
                                 </p>

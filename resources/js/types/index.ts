@@ -158,8 +158,22 @@ export type BootPayload = {
     };
     auth: Auth | null;
     tenant: Tenant | null;
+    /** What the shell reports money in. See App\Support\BootPayload::money(). */
+    money: Money;
     nav: NavSection[];
     todo_marks: Record<string, string>;
+};
+
+export type Money = {
+    /** ISO code — 'MYR'. For arithmetic and for Intl. */
+    base: string;
+    /** What a reader recognises — 'RM'. For headings and labels. */
+    symbol: string;
+    /** Changes whenever the base or the rates behind it do. Keyed into every
+     *  money-bearing query and written into every read's URL, so neither
+     *  React Query nor the browser can answer with a figure from the currency
+     *  just left. */
+    scope: string;
 };
 
 export type PlannedModule = {

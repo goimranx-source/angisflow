@@ -44,6 +44,15 @@ final class SettingsRegistry
      * `capability` is what the server checks and what the client uses to decide
      * whether to draw the tab at all — one answer, two readers.
      */
+    /**
+     * The tabs Settings offers.
+     *
+     * 'appearance' and 'media' are deliberately absent. Their keys still exist
+     * and are still read — the logo, favicon and brand name are what the boot
+     * payload white-labels the shell with, so deleting them would strip the
+     * product of its own name — they simply no longer get a tab of their own.
+     * See HIDDEN_GROUPS.
+     */
     public const GROUPS = [
         'appearance' => [
             'label' => 'Appearance',

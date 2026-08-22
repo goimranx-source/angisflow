@@ -33,7 +33,7 @@ class OrderLine extends Model
     ];
 
     protected $fillable = [
-        'order_id', 'product_variant_id', 'line_no', 'sku', 'description',
+        'order_id', 'product_variant_id', 'line_no', 'external_id', 'sku', 'description',
         'quantity', 'quantity_fulfilled', 'unit_price_minor', 'discount_minor',
         'tax_rate', 'tax_minor', 'total_minor', 'cost_minor', 'currency',
         'stock_reservation_id',

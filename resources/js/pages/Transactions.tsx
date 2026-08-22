@@ -16,6 +16,7 @@ import {
     KPICard,
 } from '@/components/modules';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useMoney } from '@/hooks/useMoney';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
@@ -187,13 +188,8 @@ export default function Transactions() {
         }
     };
 
-    // Format currency
-    const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(amount);
-    };
+    // Money in the business currency, and inside the money scope.
+    const { format: formatMoney } = useMoney();
 
     // Format date
     const formatDate = (date: string) => {

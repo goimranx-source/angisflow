@@ -58,10 +58,39 @@ export function Tooltip({
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    /*
+     * The side actually used, which is not always the side asked for.
+     *
+     * A tooltip on a heading near the top of the page, told to open upward,
+     * opens above the viewport — it exists, and cannot be read. So the
+     * preferred side is checked against the room available and flipped when
+     * there is none. Roughly measured: the bubble is not in the DOM yet at this
+     * point, and 140px is comfortably more than the tallest hint.
+     */
+    const [side, setSide] = useState(position);
+
+    const resolveSide = () => {
+        const box = containerRef.current?.getBoundingClientRect();
+
+        if (!box) {
+            return position;
+        }
+
+        const needed = 140;
+
+        if (position === 'top' && box.top < needed) return 'bottom';
+        if (position === 'bottom' && window.innerHeight - box.bottom < needed) return 'top';
+        if (position === 'left' && box.left < 300) return 'right';
+        if (position === 'right' && window.innerWidth - box.right < 300) return 'left';
+
+        return position;
+    };
+
     const handleMouseEnter = () => {
         if (disabled) return;
 
         timeoutRef.current = setTimeout(() => {
+            setSide(resolveSide());
             setIsVisible(true);
         }, delay);
     };
@@ -75,6 +104,7 @@ export function Tooltip({
 
     const handleFocus = () => {
         if (disabled) return;
+        setSide(resolveSide());
         setIsVisible(true);
     };
 
@@ -105,17 +135,24 @@ export function Tooltip({
                 <div
                     role="tooltip"
                     className={cn(
-                        'absolute z-50 rounded-lg px-3 py-2',
-                        'bg-[var(--color-text-main)] text-[var(--color-card-bg)]',
+                        'absolute z-50 px-3 py-2',
+                        // A panel like every other flyout in the shell, not an
+                        // inverted chip: light on light, dark on dark. Inverting
+                        // made it the one black rectangle on a white page.
+                        'rounded-[var(--shell-radius)] border border-[var(--shell-border)]',
+                        'bg-[var(--shell-bg)] text-[var(--color-text-body)]',
                         'text-xs font-medium leading-snug',
-                        'shadow-lg',
+                        'shadow-[var(--shadow-lg)]',
                         'animate-in fade-in-0 zoom-in-95 duration-150',
-                        'whitespace-nowrap',
+                        // Wraps, with a readable measure. nowrap was fine for a
+                        // two-word label and ran a sentence clean off the side
+                        // of the viewport — which is what these now carry.
+                        'w-max max-w-[17rem] text-left whitespace-normal',
                         // Position
-                        position === 'top' && 'bottom-full left-1/2 mb-2 -translate-x-1/2',
-                        position === 'bottom' && 'left-1/2 top-full mt-2 -translate-x-1/2',
-                        position === 'left' && 'right-full top-1/2 mr-2 -translate-y-1/2',
-                        position === 'right' && 'left-full top-1/2 ml-2 -translate-y-1/2',
+                        side === 'top' && 'bottom-full left-1/2 mb-2 -translate-x-1/2',
+                        side === 'bottom' && 'left-1/2 top-full mt-2 -translate-x-1/2',
+                        side === 'left' && 'right-full top-1/2 mr-2 -translate-y-1/2',
+                        side === 'right' && 'left-full top-1/2 ml-2 -translate-y-1/2',
                         className,
                     )}
                 >
@@ -124,11 +161,18 @@ export function Tooltip({
                     {/* Arrow */}
                     <div
                         className={cn(
-                            'absolute size-2 rotate-45 bg-[var(--color-text-main)]',
-                            position === 'top' && 'bottom-[-4px] left-1/2 -translate-x-1/2',
-                            position === 'bottom' && 'left-1/2 top-[-4px] -translate-x-1/2',
-                            position === 'left' && 'right-[-4px] top-1/2 -translate-y-1/2',
-                            position === 'right' && 'left-[-4px] top-1/2 -translate-y-1/2',
+                            'absolute size-2 rotate-45 bg-[var(--shell-bg)]',
+                            // Only the two outward edges carry the border, so
+                            // the hairline continues around the bubble instead
+                            // of drawing a cross through the arrow.
+                            side === 'top' &&
+                                'bottom-[-5px] left-1/2 -translate-x-1/2 border-r border-b border-[var(--shell-border)]',
+                            side === 'bottom' &&
+                                'left-1/2 top-[-5px] -translate-x-1/2 border-l border-t border-[var(--shell-border)]',
+                            side === 'left' &&
+                                'right-[-5px] top-1/2 -translate-y-1/2 border-t border-r border-[var(--shell-border)]',
+                            side === 'right' &&
+                                'left-[-5px] top-1/2 -translate-y-1/2 border-b border-l border-[var(--shell-border)]',
                         )}
                     />
                 </div>

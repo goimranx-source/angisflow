@@ -259,7 +259,7 @@ export default function Documents() {
                                     render: (doc) => (
                                         <div className="flex items-center gap-3">
                                             <div
-                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--color-neutral-subtle)] ${fileTypeMeta[doc.type].color}`}
+                                                className={`flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-[var(--shell-tint)] ${fileTypeMeta[doc.type].color}`}
                                             >
                                                 <Icon name={fileTypeMeta[doc.type].icon} size={20} />
                                             </div>
@@ -394,7 +394,7 @@ export default function Documents() {
                                     {selectedDocument.tags.map((tag) => (
                                         <span
                                             key={tag}
-                                            className="rounded-md border border-[var(--color-border-light)] bg-[var(--color-neutral-subtle)] px-2.5 py-1 text-xs text-[var(--color-text-main)]"
+                                            className="rounded-md border border-[var(--color-border-light)] bg-[var(--shell-tint)] px-2.5 py-1 text-xs text-[var(--color-text-main)]"
                                         >
                                             {tag}
                                         </span>

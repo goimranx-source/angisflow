@@ -6,6 +6,7 @@ namespace App\Domain\Delivery;
 
 use App\Domain\Delivery\Adapters\CourierAdapter;
 use App\Domain\Delivery\Adapters\GenericAdapter;
+use App\Domain\Delivery\Adapters\TestCourierAdapter;
 use App\Domain\Delivery\Models\CourierConnection;
 use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Delivery\Models\WebhookDelivery;
@@ -45,6 +46,7 @@ final class WebhookReceiver
 {
     /** @var list<class-string<CourierAdapter>> */
     private const ADAPTERS = [
+        TestCourierAdapter::class,
         GenericAdapter::class,
     ];
 

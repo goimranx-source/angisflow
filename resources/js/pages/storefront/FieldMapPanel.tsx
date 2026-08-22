@@ -1,0 +1,407 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+
+import { Icon } from '@/components/ui/Icon';
+import { api } from '@/lib/api';
+import { toast } from '@/lib/toast';
+
+type PathOption = { path: string; sample: string | null };
+type Target = { value: string; label: string; transform: string; custom?: boolean };
+type MapRow = {
+    source: string;
+    target: string;
+    transform: string;
+    direction: string;
+    label: string | null;
+    enabled: boolean;
+    also: string[];
+    display_label?: string;
+};
+
+type Sample = {
+    entity: string;
+    paths: PathOption[];
+    /** 'live' — a real record from this shop; 'sample' — the platform's; 'none'. */
+    source: string;
+    captured_at: string | null;
+    targets: Target[];
+    transforms: Record<string, string>;
+    maps: MapRow[];
+};
+
+/** Chosen in the target list to define a field rather than pick one. */
+const NEW_FIELD = '__new_field__';
+
+/*
+ * Two, not three.
+ *
+ * The buyer's details arrive on the order — every platform repeats them there —
+ * so they are mapped among the order's fields as "Customer — Email" and the like.
+ * A separate customer tab meant configuring the same shop twice and then having
+ * to work out which of the two an arriving order obeyed.
+ */
+const ENTITIES = [
+    { key: 'order', label: 'Orders' },
+    { key: 'product', label: 'Products' },
+];
+
+/**
+ * Which of this shop's fields become which of ours.
+ *
+ * ── Why the source is a list and not a text box ──────────────────────────────
+ *
+ * Nobody knows offhand that their delivery slot lives at
+ * `meta_data._delivery_slot` with a leading underscore. The paths offered here
+ * are read out of a real record this shop sent — every one of them exists, with
+ * the value found at it shown alongside — so mapping is recognising something
+ * rather than recalling it, and a typo is impossible because nothing is typed.
+ *
+ * ── Custom fields ────────────────────────────────────────────────────────────
+ *
+ * A target of "Custom field" stores the value against the link between this
+ * record and this shop, rather than on the record. That is deliberate: the same
+ * product sold through two shops can carry a different value in each, and there
+ * is no single true one to put on the product itself.
+ */
+export function FieldMapPanel({ connectionId }: { connectionId: string }) {
+    const queryClient = useQueryClient();
+
+    const [entity, setEntity] = useState('order');
+    const [rows, setRows] = useState<MapRow[]>([]);
+    const [naming, setNaming] = useState<Record<number, string>>({});
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['integration', connectionId, 'sample-paths', entity],
+        queryFn: () =>
+            api.get<{ data: Sample }>(`/settings/integrations/${connectionId}/sample-paths`, {
+                params: { entity },
+            }),
+    });
+
+    const sample = data?.data;
+
+    useEffect(() => {
+        if (sample) setRows(sample.maps);
+    }, [sample]);
+
+    /*
+     * Naming a field this tool does not have.
+     *
+     * Typed in words — "Manage Stock" — because that is what it is called on
+     * every screen afterwards. The stored key is derived from the name by the
+     * server, so it never depends on how somebody happened to type it, and the
+     * field becomes available to every shop this business connects rather than
+     * to the one row it was invented on.
+     */
+    const defineField = useMutation({
+        mutationFn: (payload: { label: string; type: string }) =>
+            api.post<{ data: { target: string } }>(`/settings/integrations/${connectionId}/fields`, {
+                ...payload,
+                entity,
+            }),
+        onSuccess: (result, variables) => {
+            toast.success(`${variables.label} added.`);
+            void queryClient.invalidateQueries({
+                queryKey: ['integration', connectionId, 'sample-paths', entity],
+            });
+
+            return result;
+        },
+        onError: (error: Error) => toast.error(error.message || 'That field could not be added.'),
+    });
+
+    const save = useMutation({
+        mutationFn: () =>
+            api.put(`/settings/integrations/${connectionId}/field-maps`, { entity, maps: rows }),
+        onSuccess: () => {
+            toast.success('Mapping saved.');
+            void queryClient.invalidateQueries({ queryKey: ['integration', connectionId] });
+        },
+        onError: (error: Error) => toast.error(error.message || 'That could not be saved.'),
+    });
+
+    const update = (index: number, patch: Partial<MapRow>) =>
+        setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
+    const remove = (index: number) => setRows((current) => current.filter((_, i) => i !== index));
+
+    const add = () =>
+        setRows((current) => [
+            ...current,
+            { source: '', target: '', transform: 'trim', direction: 'both', label: null, enabled: true, also: [] },
+        ]);
+
+    /*
+     * The custom fields this shop sends that nothing is reading yet.
+     *
+     * The standard fields need no suggesting — they are mapped by default and
+     * already in the table. What is never mapped, and cannot be, is whatever
+     * this particular shop's plugins added: meta_data, note_attributes,
+     * metafields. Those are exactly the paths somebody came to this screen for,
+     * and they are the ones nobody can guess the names of.
+     *
+     * Suggested, not applied: each becomes a row pointing at a custom field of
+     * the same name, and nothing is saved until Save is pressed.
+     */
+    const suggestions = (sample?.paths ?? []).filter((option) => {
+        const container = option.path.split('.')[0] ?? '';
+        const isCustom = ['meta_data', 'note_attributes', 'metafields', 'custom_fields'].includes(container);
+
+        return isCustom && !rows.some((row) => row.source === option.path);
+    });
+
+    const suggest = () =>
+        setRows((current) => [
+            ...current,
+            ...suggestions.map((option) => ({
+                source: option.path,
+                // Named after the field itself, minus any leading underscore —
+                // WordPress hides its private meta that way and the underscore
+                // means nothing here.
+                target: `custom.${(option.path.split('.').pop() ?? 'field').replace(/^_+/, '')}`,
+                transform: 'trim',
+                direction: 'both',
+                label: null,
+                enabled: true,
+                also: [],
+            })),
+        ]);
+
+    // What the sample value becomes once the row's transform has run. Shown so a
+    // wrong mapping is visible before it is saved rather than after a sync.
+    const preview = (row: MapRow): string => {
+        const found = sample?.paths.find((p) => p.path === row.source);
+
+        return found?.sample ?? '—';
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-1.5">
+                    {ENTITIES.map((option) => (
+                        <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => setEntity(option.key)}
+                            className="rounded-[var(--shell-radius)] border px-3 py-1.5 text-sm transition"
+                            style={{
+                                borderColor:
+                                    entity === option.key ? 'var(--color-brand)' : 'var(--shell-border)',
+                                color: entity === option.key ? 'var(--color-brand)' : undefined,
+                            }}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                    {/* Only offered when there is something to offer — a button
+                        that does nothing when pressed teaches people to stop
+                        pressing buttons. */}
+                    {suggestions.length > 0 && (
+                        <button type="button" className="btn btn-secondary" onClick={suggest}>
+                            <Icon name="sparkle" size={13} />
+                            Add {suggestions.length} custom field
+                            {suggestions.length === 1 ? '' : 's'}
+                        </button>
+                    )}
+
+                    <button type="button" className="btn btn-secondary" onClick={add}>
+                        <Icon name="plus" size={13} />
+                        Add row
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => save.mutate()}
+                        disabled={save.isPending}
+                    >
+                        Save
+                    </button>
+                </div>
+            </div>
+
+            {/*
+              Where the paths came from. A mapping built against the platform's
+              documented sample rather than a real record deserves a second look
+              once orders start arriving, so the screen says which it is.
+            */}
+            {sample && sample.source !== 'live' && (
+                <p className="text-xs text-[var(--color-text-muted)]">
+                    {sample.source === 'sample'
+                        ? 'Fields below come from a standard example — this shop has not sent a record yet. They will work; check them once real orders arrive.'
+                        : 'Nothing to read fields from yet. Sync once, or wait for this shop to send something.'}
+                </p>
+            )}
+
+            {isLoading && <div className="h-40 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />}
+
+            {sample && (
+                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
+                    <table className="table table-framed min-w-[52rem]">
+                        <thead>
+                            <tr>
+                                <th>This shop&rsquo;s field</th>
+                                <th>Value there</th>
+                                <th>Becomes</th>
+                                <th>Treated as</th>
+                                <th>Direction</th>
+                                <th />
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {rows.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
+                                        Nothing mapped yet.
+                                    </td>
+                                </tr>
+                            ) : (
+                                rows.map((row, index) => (
+                                    <tr key={index}>
+                                        <td>
+                                            <select
+                                                className="field w-full min-w-[13rem]"
+                                                value={row.source}
+                                                onChange={(e) => update(index, { source: e.target.value })}
+                                            >
+                                                <option value="">—</option>
+                                                {/* A path already mapped but no
+                                                    longer present in the sample
+                                                    still shows, or the row would
+                                                    silently blank itself. */}
+                                                {!sample.paths.some((p) => p.path === row.source) &&
+                                                    row.source !== '' && (
+                                                        <option value={row.source}>{row.source}</option>
+                                                    )}
+                                                {sample.paths.map((option) => (
+                                                    <option key={option.path} value={option.path}>
+                                                        {option.path}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+
+                                        <td className="max-w-[12rem] truncate text-xs text-[var(--color-text-muted)]">
+                                            {preview(row)}
+                                        </td>
+
+                                        <td>
+                                            <select
+                                                className="field w-full min-w-[11rem]"
+                                                value={row.target}
+                                                onChange={(e) => {
+                                                    const target = e.target.value;
+                                                    const known = sample.targets.find((t) => t.value === target);
+
+                                                    // The right treatment for the
+                                                    // chosen field, so money and
+                                                    // dates are handled without
+                                                    // anyone having to know.
+                                                    update(index, {
+                                                        target,
+                                                        transform: known?.transform ?? row.transform,
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">—</option>
+                                                {sample.targets.map((target) => (
+                                                    <option key={target.value} value={target.value}>
+                                                        {target.label}
+                                                    </option>
+                                                ))}
+                                                <option value={NEW_FIELD}>＋ New field…</option>
+                                            </select>
+
+                                            {/*
+                                              A custom field needs a name of its
+                                              own. Left to the path it came from,
+                                              two shops sending the same thing
+                                              under different keys would store it
+                                              under two names and no report could
+                                              bring them together.
+                                            */}
+                                            {row.target === NEW_FIELD && (
+                                                <input
+                                                    className="field mt-1.5 w-full text-xs"
+                                                    value={naming[index] ?? ''}
+                                                    onChange={(e) =>
+                                                        setNaming((c) => ({ ...c, [index]: e.target.value }))
+                                                    }
+                                                    onKeyDown={(e) => {
+                                                        if (e.key !== 'Enter') return;
+                                                        e.preventDefault();
+
+                                                        const label = (naming[index] ?? '').trim();
+
+                                                        if (label === '') return;
+
+                                                        defineField.mutate(
+                                                            { label, type: row.transform },
+                                                            {
+                                                                onSuccess: (result) => {
+                                                                    // Point this row at the field it just
+                                                                    // created, so pressing Enter finishes
+                                                                    // the job rather than starting another.
+                                                                    update(index, { target: result.data.target });
+                                                                    setNaming((c) => ({ ...c, [index]: '' }));
+                                                                },
+                                                            },
+                                                        );
+                                                    }}
+                                                    placeholder="Manage Stock — then press Enter"
+                                                    aria-label="Name this field"
+                                                    autoFocus
+                                                />
+                                            )}
+                                        </td>
+
+                                        <td>
+                                            <select
+                                                className="field w-full min-w-[10rem]"
+                                                value={row.transform}
+                                                onChange={(e) => update(index, { transform: e.target.value })}
+                                            >
+                                                {Object.entries(sample.transforms).map(([value, label]) => (
+                                                    <option key={value} value={value}>
+                                                        {label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+
+                                        <td>
+                                            <select
+                                                className="field w-full min-w-[8rem]"
+                                                value={row.direction}
+                                                onChange={(e) => update(index, { direction: e.target.value })}
+                                            >
+                                                <option value="both">Both ways</option>
+                                                <option value="in">Bring in only</option>
+                                                <option value="out">Send out only</option>
+                                            </select>
+                                        </td>
+
+                                        <td className="text-right">
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                onClick={() => remove(index)}
+                                                aria-label="Remove row"
+                                            >
+                                                <Icon name="trash" size={13} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}

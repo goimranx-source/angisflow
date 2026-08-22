@@ -14,6 +14,8 @@ type Column<T> = {
     sortable?: boolean;
     /** Custom render function for cell content */
     render?: (item: T, index: number) => ReactNode;
+    /** Custom render function for header content */
+    headerRender?: () => ReactNode;
     /** Accessor function to get the value for default rendering */
     accessor?: (item: T) => ReactNode;
     /** Column width class (e.g., 'w-48', 'w-1/4') */
@@ -47,6 +49,8 @@ type TableProps<T> = {
     skeletonRows?: number;
     /** Additional table class names */
     className?: string;
+    /** Classes applied to the table element itself, useful for wide tables. */
+    tableClassName?: string;
     /** Compact mode (smaller padding) */
     compact?: boolean;
     /** Striped rows */
@@ -96,6 +100,7 @@ export function Table<T>({
     loading = false,
     skeletonRows = 5,
     className,
+    tableClassName,
     compact = false,
     striped = false,
 }: TableProps<T>) {
@@ -121,7 +126,7 @@ export function Table<T>({
     if (loading) {
         return (
             <div className={cn('overflow-x-auto', className)}>
-                <table className="table">
+                <table className={cn('table', tableClassName)}>
                     <TableHead
                         columns={columns}
                         sortBy={sortBy}
@@ -133,7 +138,7 @@ export function Table<T>({
                             <tr key={i}>
                                 {columns.map((col) => (
                                     <td key={col.key} className={col.width}>
-                                        <div className="skeleton h-5 w-full max-w-[200px]" />
+                                        <div className="animate-pulse h-5 w-full max-w-[200px] rounded-[var(--shell-radius-sm)]" />
                                     </td>
                                 ))}
                             </tr>
@@ -147,7 +152,7 @@ export function Table<T>({
     if (data.length === 0) {
         return (
             <div className={cn('overflow-x-auto', className)}>
-                <table className="table">
+                <table className={cn('table', tableClassName)}>
                     <TableHead
                         columns={columns}
                         sortBy={sortBy}
@@ -166,7 +171,7 @@ export function Table<T>({
 
     return (
         <div className={cn('overflow-x-auto', className)}>
-            <table className={cn('table', compact && 'table-compact', striped && 'table-striped')}>
+            <table className={cn('table', tableClassName, compact && 'table-compact', striped && 'table-striped')}>
                 <TableHead
                     columns={columns}
                     sortBy={sortBy}
@@ -181,9 +186,7 @@ export function Table<T>({
                             onKeyDown={(e) => handleKeyDown(e, item, index)}
                             tabIndex={clickable && onRowClick ? 0 : undefined}
                             role={clickable && onRowClick ? 'button' : undefined}
-                            className={cn(
-                                clickable && onRowClick && 'cursor-pointer hover:bg-[var(--color-bg-subtle)]',
-                            )}
+                            className={cn(clickable && onRowClick && 'is-clickable')}
                         >
                             {columns.map((col) => {
                                 const content = col.render
@@ -200,6 +203,12 @@ export function Table<T>({
                                             col.align === 'center' && 'text-center',
                                             col.align === 'right' && 'text-right',
                                         )}
+                                        // Only when the cell is plain text.
+                                        // A rendered cell may be a badge or a
+                                        // button with its own wording, and
+                                        // "[object Object]" in a tooltip is
+                                        // worse than no tooltip.
+                                        title={typeof content === 'string' ? content : undefined}
                                     >
                                         {content}
                                     </td>
@@ -235,33 +244,48 @@ function TableHead<T>({ columns, sortBy, sortDirection, onSort }: TableHeadProps
                                 col.width,
                                 col.align === 'center' && 'text-center',
                                 col.align === 'right' && 'text-right',
-                                sortable && 'cursor-pointer select-none hover:bg-[var(--color-bg-subtle)]',
+                                // `group` so the sort caret can fade in on hover — it was
+                                // written as group-hover: with no group to hang off, so it
+                                // never appeared on anything but the sorted column.
+                                sortable && 'group is-sortable',
+                                sortable && isSorted && 'is-sorted',
                             )}
                             onClick={() => sortable && onSort(col.key)}
+                            aria-sort={
+                                isSorted
+                                    ? sortDirection === 'desc'
+                                        ? 'descending'
+                                        : 'ascending'
+                                    : undefined
+                            }
                         >
-                            <div
-                                className={cn(
-                                    'flex items-center gap-1.5',
-                                    col.align === 'center' && 'justify-center',
-                                    col.align === 'right' && 'justify-end',
-                                )}
-                            >
-                                <span>{col.label}</span>
-                                {sortable && (
-                                    <span
-                                        className={cn(
-                                            'transition-opacity',
-                                            isSorted ? 'opacity-100' : 'opacity-0 group-hover:opacity-50',
-                                        )}
-                                    >
-                                        {isSorted && sortDirection === 'desc' ? (
-                                            <Icon name="caret-down" size={14} weight="fill" />
-                                        ) : (
-                                            <Icon name="caret-up" size={14} weight="fill" />
-                                        )}
-                                    </span>
-                                )}
-                            </div>
+                            {col.headerRender ? (
+                                col.headerRender()
+                            ) : (
+                                <div
+                                    className={cn(
+                                        'flex items-center gap-1.5',
+                                        col.align === 'center' && 'justify-center',
+                                        col.align === 'right' && 'justify-end',
+                                    )}
+                                >
+                                    <span>{col.label}</span>
+                                    {sortable && (
+                                        <span
+                                            className={cn(
+                                                'transition-opacity',
+                                                isSorted ? 'opacity-100' : 'opacity-0 group-hover:opacity-50',
+                                            )}
+                                        >
+                                            {isSorted && sortDirection === 'desc' ? (
+                                                <Icon name="caret-down" size={14} weight="fill" />
+                                            ) : (
+                                                <Icon name="caret-up" size={14} weight="fill" />
+                                            )}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </th>
                     );
                 })}

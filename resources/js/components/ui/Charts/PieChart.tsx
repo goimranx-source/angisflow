@@ -246,7 +246,7 @@ export function PieChart({
                                 key={segment.label}
                                 className={cn(
                                     'flex items-center justify-between gap-2 rounded px-2 py-1 transition-colors',
-                                    isHovered && 'bg-[var(--color-surface)]',
+                                    isHovered && 'bg-[var(--color-card-bg)]',
                                     onSegmentClick && 'cursor-pointer',
                                 )}
                                 onMouseEnter={() => setHoveredIndex(index)}

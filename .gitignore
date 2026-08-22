@@ -50,3 +50,6 @@ ngrok.exe
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Kiro tool scratch
+/.kiro
