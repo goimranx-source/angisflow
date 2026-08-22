@@ -47,6 +47,7 @@ class IntegrationLink extends Model
             'custom_fields' => 'array',
             'last_pulled_at' => 'datetime',
             'last_pushed_at' => 'datetime',
+            'push_pending_at' => 'datetime',
         ];
     }
 
@@ -164,13 +165,58 @@ class IntegrationLink extends Model
             && hash_equals($this->push_fingerprint, self::fingerprint($payload));
     }
 
+    /**
+     * A local change this shop has not accepted yet.
+     *
+     * ── Why the debt is written before the attempt ───────────────────────────
+     *
+     * So that it survives the attempt never happening. Recording only failures
+     * cannot catch a push that was never scheduled, a worker that was not
+     * running, or a process that died between the save and the dispatch — and
+     * those are the cases that produced silent divergence here, not a shop
+     * answering with an error.
+     *
+     * Written in the same transaction as the change it refers to, so there is
+     * no instant where the order has moved and nothing knows the shop needs
+     * telling.
+     */
+    public function markPushPending(): void
+    {
+        $this->forceFill([
+            'push_pending_at' => $this->push_pending_at ?? now(),
+            // Last time's reason is not this time's; a fresh attempt starts
+            // without the old complaint attached to it.
+            'push_error' => null,
+        ])->save();
+    }
+
+    /** Why the last attempt did not land. The debt stays until one does. */
+    public function recordPushFailure(string $reason): void
+    {
+        $this->forceFill([
+            'push_pending_at' => $this->push_pending_at ?? now(),
+            'push_error' => mb_substr($reason, 0, 1000),
+        ])->save();
+    }
+
     /** @param array<string, mixed> $payload */
     public function recordPush(array $payload): void
     {
         $this->forceFill([
             'push_fingerprint' => self::fingerprint($payload),
             'last_pushed_at' => now(),
+
+            // Settled: this is the only thing that clears the debt, which is
+            // what makes the debt trustworthy.
+            'push_pending_at' => null,
+            'push_error' => null,
         ])->save();
+    }
+
+    /** Changes made here that the shop has not taken. */
+    public function scopeUnsent(Builder $query): Builder
+    {
+        return $query->whereNotNull('push_pending_at');
     }
 
     public function recordPull(): void

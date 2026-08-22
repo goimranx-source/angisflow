@@ -51,6 +51,36 @@ final class PushIntegrationRecord implements ShouldQueue
         public readonly int $localId,
     ) {}
 
+    /**
+     * The last word on an attempt that will not be retried again.
+     *
+     * ── Why the reason is kept on the link ───────────────────────────────────
+     *
+     * Because failed_jobs is a place for an operator, not for the person whose
+     * order did not reach the shop. They are looking at the order, and what
+     * they need is there: that it has not been taken, and what the shop said
+     * about it. The pending stamp is left standing — the change is still owed —
+     * and only a push that succeeds clears either.
+     *
+     * Laravel calls this after the final attempt, so a shop that was briefly
+     * unreachable does not leave a complaint behind once a retry works.
+     */
+    public function failed(\Throwable $e): void
+    {
+        $integration = Integration::withoutGlobalScopes()->find($this->integrationId);
+
+        if ($integration === null) {
+            return;
+        }
+
+        IntegrationLink::withoutGlobalScopes()
+            ->where('integration_id', $this->integrationId)
+            ->where('entity', $this->entity)
+            ->where('linkable_id', $this->localId)
+            ->first()
+            ?->recordPushFailure($e->getMessage());
+    }
+
     public function handle(EntityLinker $linker): void
     {
         $integration = Integration::withoutGlobalScopes()->find($this->integrationId);

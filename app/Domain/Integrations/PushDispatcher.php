@@ -32,6 +32,31 @@ final class PushDispatcher
         $jobs = [];
 
         foreach ($this->integrationsFor($order) as $integration) {
+            /*
+             * The debt is written here, before anything is sent.
+             *
+             * ── Why not when the send fails ──────────────────────────────────
+             *
+             * Because the sends that hurt are the ones that never happen. A
+             * queue with no worker, a batch that throws after the orders are
+             * already saved, a process killed mid-request — none of those
+             * produce a failure to record, and all three have left this
+             * application quietly disagreeing with a shop.
+             *
+             * Marked first, the order carries "the shop has not taken this"
+             * from the moment it changes until a push actually succeeds. The
+             * worst case becomes a visible backlog instead of silence.
+             *
+             * A link that does not exist yet is not marked: there is nothing to
+             * mark, and the push will create it.
+             */
+            IntegrationLink::query()
+                ->where('integration_id', $integration->id)
+                ->where('entity', IntegrationLink::ORDER)
+                ->where('linkable_id', $order->id)
+                ->first()
+                ?->markPushPending();
+
             $jobs[] = new PushIntegrationRecord($integration->id, IntegrationLink::ORDER, (int) $order->id);
         }
 

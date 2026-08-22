@@ -42,6 +42,13 @@ type Order = {
     /** Short tag for the shop it came through — 'VB', or 'WALK' for the counter. */
     store_code: string | null;
     /**
+     * Set only when this order's changes have not reached the shop.
+     *
+     * Null is the ordinary case, so a row shows nothing rather than a tick that
+     * would be noise everywhere except the one place it matters.
+     */
+    unsent: { since: string; error: string | null } | null;
+    /**
      * Null for a walk-in sale, and deliberately so. Inventing a "Guest"
      * customer here would make a genuine customer of that name indistinguishable
      * from an anonymous one, and would put a row in the customer list that
@@ -1111,8 +1118,49 @@ export default function Orders() {
                                                     {order.store_code ?? '#'}
                                                 </span>
                                                 <div className="min-w-0 whitespace-nowrap">
-                                                    <p className="font-semibold text-[var(--color-text-main)]">
+                                                    <p className="flex items-center gap-1.5 font-semibold text-[var(--color-text-main)]">
                                                         {order.order_number}
+
+                                                        {/*
+                                                          Shown only when the shop
+                                                          has not taken this order's
+                                                          changes.
+
+                                                          Next to the number rather
+                                                          than in a column of its
+                                                          own: it is a fact about
+                                                          this order, not a
+                                                          dimension of the list, and
+                                                          on almost every row there
+                                                          is nothing to say.
+                                                        */}
+                                                        {order.unsent && (
+                                                            <span
+                                                                // On the span rather than the icon: the
+                                                                // reason is what somebody needs, and Icon
+                                                                // takes no title of its own.
+                                                                title={
+                                                                    order.unsent.error
+                                                                        ? `Not sent to the shop — ${order.unsent.error}`
+                                                                        : 'Waiting to reach the shop'
+                                                                }
+                                                                aria-label={
+                                                                    order.unsent.error
+                                                                        ? 'Not sent to the shop'
+                                                                        : 'Waiting to reach the shop'
+                                                                }
+                                                                className={
+                                                                    order.unsent.error
+                                                                        ? 'text-[var(--color-danger)]'
+                                                                        : 'text-[var(--color-text-muted)]'
+                                                                }
+                                                            >
+                                                                <Icon
+                                                                    name={order.unsent.error ? 'warning-circle' : 'cloud-arrow-up'}
+                                                                    size={14}
+                                                                />
+                                                            </span>
+                                                        )}
                                                     </p>
                                                     <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
                                                         {formatDate(order.date)}

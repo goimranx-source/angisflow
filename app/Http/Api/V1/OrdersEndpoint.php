@@ -17,9 +17,11 @@ use App\Domain\Sales\Models\Order;
 use App\Domain\Storefront\StoreCode;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
+use App\Domain\Integrations\Models\IntegrationLink;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -135,9 +137,26 @@ class OrdersEndpoint
         // set, so they cannot be worked out one order at a time.
         $storeCodes = StoreCode::forBusiness((int) $business->id);
 
+        /*
+         * Which of these orders the shop has not taken.
+         *
+         * ── Why it is fetched for the page rather than per order ─────────────
+         *
+         * One query for the whole list instead of one per row. The answer is
+         * almost always empty, and on the rare page where it is not, it is a
+         * handful of rows — so this is a cheap indexed read that turns a silent
+         * disagreement into something visible on the row it belongs to.
+         */
+        $unsent = IntegrationLink::query()
+            ->where('entity', IntegrationLink::ORDER)
+            ->whereIn('linkable_id', array_map(fn (Order $o): int => (int) $o->id, $page->items()))
+            ->whereNotNull('push_pending_at')
+            ->get(['linkable_id', 'push_pending_at', 'push_error'])
+            ->keyBy('linkable_id');
+
         return response()->json([
             'data' => array_map(
-                fn (Order $order): array => $this->present($order, $base, $storeCodes),
+                fn (Order $order): array => $this->present($order, $base, $storeCodes, $unsent->get($order->id)),
                 $page->items(),
             ),
             'summary' => $this->summary(clone $query, $base),
@@ -371,8 +390,9 @@ class OrdersEndpoint
 
     /**
      * @param  array<int, string>  $storeCodes  storefront id => short tag
+     * @param  IntegrationLink|null  $unsent  set when the shop has not taken this order's changes
      */
-    private function present(Order $order, string $base, array $storeCodes = []): array
+    private function present(Order $order, string $base, array $storeCodes = [], ?IntegrationLink $unsent = null): array
     {
         $from = (string) $order->currency;
 
@@ -421,6 +441,23 @@ class OrdersEndpoint
             'store_code' => $order->storefront_id === null
                 ? 'WALK'
                 : ($storeCodes[(int) $order->storefront_id] ?? null),
+
+            /*
+             * Whether this order's changes have reached the shop.
+             *
+             * Null when there is nothing outstanding, which is the ordinary
+             * case — so a screen shows nothing at all rather than a reassuring
+             * green tick on every row, which would be noise the moment it
+             * mattered.
+             *
+             * `error` separates "still on its way" from "this needs somebody":
+             * a pending stamp alone is work in flight, a pending stamp with a
+             * reason is work that stopped.
+             */
+            'unsent' => $unsent === null ? null : [
+                'since' => $unsent->push_pending_at?->toIso8601String(),
+                'error' => $unsent->push_error,
+            ],
 
             'date' => $order->ordered_on?->toDateString(),
             'status' => $order->status,
@@ -686,15 +723,30 @@ class OrdersEndpoint
                 }
 
                 if (! empty($changes)) {
-                    $order->update($changes);
-
                     /*
-                     * Collected rather than sent, so all of them travel as one
-                     * batch below and the caller can be told how far along it
-                     * is. Sending here would make each push an unrelated job
-                     * that nothing can count.
+                     * The change and the record that it is owed to the shop are
+                     * written together, or neither is.
+                     *
+                     * ── Why this order needs a transaction of its own ────────
+                     *
+                     * Because between updating the order and noting that the
+                     * shop has not been told, a failure leaves exactly the state
+                     * this application has twice shipped: an order that has
+                     * moved here, with nothing anywhere saying the shop still
+                     * disagrees. One transaction per order rather than one for
+                     * the batch, so a single bad order fails alone instead of
+                     * abandoning the two hundred good ones beside it.
+                     *
+                     * Collected rather than sent: they travel as one batch
+                     * below, which is what lets the work be counted.
                      */
-                    foreach ($pushes->jobsFor($order->fresh()) as $job) {
+                    $jobs = DB::transaction(function () use ($order, $changes, $pushes): array {
+                        $order->update($changes);
+
+                        return $pushes->jobsFor($order->fresh());
+                    });
+
+                    foreach ($jobs as $job) {
                         $queued[] = $job;
                     }
 
