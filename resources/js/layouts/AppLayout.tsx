@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigation } from 'react-router';
 
 import { AccountNotice } from '@/components/shell/AccountNotice';
+import { PushProgress } from '@/components/modules/PushProgress';
 import { AppFooter } from '@/components/shell/AppFooter';
 import { PovaPanel } from '@/components/pova/PovaPanel';
 import { usePovaLayout } from '@/hooks/usePovaLayout';
@@ -316,6 +317,17 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
                         <AppFooter />
                     </main>
                 )}
+
+                {/*
+                  Background work that outlives the screen that started it.
+
+                  Mounted at the layout so a bulk change still reports itself
+                  after a reload or a move to another page — the work carries on
+                  regardless, and a person who has just changed two hundred
+                  orders should not have to guess whether it reached the shop.
+                  Renders nothing at all when there is nothing running.
+                */}
+                <PushProgress />
 
                 {/* Single PovaPanel instance - always mounted to preserve state across layout changes */}
                 {/* For sidebar/full layouts, it renders here in the flex container */}

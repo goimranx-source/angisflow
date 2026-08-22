@@ -18,6 +18,8 @@ use App\Domain\Storefront\StoreCode;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -590,6 +592,9 @@ class OrdersEndpoint
         $failed = 0;
         $errors = [];
 
+        /** @var list<\App\Domain\Integrations\Jobs\PushIntegrationRecord> $queued */
+        $queued = [];
+
         foreach ($orders as $order) {
             try {
                 $changes = [];
@@ -682,9 +687,18 @@ class OrdersEndpoint
 
                 if (! empty($changes)) {
                     $order->update($changes);
-                    $pushes->order($order->fresh());
-                    $updated++;
 
+                    /*
+                     * Collected rather than sent, so all of them travel as one
+                     * batch below and the caller can be told how far along it
+                     * is. Sending here would make each push an unrelated job
+                     * that nothing can count.
+                     */
+                    foreach ($pushes->jobsFor($order->fresh()) as $job) {
+                        $queued[] = $job;
+                    }
+
+                    $updated++;
                 }
             } catch (\Throwable $e) {
                 $failed++;
@@ -697,14 +711,188 @@ class OrdersEndpoint
             $message .= ", {$failed} failed";
         }
 
+        /*
+         * The local change is done; reaching the shops is not, and nobody
+         * should be made to wait for it.
+         *
+         * ── Why a batch and not a queue of loose jobs ────────────────────────
+         *
+         * Both get the work off the request. Only a batch can answer "how far
+         * along is it" — and without that answer the only honest thing a screen
+         * can do is either lie that the work is finished or hold somebody there
+         * watching a spinner. A batch id turns a wait into a progress line
+         * somebody can ignore while they carry on.
+         *
+         * With no worker this falls back to the old behaviour, which is slow
+         * but real, rather than queueing into a void. See PushDispatcher.
+         */
+        $batchId = null;
+
+        if ($queued !== []) {
+            if ($pushes->hasWorker()) {
+                $batchId = Bus::batch($queued)
+                    ->name("Sending {$updated} order".($updated === 1 ? '' : 's').' to connected shops')
+                    // One shop refusing one order must not abandon the rest.
+                    ->allowFailures()
+                    ->dispatch()
+                    ->id;
+
+                /*
+                 * Remembered against the business, not left to the browser.
+                 *
+                 * ── Why the server has to hold this ──────────────────────────
+                 *
+                 * Because the tab that started the work is not the only place
+                 * it matters, and is the least reliable of them. A reload, a
+                 * move to another screen, or a second tab all lose a batch id
+                 * kept in component state — and the work carries on regardless,
+                 * so the person is left with no way of knowing whether their
+                 * two hundred orders ever reached the shop.
+                 *
+                 * Held here, any page can ask what is still running, and the
+                 * answer is the same on every device the account is open on.
+                 *
+                 * Capped and short-lived because it is a notice, not a record:
+                 * the batch table is the record.
+                 */
+                self::rememberBatch((int) $business->id, $batchId);
+            } else {
+                foreach ($queued as $job) {
+                    dispatch($job)->afterResponse();
+                }
+            }
+        }
+
         return response()->json([
             'message' => $message,
             'data' => [
                 'updated' => $updated,
                 'failed' => $failed,
                 'errors' => $errors,
+
+                // What the screen needs to follow the shop-side work.
+                'batch_id' => $batchId,
+                'pushes' => count($queued),
             ],
         ], $failed > 0 && $updated === 0 ? 422 : 200);
+    }
+
+    /** Cache key holding the recent push batches for one business. */
+    private static function batchKey(int $businessId): string
+    {
+        return "orders.push-batches.{$businessId}";
+    }
+
+    private static function rememberBatch(int $businessId, string $batchId): void
+    {
+        $key = self::batchKey($businessId);
+
+        $ids = Cache::get($key, []);
+        $ids[] = $batchId;
+
+        // The last handful only: anything older has either finished or is no
+        // longer something a screen should be reporting.
+        Cache::put($key, array_slice(array_unique($ids), -10), now()->addHours(6));
+    }
+
+    /**
+     * What bulk work is still reaching the shops, for whoever is looking.
+     *
+     * ── Why this is asked without a batch id ─────────────────────────────────
+     *
+     * So that any page, in any tab, after any reload, can find out. Progress
+     * tied to an id the browser has to keep is progress that disappears the
+     * moment somebody refreshes — which is precisely when they most want to
+     * know the work survived. The server knows what is running; the screen
+     * only has to ask.
+     *
+     * Finished batches are dropped from the list as they are found, so this
+     * settles back to a single cheap read once the work is done.
+     */
+    public function activePushes(): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $key = self::batchKey((int) $business->id);
+        $ids = Cache::get($key, []);
+
+        $running = [];
+        $keep = [];
+
+        foreach ($ids as $id) {
+            $batch = Bus::findBatch($id);
+
+            // Missing means pruned, which means finished.
+            if ($batch === null || $batch->finished()) {
+                continue;
+            }
+
+            $keep[] = $id;
+            $running[] = $batch;
+        }
+
+        if ($keep !== $ids) {
+            Cache::put($key, $keep, now()->addHours(6));
+        }
+
+        if ($running === []) {
+            return response()->json(['data' => ['active' => false]]);
+        }
+
+        $total = array_sum(array_map(fn ($b): int => $b->totalJobs, $running));
+        $pending = array_sum(array_map(fn ($b): int => $b->pendingJobs, $running));
+        $failed = array_sum(array_map(fn ($b): int => $b->failedJobs, $running));
+
+        return response()->json([
+            'data' => [
+                'active' => true,
+                'batches' => count($running),
+                'total' => $total,
+                'done' => $total - $pending,
+                'failed' => $failed,
+                'progress' => $total > 0 ? (int) round((($total - $pending) / $total) * 100) : 0,
+            ],
+        ]);
+    }
+
+    /**
+     * How far along a bulk change's shop-side work is.
+     *
+     * ── Why this is polled rather than pushed ────────────────────────────────
+     *
+     * Because the alternative is a websocket for a progress line, and this
+     * answer is cheap: it is one read of the batch row, and the screen stops
+     * asking the moment it finishes. A connection held open for the length of
+     * every bulk edit costs more than the question does.
+     *
+     * A batch that cannot be found is reported as finished rather than as an
+     * error. Laravel prunes completed batches, so "gone" and "done" are the
+     * same thing from here, and a screen that treated it as a failure would
+     * show one for every bulk change somebody left open long enough.
+     */
+    public function bulkProgress(string $batch): JsonResponse
+    {
+        $found = Bus::findBatch($batch);
+
+        if ($found === null) {
+            return response()->json([
+                'data' => ['finished' => true, 'total' => 0, 'done' => 0, 'failed' => 0, 'progress' => 100],
+            ]);
+        }
+
+        return response()->json([
+            'data' => [
+                'finished' => $found->finished(),
+                'cancelled' => $found->cancelled(),
+                'total' => $found->totalJobs,
+                // pendingJobs counts down, so what is done is the difference.
+                'done' => $found->totalJobs - $found->pendingJobs,
+                'failed' => $found->failedJobs,
+                'progress' => $found->progress(),
+            ],
+        ]);
     }
 
     /**

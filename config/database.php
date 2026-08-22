@@ -38,9 +38,25 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            'busy_timeout' => null,
-            'journal_mode' => null,
-            'synchronous' => null,
+            /*
+             * Write-ahead logging, so a worker and the web process can both
+             * write.
+             *
+             * SQLite's default journal takes a lock over the whole database for
+             * every write. That is invisible while one process is using it and
+             * immediate once a queue worker exists: a bulk update writing
+             * orders on one side and a push job recording its result on the
+             * other collide, and one of them dies with "database is locked" —
+             * which is a push that silently never reaches the shop.
+             *
+             * WAL lets readers carry on during a write and keeps writers to one
+             * at a time rather than one at all. The busy timeout is the second
+             * half of it: a writer that arrives mid-write waits its turn
+             * instead of failing on the spot.
+             */
+            'busy_timeout' => 10000,
+            'journal_mode' => 'WAL',
+            'synchronous' => 'NORMAL',
             'transaction_mode' => 'DEFERRED',
         ],
 

@@ -18,6 +18,7 @@ use App\Domain\Integrations\Support\StatusVocabulary;
 use App\Domain\Sales\Models\Order;
 use App\Domain\Tenancy\Models\Account;
 use App\Domain\Tenancy\TenantContext;
+use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,7 +28,15 @@ use Illuminate\Support\Facades\Log;
 
 final class PushIntegrationRecord implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    /*
+     * Batchable so a bulk change can send its pushes as one tracked group.
+     *
+     * The trait is what makes $this->batch() available and what lets a batch
+     * count its own progress; without it Bus::batch() refuses the job outright.
+     * It changes nothing about how a single push behaves when dispatched on its
+     * own — batch() is simply null there.
+     */
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
 

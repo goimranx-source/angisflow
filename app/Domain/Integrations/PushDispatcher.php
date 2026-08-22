@@ -13,7 +13,50 @@ final class PushDispatcher
 {
     public function __construct(private readonly QueueHeartbeat $workers) {}
 
+    /**
+     * The pushes this order needs, without sending any of them.
+     *
+     * ── Why a caller would want them un-sent ─────────────────────────────────
+     *
+     * So that a bulk change can put them all in one batch. Sent one at a time
+     * they are unrelated jobs: nothing can say how many there were, how many
+     * are done, or whether the whole thing finished — which is exactly what
+     * somebody who just changed two hundred orders wants to know, and the
+     * reason they otherwise sit and watch a spinner instead of getting on with
+     * their work.
+     *
+     * @return list<PushIntegrationRecord>
+     */
+    public function jobsFor(Order $order): array
+    {
+        $jobs = [];
+
+        foreach ($this->integrationsFor($order) as $integration) {
+            $jobs[] = new PushIntegrationRecord($integration->id, IntegrationLink::ORDER, (int) $order->id);
+        }
+
+        return $jobs;
+    }
+
+    /** Whether a worker is available, so a caller can choose how to send. */
+    public function hasWorker(): bool
+    {
+        return $this->workers->alive();
+    }
+
     public function order(Order $order): void
+    {
+        foreach ($this->jobsFor($order) as $job) {
+            $this->send($job);
+        }
+    }
+
+    /**
+     * The shops this order should be sent to.
+     *
+     * @return iterable<Integration>
+     */
+    private function integrationsFor(Order $order): iterable
     {
         $integrations = Integration::query()
             ->where('business_id', $order->business_id)
@@ -34,7 +77,7 @@ final class PushDispatcher
                 continue;
             }
 
-            $this->send(new PushIntegrationRecord($integration->id, IntegrationLink::ORDER, (int) $order->id));
+            yield $integration;
         }
     }
 

@@ -442,6 +442,14 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
         ->middleware('can:sales.edit')->name('orders.bulk-update');
     Route::post('orders/bulk-dispatch', [OrdersEndpoint::class, 'bulkDispatch'])
         ->middleware('can:sales.edit')->name('orders.bulk-dispatch');
+    // Read-only progress for a bulk change's shop-side work, so the screen can
+    // report it without holding the request that started it.
+    // What bulk work is still running for this business - asked by any page,
+    // so a reload or a move to another screen does not lose sight of it.
+    Route::get('orders/pushes/active', [OrdersEndpoint::class, 'activePushes'])
+        ->middleware('can:sales.view')->name('orders.pushes.active');
+    Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])
+        ->middleware('can:sales.view')->name('orders.bulk-progress');
     Route::post('orders/{orderId}/dispatch', [OrdersEndpoint::class, 'dispatch'])
         ->middleware('can:sales.edit')->name('orders.dispatch');
     Route::post('orders/{orderId}/cancel-dispatch', [OrdersEndpoint::class, 'cancelDispatch'])
