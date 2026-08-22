@@ -2159,125 +2159,215 @@ export default function Orders() {
                                     </div>
                                 )}
 
-                                <DrawerSection title="Customer">
-                                    <DrawerField
-                                        label="Name"
-                                        value={selectedOrder.customer?.name ?? 'Walk-in'}
-                                        icon="user"
-                                    />
-                                    <DrawerField
-                                        label="Email"
-                                        value={selectedOrder.customer?.email ?? '—'}
-                                        icon="envelope"
-                                    />
-                                </DrawerSection>
+                                {/*
+                                  Who and where, side by side.
 
-                                {selectedOrder.shipping_address && (
-                                    <DrawerSection title="Shipping Address">
-                                        <DrawerField
-                                            label="Address"
-                                            value={(() => {
-                                                /*
-                                                 * Assembled from the parts that
-                                                 * are actually there.
-                                                 *
-                                                 * As a fixed template this
-                                                 * printed punctuation for data
-                                                 * that does not exist: an order
-                                                 * with no city, state or
-                                                 * postcode still got a line
-                                                 * containing a lone comma, and
-                                                 * an empty one for the country
-                                                 * under it.
-                                                 */
-                                                const at = selectedOrder.shipping_address!;
+                                  Four facts that were four full-width rows with
+                                  a decorative icon apiece, each costing as much
+                                  vertical space as the total. Paired, they read
+                                  as what they are — the two ends of one
+                                  delivery — and the money below them gets to be
+                                  the thing you scroll to.
+                                */}
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <section>
+                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                            Customer
+                                        </h4>
 
-                                                const locality = [
-                                                    [at.city, at.state].filter(Boolean).join(', '),
-                                                    at.postal_code,
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(' ');
-
-                                                const lines = [at.line1, at.line2, locality, at.country]
-                                                    .map((part) => (part ?? '').trim())
-                                                    .filter((part) => part !== '');
-
-                                                if (lines.length === 0) {
-                                                    return (
-                                                        <span className="text-sm text-[var(--color-text-muted)]">
-                                                            No address on this order
-                                                        </span>
-                                                    );
-                                                }
-
-                                                return (
-                                                    <div className="text-sm">
-                                                        {lines.map((line, index) => (
-                                                            <div key={index}>{line}</div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()}
-                                            icon="map-pin"
-                                        />
-                                    </DrawerSection>
-                                )}
-
-                                <DrawerSection title="Order Summary">
-                                    <DrawerField
-                                        label="Items"
-                                        value={selectedOrder.items_count}
-                                        icon="shopping-bag"
-                                    />
-                                    <DrawerField
-                                        label="Subtotal"
-                                        value={formatMoney(selectedOrder.subtotal)}
-                                        icon="receipt"
-                                    />
-                                    {selectedOrder.discount > 0 && (
-                                        <DrawerField
-                                            label="Discount"
-                                            value={formatMoney(-selectedOrder.discount)}
-                                            icon="tag"
-                                        />
-                                    )}
-                                    <DrawerField
-                                        label="Tax"
-                                        value={formatMoney(selectedOrder.tax)}
-                                        icon="scales"
-                                    />
-                                    <DrawerField
-                                        label="Shipping"
-                                        value={formatMoney(selectedOrder.shipping)}
-                                        icon="truck"
-                                    />
-                                    <DrawerField
-                                        label="Total"
-                                        value={
-                                            <span className="font-semibold text-lg">
-                                                {selectedOrder.source_symbol}
-                                                {selectedOrder.total_native.toLocaleString(undefined, {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })}
-                                                {selectedOrder.is_converted && (
-                                                    <span className="ml-2 text-sm font-normal text-[var(--color-text-muted)]">
-                                                        ≈ {formatMoney(selectedOrder.total)}
-                                                    </span>
+                                        {selectedOrder.customer ? (
+                                            <>
+                                                <p className="text-sm font-medium text-[var(--color-text-main)]">
+                                                    {selectedOrder.customer.name}
+                                                </p>
+                                                {selectedOrder.customer.email ? (
+                                                    <a
+                                                        href={`mailto:${selectedOrder.customer.email}`}
+                                                        className="mt-0.5 block truncate text-sm text-[var(--color-brand)] hover:underline"
+                                                        onClick={(event) => event.stopPropagation()}
+                                                    >
+                                                        {selectedOrder.customer.email}
+                                                    </a>
+                                                ) : (
+                                                    <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
+                                                        No email on file
+                                                    </p>
                                                 )}
-                                            </span>
-                                        }
-                                        icon="currency-dollar"
-                                    />
-                                </DrawerSection>
+                                            </>
+                                        ) : (
+                                            <p className="text-sm text-[var(--color-text-muted)]">
+                                                Walk-in — sold at the counter
+                                            </p>
+                                        )}
+                                    </section>
+
+                                    <section>
+                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                            Delivery
+                                        </h4>
+
+                                        {(() => {
+                                            /*
+                                             * Built from the parts that exist.
+                                             * As a fixed template this printed
+                                             * punctuation for data that was not
+                                             * there — a line holding one comma
+                                             * when the city and postcode were
+                                             * missing.
+                                             */
+                                            const at = selectedOrder.shipping_address;
+
+                                            if (!at) {
+                                                return (
+                                                    <p className="text-sm text-[var(--color-text-muted)]">
+                                                        No delivery address
+                                                    </p>
+                                                );
+                                            }
+
+                                            const locality = [
+                                                [at.city, at.state].filter(Boolean).join(', '),
+                                                at.postal_code,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' ');
+
+                                            const lines = [at.line1, at.line2, locality, at.country]
+                                                .map((part) => (part ?? '').trim())
+                                                .filter((part) => part !== '');
+
+                                            if (lines.length === 0) {
+                                                return (
+                                                    <p className="text-sm text-[var(--color-text-muted)]">
+                                                        No delivery address
+                                                    </p>
+                                                );
+                                            }
+
+                                            return (
+                                                <address className="text-sm not-italic leading-relaxed text-[var(--color-text-body)]">
+                                                    {lines.map((line, index) => (
+                                                        <span key={index} className="block">
+                                                            {line}
+                                                        </span>
+                                                    ))}
+                                                </address>
+                                            );
+                                        })()}
+                                    </section>
+                                </div>
+
+                                {/*
+                                  The money, in the money it was charged in.
+
+                                  ── Why one currency and not two ──────────────
+
+                                  Because this block was mixing them: subtotal,
+                                  tax and shipping converted into the books
+                                  currency, and the total in the shop's own. Four
+                                  correct figures that visibly did not add up,
+                                  which is the one thing a summary must never do.
+                                  Everything here is now the shop's currency, and
+                                  the converted figure sits once at the bottom
+                                  where it is a conversion rather than a
+                                  contradiction.
+                                */}
+                                {(() => {
+                                    const n = selectedOrder.native;
+
+                                    const money = (value: number): string =>
+                                        `${n.symbol}${value.toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })}`;
+
+                                    const rows: Array<{ label: string; value: string; muted?: boolean }> = [
+                                        { label: 'Subtotal', value: money(n.subtotal) },
+                                        ...(n.discount > 0
+                                            ? [{ label: 'Discount', value: `−${money(n.discount)}` }]
+                                            : []),
+                                        ...(n.shipping > 0 ? [{ label: 'Shipping', value: money(n.shipping) }] : []),
+                                        ...(n.tax > 0 ? [{ label: 'Tax', value: money(n.tax) }] : []),
+                                    ];
+
+                                    // Rounded before comparing: a penny of float
+                                    // drift must not invent an outstanding balance.
+                                    const outstanding = Math.round((n.total - n.paid) * 100) / 100;
+
+                                    return (
+                                        <section className="rounded-[var(--shell-radius)] border border-[var(--shell-border)]">
+                                            <h4 className="border-b border-[var(--shell-border)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                                Payment
+                                            </h4>
+
+                                            <dl className="px-4 py-3 text-sm">
+                                                {rows.map((row) => (
+                                                    <div key={row.label} className="flex items-baseline justify-between py-1">
+                                                        <dt className="text-[var(--color-text-muted)]">{row.label}</dt>
+                                                        <dd className="tabular-nums text-[var(--color-text-body)]">
+                                                            {row.value}
+                                                        </dd>
+                                                    </div>
+                                                ))}
+
+                                                <div className="mt-2 flex items-baseline justify-between border-t border-[var(--shell-border)] pt-2.5">
+                                                    <dt className="font-semibold text-[var(--color-text-main)]">Total</dt>
+                                                    <dd className="text-right">
+                                                        <span className="text-base font-bold tabular-nums text-[var(--color-text-main)]">
+                                                            {money(n.total)}
+                                                        </span>
+                                                        {selectedOrder.is_converted && (
+                                                            <span
+                                                                className="mt-0.5 block text-xs font-normal tabular-nums text-[var(--color-text-muted)]"
+                                                                title={`In the books, converted to ${selectedOrder.currency}`}
+                                                            >
+                                                                ≈ {formatMoney(selectedOrder.total)}
+                                                            </span>
+                                                        )}
+                                                    </dd>
+                                                </div>
+
+                                                {/*
+                                                  Shown only when the order is
+                                                  genuinely unsettled.
+
+                                                  payment_status is the
+                                                  authority, not the arithmetic:
+                                                  paid_minor is often zero on an
+                                                  order a shop reports as paid,
+                                                  because the amount was never
+                                                  recorded against it. Trusting
+                                                  the subtraction alone puts
+                                                  "Balance due" on orders that
+                                                  are fully paid, which is the
+                                                  kind of wrong that gets a
+                                                  customer chased for money they
+                                                  already sent.
+                                                */}
+                                                {selectedOrder.payment_status === 'unpaid' && outstanding > 0 && (
+                                                    <div className="mt-2 flex items-baseline justify-between rounded-[var(--shell-radius-sm)] bg-amber-50 px-2 py-1.5">
+                                                        <dt className="text-xs font-medium text-amber-900">
+                                                            Balance due
+                                                        </dt>
+                                                        <dd className="text-sm font-semibold tabular-nums text-amber-900">
+                                                            {money(outstanding)}
+                                                        </dd>
+                                                    </div>
+                                                )}
+                                            </dl>
+                                        </section>
+                                    );
+                                })()}
 
                                 {selectedOrder.notes && (
-                                    <DrawerSection title="Notes">
-                                        <p className="text-sm text-[var(--color-text-body)]">
+                                    <section>
+                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                            Notes
+                                        </h4>
+                                        <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-text-body)]">
                                             {selectedOrder.notes}
                                         </p>
-                                    </DrawerSection>
+                                    </section>
                                 )}
                             </div>
                         ),
@@ -2285,12 +2375,133 @@ export default function Orders() {
                     {
                         key: 'items',
                         label: 'Items',
-                        content: <p className="text-sm text-[var(--color-text-muted)]">Order items coming soon</p>,
+                        /*
+                          What was actually bought.
+
+                          ── Why this was a placeholder and should not have been ──
+
+                          The list already carries every line — the endpoint
+                          loads them with the order precisely so this tab costs
+                          no second request — and the tab said "coming soon"
+                          over data that was sitting in memory. A tab that
+                          promises the one thing an order is made of, and then
+                          does not show it, is worse than not offering the tab.
+
+                          Priced in the shop's own currency, like everything
+                          else about this order, so the lines and the total are
+                          the same arithmetic.
+                        */
+                        content: selectedOrder && (
+                            selectedOrder.items.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
+                                    No line items were imported for this order.
+                                </p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-[var(--shell-border)] text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                                                <th className="px-3 py-2 text-left font-semibold">Item</th>
+                                                <th className="w-14 px-3 py-2 text-right font-semibold">Qty</th>
+                                                <th className="w-28 px-3 py-2 text-right font-semibold">Unit</th>
+                                                <th className="w-28 px-3 py-2 text-right font-semibold">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {selectedOrder.items.map((item, index) => (
+                                                <tr
+                                                    key={`${item.sku ?? item.description}-${index}`}
+                                                    className="border-b border-[var(--shell-border)] last:border-0"
+                                                >
+                                                    <td className="px-3 py-2.5">
+                                                        <p className="font-medium text-[var(--color-text-main)]">
+                                                            {item.description}
+                                                        </p>
+                                                        {item.sku && (
+                                                            <p className="mt-0.5 font-mono text-[11px] text-[var(--color-text-muted)]">
+                                                                {item.sku}
+                                                            </p>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-right tabular-nums text-[var(--color-text-muted)]">
+                                                        {item.quantity}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-right tabular-nums text-[var(--color-text-body)]">
+                                                        {selectedOrder.native.symbol}
+                                                        {item.unit_price.toLocaleString(undefined, {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-right font-medium tabular-nums text-[var(--color-text-main)]">
+                                                        {selectedOrder.native.symbol}
+                                                        {item.total.toLocaleString(undefined, {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )
+                        ),
                     },
                     {
                         key: 'history',
                         label: 'History',
-                        content: <p className="text-sm text-[var(--color-text-muted)]">Order history coming soon</p>,
+                        /*
+                          What is genuinely known about this order's life, and
+                          nothing invented.
+
+                          There is no event log yet, so this does not pretend
+                          otherwise — but the four timestamps the record does
+                          carry are worth showing, and "coming soon" over an
+                          empty panel taught somebody to stop opening the tab.
+                          When there is a real trail it replaces this.
+                        */
+                        content: selectedOrder && (
+                            <dl className="text-sm">
+                                {[
+                                    { label: 'Placed', value: formatDate(selectedOrder.date) },
+                                    { label: 'Added here', value: formatDate(selectedOrder.created_at) },
+                                    {
+                                        label: 'Channel',
+                                        value: channelLabels[selectedOrder.channel] ?? selectedOrder.channel,
+                                    },
+                                    {
+                                        label: 'Shop',
+                                        value: selectedOrder.store?.name ?? 'Walk-in / counter',
+                                    },
+                                    ...(selectedOrder.dispatch
+                                        ? [
+                                              {
+                                                  label: 'Courier',
+                                                  value:
+                                                      selectedOrder.dispatch.courier.label ?? 'Awaiting a courier',
+                                              },
+                                              {
+                                                  label: 'Consignment',
+                                                  value:
+                                                      selectedOrder.dispatch.tracking_number ??
+                                                      selectedOrder.dispatch.shipment_number,
+                                              },
+                                          ]
+                                        : []),
+                                ].map((row) => (
+                                    <div
+                                        key={row.label}
+                                        className="flex items-baseline justify-between border-b border-[var(--shell-border)] py-2.5 last:border-0"
+                                    >
+                                        <dt className="text-[var(--color-text-muted)]">{row.label}</dt>
+                                        <dd className="text-right font-medium text-[var(--color-text-main)]">
+                                            {row.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        ),
                     },
                 ]}
                 activeTab={drawerTab}
