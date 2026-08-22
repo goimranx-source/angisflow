@@ -525,16 +525,36 @@ export default function Orders() {
         mutationFn: (params: { order_ids: string[]; action: string; status?: string; payment_status?: string; fulfilment_status?: string }) =>
             api.post('/orders/bulk-update', params),
         onSuccess: (result) => {
-            const data = result as {
-                message: string;
-                data: { updated: number; failed: number; batch_id?: string | null; pushes?: number };
-            };
-            if (data.data.failed > 0 && data.data.updated === 0) {
-                toast.error(data.message);
-            } else if (data.data.failed > 0) {
-                toast.warning(data.message);
+            /*
+             * Read defensively, because a 2xx is not a promise about the body.
+             *
+             * ── Why this is not paranoia ─────────────────────────────────────
+             *
+             * A response can arrive successful and empty: a proxy truncating
+             * it, or — as happened here — the server dying in its after-response
+             * work before the body was flushed. Reading result.data.failed
+             * straight off then throws "Cannot read properties of null", and
+             * what the person sees is a crash rather than the change they made,
+             * which did in fact happen.
+             *
+             * The orders are re-fetched below regardless, so the screen tells
+             * the truth even when the reply did not.
+             */
+            const data = (result ?? null) as {
+                message?: string;
+                data?: { updated?: number; failed?: number; batch_id?: string | null; pushes?: number };
+            } | null;
+
+            const updated = data?.data?.updated ?? 0;
+            const failed = data?.data?.failed ?? 0;
+            const message = data?.message ?? 'Orders updated.';
+
+            if (failed > 0 && updated === 0) {
+                toast.error(message);
+            } else if (failed > 0) {
+                toast.warning(message);
             } else {
-                toast.success(data.message);
+                toast.success(message);
             }
 
             /*
@@ -553,7 +573,7 @@ export default function Orders() {
              * poll. That is what makes the progress survive a reload: nothing
              * about it is held in this page.
              */
-            if (data.data.batch_id) {
+            if (data?.data?.batch_id) {
                 void queryClient.invalidateQueries({ queryKey: ['pushes', 'active'] });
             }
 
@@ -613,13 +633,19 @@ export default function Orders() {
         mutationFn: (params: { order_ids: string[]; courier_id: string }) =>
             api.post('/orders/bulk-dispatch', params),
         onSuccess: (result) => {
-            const data = result as { message: string; data: { dispatched: number; failed: number } };
-            if (data.data.failed > 0 && data.data.dispatched === 0) {
-                toast.error(data.message);
-            } else if (data.data.failed > 0) {
-                toast.warning(data.message);
+            // Same guard as the bulk update above: a 2xx is not a promise
+            // about the body, and a crash here would hide work that happened.
+            const data = (result ?? null) as { message?: string; data?: { dispatched?: number; failed?: number } } | null;
+            const dispatched = data?.data?.dispatched ?? 0;
+            const failed = data?.data?.failed ?? 0;
+            const message = data?.message ?? 'Orders dispatched.';
+
+            if (failed > 0 && dispatched === 0) {
+                toast.error(message);
+            } else if (failed > 0) {
+                toast.warning(message);
             } else {
-                toast.success(data.message);
+                toast.success(message);
             }
             setSelectedOrders([]);
             setBulkAction('');

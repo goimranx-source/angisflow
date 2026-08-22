@@ -233,7 +233,15 @@ final readonly class FieldMapSet
                     continue;
                 }
 
-                $this->write($payload, $map->source, Transform::reverse($custom[$key], $map->transform, $context));
+                $customValue = Transform::reverse($custom[$key], $map->transform, $context);
+
+                // Same rule as below: an unknown is omitted, never sent as an
+                // instruction to erase what the shop holds.
+                if ($customValue === null) {
+                    continue;
+                }
+
+                $this->write($payload, $map->source, $customValue);
 
                 continue;
             }
@@ -242,7 +250,29 @@ final readonly class FieldMapSet
                 continue;
             }
 
-            $this->write($payload, $map->source, Transform::reverse($attributes[$map->target], $map->transform, $context));
+            $value = Transform::reverse($attributes[$map->target], $map->transform, $context);
+
+            /*
+             * What we do not know is not sent.
+             *
+             * ── Why null is omitted rather than written ──────────────────────
+             *
+             * Because null here means "we hold nothing for this", and a shop
+             * reads a null as "set this to nothing" — so an order imported
+             * without a postcode would push back an instruction to erase the
+             * postcode the shop itself has.
+             *
+             * Several platforms refuse it outright rather than obeying, and
+             * that refusal is not confined to the field: WooCommerce answers a
+             * null inside the shipping object with "Invalid parameter(s):
+             * shipping" and rejects the entire request. One unknown city meant
+             * the status change travelling with it never landed either.
+             */
+            if ($value === null) {
+                continue;
+            }
+
+            $this->write($payload, $map->source, $value);
         }
 
         return $payload;
