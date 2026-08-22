@@ -47,7 +47,14 @@ export type PrintableOrder = {
      * Shop first, then the business - a document should not have to work the
      * fallback out, and a counter sale has no shop to ask.
      */
-    brand?: { name?: string | null; logo_url?: string | null } | null;
+    brand?: {
+        name?: string | null;
+        tagline?: string | null;
+        logo_url?: string | null;
+        address?: string | null;
+        phone?: string | null;
+        email?: string | null;
+    } | null;
     shipping_address?: {
         line1?: string | null;
         line2?: string | null;
@@ -64,6 +71,7 @@ export type PrintableOrder = {
         tax: number;
         shipping: number;
         total: number;
+        paid?: number;
     };
     items: Array<{
         description: string;
@@ -128,134 +136,148 @@ function invoiceBody(order: PrintableOrder, labels: Labels): string {
             ? `${order.store_code}-${order.order_number}`
             : order.order_number;
 
-    /*
-     * The mark, or the name set as one.
-     *
-     * A logo that fails to load must not leave the masthead empty, so the name
-     * is the alt text rather than a decorative blank — a broken image with no
-     * alt is a document that looks like it came from nobody.
-     */
     const brandName = order.brand?.name ?? order.store?.name ?? 'Invoice';
     const logo = order.brand?.logo_url;
 
-    const masthead = logo
-        ? `<img class="brand-logo" src="${escape(logo)}" alt="${escape(brandName)}">`
-        : `<div class="brand-name">${escape(brandName)}</div>`;
+    /*
+     * The seller block, built from what exists.
+     *
+     * Each line is dropped rather than printed empty: an invoice with a blank
+     * space where the phone number belongs looks broken, one with no phone line
+     * simply has no phone. Nothing here is required, because a business that
+     * has not filled its address in should still be able to invoice.
+     */
+    const sellerLines = [
+        order.brand?.tagline ? `A brand of ${order.brand.tagline}` : null,
+        order.brand?.address,
+        order.brand?.phone ? `Phone: ${order.brand.phone}` : null,
+        order.brand?.email,
+    ].filter((line): line is string => Boolean(line && String(line).trim()));
 
     const rows = order.items.length
         ? order.items
               .map(
                   (item) => `
                     <tr>
-                        <td>
-                            <div class="item-name">${escape(item.description)}</div>
-                            ${item.sku ? `<div class="item-sku">${escape(item.sku)}</div>` : ''}
-                        </td>
+                        <td>${escape(item.description)}${
+                            item.sku ? `<span class="sku">${escape(item.sku)}</span>` : ''
+                        }</td>
                         <td class="num">${item.quantity.toLocaleString()}</td>
                         <td class="num">${amount(order, item.unit_price)}</td>
-                        <td class="num">${amount(order, item.total)}</td>
+                        <td class="num strong">${amount(order, item.total)}</td>
                     </tr>`,
               )
               .join('')
-        : `<tr><td colspan="4" class="muted">No items were recorded against this order.</td></tr>`;
+        : `<tr><td colspan="4">No items were recorded against this order.</td></tr>`;
 
-    const totalRow = (label: string, value: string, cls = '') => `
-        <tr class="${cls}">
-            <td class="label">${escape(label)}</td>
-            <td class="num">${value}</td>
-        </tr>`;
+    const line = (label: string, value: string) =>
+        `<tr><td class="lbl">${escape(label)}</td><td class="val">${value}</td></tr>`;
+
+    const outstanding = Math.max(0, order.native.total - (order.native.paid ?? 0));
 
     return `
         <article class="doc">
-            <header class="doc-head">
-                <div>
-                    ${masthead}
-                    ${logo ? `<div class="brand-sub">${escape(brandName)}</div>` : ''}
-                </div>
-                <div class="doc-title">
-                    <div class="doc-type">Invoice</div>
-                    <div class="doc-ref">${escape(reference)}</div>
-                    <div class="doc-date">${escape(formatDate(order.date))}</div>
-                </div>
-            </header>
+            ${paid ? '' : '<div class="watermark">PENDING PAYMENT</div>'}
 
-            <section class="parties">
-                <div class="party">
-                    <h2>Billed to</h2>
-                    <p class="who">${escape(order.customer?.name ?? 'Walk-in customer')}</p>
-                    ${order.customer?.email ? `<p class="muted">${escape(order.customer.email)}</p>` : ''}
-                </div>
+            <div class="sheet">
+                <div class="wordmark">Invoice</div>
+
+                <section class="top">
+                    <div class="seller">
+                        ${logo ? `<img class="seller-logo" src="${escape(logo)}" alt="${escape(brandName)}">` : ''}
+                        <div class="seller-name">${escape(brandName)}</div>
+                        ${sellerLines.map((l) => `<p>${escape(l)}</p>`).join('')}
+                    </div>
+
+                    <table class="meta">
+                        <tr><th>Invoice number</th><td>${escape(reference)}</td></tr>
+                        <tr><th>Order ID</th><td>${escape(order.order_number)}</td></tr>
+                        <tr><th>Invoice date</th><td>${escape(formatDate(order.date))}</td></tr>
+                        <tr><th>Order Total</th><td>${amount(order, order.native.total)}</td></tr>
+                    </table>
+                </section>
+
+                <section class="parties">
+                    <div class="party">
+                        <h2>Bill To</h2>
+                        <p class="who">${escape(order.customer?.name ?? 'Walk-in customer')}</p>
+                        ${ship.map((l) => `<p>${escape(l)}</p>`).join('')}
+                        ${order.customer?.email ? `<p>Email: ${escape(order.customer.email)}</p>` : ''}
+                    </div>
+
+                    <div class="party">
+                        <h2>Ship To</h2>
+                        <p class="who">${escape(order.customer?.name ?? 'Walk-in customer')}</p>
+                        ${
+                            ship.length
+                                ? ship.map((l) => `<p>${escape(l)}</p>`).join('')
+                                : '<p>Collected in person</p>'
+                        }
+                    </div>
+                </section>
+
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th class="num">Quantity</th>
+                            <th class="num">Unit price</th>
+                            <th class="num">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Payment Method</th>
+                            <th class="num">Amount</th>
+                            <th class="num">Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${order.is_cod ? 'COD' : escape(labels.payment[order.payment_status] ?? order.payment_status)}</td>
+                            <td class="num">${amount(order, order.native.paid ?? 0)}</td>
+                            <td class="num">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="totals">
+                    ${line('Subtotal', amount(order, order.native.subtotal))}
+                    ${order.native.discount > 0 ? line('Discount', `−${amount(order, order.native.discount)}`) : ''}
+                    ${order.native.shipping > 0 ? line('Shipping', amount(order, order.native.shipping)) : ''}
+                    ${order.native.tax > 0 ? line('Tax', amount(order, order.native.tax)) : ''}
+
+                    <tr class="grand">
+                        <td class="lbl">Total</td>
+                        <td class="val">${amount(order, order.native.total)} ${escape(order.native.currency)}</td>
+                    </tr>
+
+                    <tr class="spacer"><td colspan="2"></td></tr>
+                    ${line('Amount Paid', amount(order, order.native.paid ?? 0))}
+                    ${outstanding > 0 ? line('Outstanding', amount(order, outstanding)) : ''}
+                </table>
+
+                <section class="note">
+                    <h2>Note to recipient(s)</h2>
+                    <p>${escape(order.notes ?? `Thank you for your business with ${brandName}!`)}</p>
+                </section>
 
                 ${
-                    ship.length
-                        ? `<div class="party">
-                                <h2>Delivered to</h2>
-                                ${ship.map((line) => `<p>${escape(line)}</p>`).join('')}
-                           </div>`
+                    order.brand?.email || order.brand?.phone
+                        ? `<div class="foot">For inquiries: ${[
+                              order.brand?.email,
+                              order.brand?.phone,
+                          ]
+                              .filter(Boolean)
+                              .map((v) => escape(String(v)))
+                              .join(' | ')}</div>`
                         : ''
                 }
-
-                <div class="facts">
-                    <h2>Details</h2>
-                    <dl>
-                        <dt>Status</dt><dd>${escape(labels.status[order.status] ?? order.status)}</dd>
-                        <dt>Payment</dt><dd>${escape(labels.payment[order.payment_status] ?? order.payment_status)}</dd>
-                        ${order.is_cod ? '<dt>Method</dt><dd>Cash on delivery</dd>' : ''}
-                        <dt>Currency</dt><dd>${escape(order.native.currency)}</dd>
-                    </dl>
-                </div>
-            </section>
-
-            <table class="items">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th class="num">Qty</th>
-                        <th class="num">Unit price</th>
-                        <th class="num">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-
-            <section class="summary">
-                <div>
-                    <table class="totals">
-                        ${totalRow('Subtotal', amount(order, order.native.subtotal))}
-                        ${
-                            order.native.discount > 0
-                                ? totalRow('Discount', `−${amount(order, order.native.discount)}`)
-                                : ''
-                        }
-                        ${order.native.shipping > 0 ? totalRow('Shipping', amount(order, order.native.shipping)) : ''}
-                        ${order.native.tax > 0 ? totalRow('Tax', amount(order, order.native.tax)) : ''}
-                        ${totalRow('Total', amount(order, order.native.total), 'grand')}
-                        ${
-                            paid
-                                ? ''
-                                : totalRow('Balance due', amount(order, order.native.total), 'due')
-                        }
-                    </table>
-
-                    <div class="stamp ${paid ? 'stamp-paid' : 'stamp-due'}">
-                        ${paid ? 'Paid in full' : 'Payment due'}
-                    </div>
-                </div>
-            </section>
-
-            ${
-                order.notes
-                    ? `<section class="notes">
-                            <h2>Notes</h2>
-                            <p>${escape(order.notes)}</p>
-                       </section>`
-                    : ''
-            }
-
-            <footer class="doc-foot">
-                <span>${escape(brandName)}</span>
-                <span>${escape(reference)}</span>
-            </footer>
+            </div>
         </article>`;
 }
 
@@ -315,101 +337,91 @@ function receiptBody(order: PrintableOrder, labels: Labels): string {
 }
 
 const INVOICE_CSS = `
-    @page { size: A4; margin: 14mm 16mm 18mm; }
+    @page { size: A4; margin: 14mm 13mm; }
 
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1b1f24;
-           font-size: 10pt; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #3c4043;
+           font-size: 10pt; line-height: 1.55;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
     .doc { page-break-after: always; position: relative; }
     .doc:last-child { page-break-after: auto; }
 
-    /* ── Masthead ─────────────────────────────────────────────────────────── */
-
-    .doc-head { display: flex; justify-content: space-between; align-items: flex-start;
-                gap: 12mm; padding-bottom: 6mm; margin-bottom: 7mm;
-                border-bottom: 1px solid #e3e7ec; }
-
     /*
-     * Constrained by height, not width: logos arrive square, wide and
-     * everything between, and a rule on width alone lets a tall one push the
-     * whole masthead down the page.
+     * Diagonal, behind everything, and only when money is owed.
+     *
+     * A stamp in the corner is read after the total; a watermark is read
+     * before anything at all, which is the right order for the one fact that
+     * changes what somebody does with the page.
      */
-    .brand-logo { max-height: 16mm; max-width: 55mm; display: block; }
-    .brand-name { font-size: 15pt; font-weight: 700; letter-spacing: -.01em; }
-    .brand-sub { font-size: 9pt; color: #6b7280; margin-top: 1mm; }
+    .watermark { position: absolute; top: 42%; left: 50%; z-index: 0;
+                 transform: translate(-50%, -50%) rotate(-38deg);
+                 font-size: 46pt; font-weight: 700; letter-spacing: .06em;
+                 color: #f6b8b8; opacity: .55; white-space: nowrap; pointer-events: none; }
 
-    .doc-title { text-align: right; }
-    .doc-type { font-size: 20pt; font-weight: 700; letter-spacing: .04em;
-                text-transform: uppercase; color: #1b1f24; line-height: 1; }
-    .doc-ref { font-size: 11pt; font-weight: 600; margin-top: 2mm; font-variant-numeric: tabular-nums; }
-    .doc-date { font-size: 9pt; color: #6b7280; margin-top: 1mm; }
+    .sheet { position: relative; z-index: 1; }
 
-    /* ── Parties ──────────────────────────────────────────────────────────── */
+    /* ── Wordmark ─────────────────────────────────────────────────────────── */
 
-    .parties { display: flex; gap: 10mm; margin-bottom: 7mm; }
+    .wordmark { text-align: right; font-size: 26pt; font-weight: 300; letter-spacing: .16em;
+                color: #d2d6da; text-transform: uppercase; line-height: 1; margin-bottom: 9mm; }
+
+    /* ── Seller, and the meta table beside it ─────────────────────────────── */
+
+    .top { display: flex; justify-content: space-between; gap: 10mm; margin-bottom: 9mm; }
+
+    .seller { max-width: 88mm; }
+    .seller-logo { max-height: 15mm; max-width: 52mm; display: block; margin-bottom: 3mm; }
+    .seller-name { font-size: 12.5pt; font-weight: 700; color: #26292d; margin-bottom: 2mm; }
+    .seller p { color: #6f757c; }
+
+    .meta { border-collapse: separate; border-spacing: 0 1.6mm; width: 78mm; }
+    .meta th { background: #e4f1f7; color: #3c4043; font-weight: 600; text-align: left;
+               padding: 2.4mm 3mm; width: 38mm; }
+    .meta td { background: #f5f6f7; padding: 2.4mm 3mm; }
+
+    /* ── Bill to / Ship to ────────────────────────────────────────────────── */
+
+    .parties { display: flex; gap: 10mm; margin-bottom: 8mm; }
     .party { flex: 1; }
-    .party h2, .facts h2 { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .14em;
-                           color: #8a93a0; margin-bottom: 2mm; font-weight: 600; }
-    .party p { line-height: 1.45; }
-    .party .who { font-weight: 600; }
-    .muted { color: #6b7280; }
+    .party h2 { font-size: 10pt; font-weight: 700; color: #26292d; margin-bottom: 2mm; }
+    .party .who { font-weight: 700; color: #26292d; }
+    .party p { color: #6f757c; }
 
-    /* A boxed column of the facts that decide how the invoice is treated. */
-    .facts { flex: 0 0 52mm; background: #f6f8fa; border-radius: 2mm; padding: 4mm; }
-    .facts dl { display: grid; grid-template-columns: auto auto; gap: 1.5mm 4mm; font-size: 9pt; }
-    .facts dt { color: #6b7280; }
-    .facts dd { text-align: right; font-weight: 600; }
+    /* ── Tables ───────────────────────────────────────────────────────────── */
 
-    /* ── Items ────────────────────────────────────────────────────────────── */
+    table.grid { width: 100%; border-collapse: collapse; margin-bottom: 7mm; }
+    table.grid th { background: #e4f1f7; color: #26292d; font-weight: 600; text-align: left;
+                    padding: 3mm; border: 1px solid #dfe3e6; }
+    table.grid td { padding: 3mm; border: 1px solid #e8ebee; color: #3c4043; vertical-align: top; }
+    table.grid tr { page-break-inside: avoid; }
 
-    table { width: 100%; border-collapse: collapse; }
-
-    .items { margin-bottom: 4mm; }
-    .items thead th { text-align: left; font-size: 7.5pt; text-transform: uppercase;
-                      letter-spacing: .1em; color: #8a93a0; font-weight: 600;
-                      padding: 0 2mm 2mm; border-bottom: 1.5px solid #1b1f24; }
-    .items thead th:first-child { padding-left: 0; }
-    .items thead th:last-child { padding-right: 0; }
-    .items td { padding: 2.5mm 2mm; border-bottom: 1px solid #eef1f4; vertical-align: top; }
-    .items td:first-child { padding-left: 0; }
-    .items td:last-child { padding-right: 0; }
-    /* Rows must not be split across a page break mid-item. */
-    .items tr { page-break-inside: avoid; }
-    .item-name { font-weight: 500; }
-    .item-sku { font-size: 8pt; color: #8a93a0; margin-top: .5mm; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-
-    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .strong { font-weight: 700; color: #26292d; }
+    .sku { display: block; font-size: 8pt; color: #9aa1a8; margin-top: .6mm;
+           font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
     /* ── Totals ───────────────────────────────────────────────────────────── */
 
-    .summary { display: flex; justify-content: flex-end; page-break-inside: avoid; }
-    .totals { width: 74mm; }
-    .totals td { padding: 1.5mm 0; }
-    .totals .label { color: #6b7280; }
-    .totals .grand td { border-top: 1.5px solid #1b1f24; padding-top: 3mm; font-size: 13pt; font-weight: 700; }
-    .totals .due td { color: #92400e; font-weight: 700; padding-top: 2mm; }
+    .totals { width: 100%; border-collapse: collapse; page-break-inside: avoid; }
+    .totals td { padding: 2.2mm 3mm; }
+    .totals .lbl { text-align: right; color: #6f757c; width: 100%; }
+    .totals .val { text-align: right; white-space: nowrap; font-weight: 700; color: #26292d;
+                   font-variant-numeric: tabular-nums; padding-right: 0; }
 
-    /*
-     * Stamped rather than merely stated.
-     *
-     * "Paid" in a list of fields is read at the same weight as the postcode.
-     * The one thing somebody picking up an invoice needs to know before
-     * anything else is whether money is still owed.
-     */
-    .stamp { display: inline-block; margin-top: 4mm; padding: 1.5mm 4mm; border-radius: 1mm;
-             font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
-    .stamp-paid { color: #0f6b3f; background: #e7f6ee; border: 1px solid #b7e2c9; }
-    .stamp-due { color: #92400e; background: #fdf3e3; border: 1px solid #f0d9a8; }
+    /* The one row that is a band rather than a line. */
+    .totals .grand td { background: #e4f1f7; font-size: 11.5pt; padding: 3.2mm 3mm; }
+    .totals .grand .lbl { color: #26292d; font-weight: 700; }
 
-    /* ── Foot ─────────────────────────────────────────────────────────────── */
+    .totals .spacer td { padding: 2mm 0 0; }
 
-    .notes { margin-top: 8mm; page-break-inside: avoid; }
-    .notes h2 { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .14em;
-                color: #8a93a0; margin-bottom: 2mm; font-weight: 600; }
-    .notes p { white-space: pre-line; }
+    /* ── Note and foot ────────────────────────────────────────────────────── */
 
-    .doc-foot { margin-top: 10mm; padding-top: 4mm; border-top: 1px solid #e3e7ec;
-                font-size: 8.5pt; color: #8a93a0; display: flex; justify-content: space-between; gap: 8mm; }
+    .note { margin-top: 8mm; page-break-inside: avoid; }
+    .note h2 { font-size: 10pt; font-weight: 700; color: #26292d; margin-bottom: 1.5mm; }
+    .note p { color: #6f757c; white-space: pre-line; }
+
+    .foot { margin-top: 10mm; padding-top: 4mm; border-top: 1px solid #e8ebee;
+            color: #9aa1a8; font-size: 9pt; }
 `;
 
 const RECEIPT_CSS = `

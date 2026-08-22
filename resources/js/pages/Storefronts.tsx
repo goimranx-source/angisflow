@@ -174,6 +174,8 @@ export default function Storefronts() {
     const [newName, setNewName] = useState('');
     const [newDomain, setNewDomain] = useState('');
     const [newCode, setNewCode] = useState('');
+    const [newLogo, setNewLogo] = useState<string | null>(null);
+    const [newLogoUrl, setNewLogoUrl] = useState<string | null>(null);
     const [newType, setNewType] = useState('online');
     const [newStatus, setNewStatus] = useState('active');
     const [storeTab, setStoreTab] = useState<'details' | 'fields' | 'statuses'>('details');
@@ -216,7 +218,7 @@ export default function Storefronts() {
      * the image straight at the storefront would be a second, worse copy of all
      * of that — and one that breaks the day the disk changes.
      */
-    const uploadLogo = async (file: File): Promise<void> => {
+    const uploadLogo = async (file: File, into: 'edit' | 'create' = 'edit'): Promise<void> => {
         setLogoUploading(true);
 
         try {
@@ -698,6 +700,76 @@ export default function Storefronts() {
                             Shown beside this shop's order numbers. Left blank, initials of the name
                             are used.
                         </p>
+                    </div>
+
+                    {/*
+                      Offered while the shop is being made, not only afterwards.
+
+                      It was only on the edit form, which meant every new shop
+                      started with the wrong mark on its invoices until somebody
+                      noticed and went back for it — and the moment a person is
+                      most willing to set a logo is the moment they are setting
+                      everything else.
+                    */}
+                    <div>
+                        <span className="mb-1.5 block text-sm font-medium">
+                            Logo{' '}
+                            <span className="text-xs text-[var(--color-text-subtle)]">optional</span>
+                        </span>
+
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)]">
+                                {newLogoUrl ? (
+                                    <img
+                                        src={newLogoUrl}
+                                        alt=""
+                                        className="max-h-full max-w-full object-contain"
+                                    />
+                                ) : (
+                                    <Icon name="image" size={20} className="text-[var(--color-text-subtle)]" />
+                                )}
+                            </div>
+
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <label className="btn btn-secondary cursor-pointer text-sm">
+                                        {logoUploading ? 'Uploading…' : 'Choose image'}
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            disabled={logoUploading}
+                                            onChange={(event) => {
+                                                const file = event.target.files?.[0];
+                                                event.target.value = '';
+
+                                                if (file) {
+                                                    void uploadLogo(file, 'create');
+                                                }
+                                            }}
+                                        />
+                                    </label>
+
+                                    {newLogoUrl && (
+                                        <button
+                                            type="button"
+                                            className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+                                            onClick={() => {
+                                                setNewLogo(null);
+                                                setNewLogoUrl(null);
+                                            }}
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                </div>
+
+                                <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
+                                    Shown on invoices for this shop&rsquo;s orders. Leave it empty to use the
+                                    business logo.
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">

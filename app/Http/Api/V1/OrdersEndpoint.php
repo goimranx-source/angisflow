@@ -152,6 +152,20 @@ class OrdersEndpoint
         $businessName = (string) $business->name;
 
         /*
+         * Where the paperwork says it came from.
+         *
+         * Read from the business once for the page. Null entries are passed
+         * through and dropped by the document rather than printed as empty
+         * lines - an invoice with a blank space where the phone number goes
+         * looks broken, one without a phone line simply has no phone.
+         */
+        $businessContact = [
+            'address' => $business->address,
+            'phone' => $business->phone,
+            'email' => $business->email,
+        ];
+
+        /*
          * Which of these orders the shop has not taken.
          *
          * ── Why it is fetched for the page rather than per order ─────────────
@@ -170,7 +184,7 @@ class OrdersEndpoint
 
         return response()->json([
             'data' => array_map(
-                fn (Order $order): array => $this->present($order, $base, $storeCodes, $unsent->get($order->id), $businessLogo, $businessName),
+                fn (Order $order): array => $this->present($order, $base, $storeCodes, $unsent->get($order->id), $businessLogo, $businessName, $businessContact),
                 $page->items(),
             ),
             'summary' => $this->summary(clone $query, $base),
@@ -406,7 +420,7 @@ class OrdersEndpoint
      * @param  array<int, string>  $storeCodes  storefront id => short tag
      * @param  IntegrationLink|null  $unsent  set when the shop has not taken this order's changes
      */
-    private function present(Order $order, string $base, array $storeCodes = [], ?IntegrationLink $unsent = null, ?string $businessLogo = null, string $businessName = ''): array
+    private function present(Order $order, string $base, array $storeCodes = [], ?IntegrationLink $unsent = null, ?string $businessLogo = null, string $businessName = '', array $businessContact = []): array
     {
         $from = (string) $order->currency;
 
@@ -471,7 +485,15 @@ class OrdersEndpoint
              */
             'brand' => [
                 'name' => $order->storefront?->name ?? $businessName,
+                // "A brand of ..." - only when the shop is not the business
+                // itself, or it would print the same name twice.
+                'tagline' => $order->storefront !== null && $order->storefront->name !== $businessName
+                    ? $businessName
+                    : null,
                 'logo_url' => $order->storefront?->logo?->url() ?? $businessLogo,
+                'address' => $businessContact['address'] ?? null,
+                'phone' => $businessContact['phone'] ?? null,
+                'email' => $businessContact['email'] ?? null,
             ],
 
             /*
