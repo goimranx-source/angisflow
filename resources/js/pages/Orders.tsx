@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 
 import {
     FilterBar,
@@ -21,6 +22,7 @@ import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useMoney } from '@/hooks/useMoney';
 import { RowAction, RowActionMenu, RowActions } from '@/components/modules/RowActions';
+import { BulkActionsMenu, type BulkActionGroup } from '@/components/modules/BulkActionsMenu';
 import {
     downloadCsv,
     orderImportCsv,
@@ -155,7 +157,44 @@ export default function Orders() {
     const [statusFilter, setStatusFilter] = useState('');
     const [paymentFilter, setPaymentFilter] = useState('');
     const [storeFilter, setStoreFilter] = useState('');
-    const [tab, setTab] = useState<'all' | 'trashed' | 'archived'>('all');
+    /*
+     * Which tab is open lives in the address, not in component state.
+     *
+     * ── Why the URL rather than useState ─────────────────────────────────────
+     *
+     * Because state does not survive a reload, and the tab was the one thing
+     * the address never said. Somebody working through the trash was thrown
+     * back to All Orders on every refresh — and worse, silently, so the next
+     * thing they did was to a different set of orders than the one they
+     * thought they were looking at.
+     *
+     * In the address it also survives the back button and a link pasted to
+     * somebody else, which state in a component can never do.
+     *
+     * 'all' is written as the absence of the parameter rather than ?tab=all, so
+     * the default view has one address instead of two.
+     */
+    const [params, setParams] = useSearchParams();
+
+    const requested = params.get('tab');
+    const tab: 'all' | 'trashed' | 'archived' =
+        requested === 'archived' || requested === 'trashed' ? requested : 'all';
+
+    const setTab = (next: 'all' | 'trashed' | 'archived') => {
+        setParams(
+            (current) => {
+                const updated = new URLSearchParams(current);
+
+                next === 'all' ? updated.delete('tab') : updated.set('tab', next);
+
+                return updated;
+            },
+            // Replaced rather than pushed: a tab is a view of one page, and
+            // stacking every glance at the trash into history makes Back mean
+            // something different from "the page I came from".
+            { replace: true },
+        );
+    };
 
     /*
      * One range, not two loose date boxes.
@@ -179,6 +218,15 @@ export default function Orders() {
     const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [drawerTab, setDrawerTab] = useState('overview');
+
+    /*
+     * Whether the drawer is showing the fields that can be changed.
+     *
+     * Off by default: an order is read far more often than it is edited, and a
+     * screen full of dropdowns invites a change nobody came to make.
+     */
+    const [editing, setEditing] = useState(false);
+
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [sortBy, setSortBy] = useState<string | null>('date');
@@ -470,7 +518,10 @@ export default function Orders() {
         mutationFn: (params: { order_ids: string[]; action: string; status?: string; payment_status?: string; fulfilment_status?: string }) =>
             api.post('/orders/bulk-update', params),
         onSuccess: (result) => {
-            const data = result as { message: string; data: { updated: number; failed: number } };
+            const data = result as {
+                message: string;
+                data: { updated: number; failed: number; batch_id?: string | null; pushes?: number };
+            };
             if (data.data.failed > 0 && data.data.updated === 0) {
                 toast.error(data.message);
             } else if (data.data.failed > 0) {
@@ -478,6 +529,27 @@ export default function Orders() {
             } else {
                 toast.success(data.message);
             }
+
+            /*
+             * The toast reports the local change, which is finished. Reaching
+             * the shops is not, and is the part that takes minutes on a large
+             * selection — so it gets its own line that stays until it is
+             * genuinely done. Without a batch there is nothing to follow, which
+             * is the case when no shop is connected.
+             */
+            /*
+             * Nudged rather than told.
+             *
+             * The card that reports shop-side progress lives in the layout and
+             * asks the server what is running, so it needs no batch id from
+             * here — only a reason to look now instead of on its next slow
+             * poll. That is what makes the progress survive a reload: nothing
+             * about it is held in this page.
+             */
+            if (data.data.batch_id) {
+                void queryClient.invalidateQueries({ queryKey: ['pushes', 'active'] });
+            }
+
             setSelectedOrders([]);
             setBulkAction('');
             void queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -1595,106 +1667,263 @@ export default function Orders() {
             <BulkActions
                 selectedCount={selectedOrders.length}
                 onClearSelection={() => setSelectedOrders([])}
-                className="min-w-[800px] max-w-4xl"
             >
-                <select
-                    value={bulkAction}
-                    onChange={(e) => setBulkAction(e.target.value)}
-                    className="field field-sm"
-                    style={{ width: 'auto', minWidth: '220px', height: '32px' }}
-                >
-                    <option value="">Select action...</option>
-                    
-                    {tab === 'trashed' ? (
-                        // TRASH TAB: Only restore and delete options
-                        <>
-                            <optgroup label="Trash Actions">
-                                <option value="restore">Restore from Trash</option>
-                                <option value="delete_permanently">Delete Permanently</option>
-                            </optgroup>
-                        </>
-                    ) : tab === 'archived' ? (
-                        // ARCHIVED TAB: Unarchive and export options
-                        <>
-                            <optgroup label="Archive Actions">
-                                <option value="unarchive">Move to Active Orders</option>
-                            </optgroup>
-                            <optgroup label="Export">
-                                <option value="export">Export CSV</option>
-                                <option value="print">Print Orders</option>
-                            </optgroup>
-                        </>
-                    ) : (
-                        // ALL ORDERS TAB: Full options
-                        <>
-                            {allStatuses.length > 0 && (
-                                <optgroup label="Change Order Status">
-                                    {allStatuses.map(status => (
-                                        <option key={status.value} value={`status:${status.value}`}>
-                                            {status.label}{status.custom ? ' (Custom)' : ''}
-                                        </option>
-                                    ))}
-                                </optgroup>
-                            )}
-                            
-                            {availablePaymentStatuses.length > 0 && (
-                                <optgroup label="Payment Status">
-                                    {availablePaymentStatuses.map(status => (
-                                        <option key={status.value} value={`payment:${status.value}`}>
-                                            {status.label}
-                                        </option>
-                                    ))}
-                                    <option value="mark_paid">Mark as Paid (Full Amount)</option>
-                                </optgroup>
-                            )}
-                            
-                            {availableFulfilmentStatuses.length > 0 && (
-                                <optgroup label="Fulfillment Status">
-                                    {availableFulfilmentStatuses.map(status => (
-                                        <option key={status.value} value={`fulfilment:${status.value}`}>
-                                            {status.label}
-                                        </option>
-                                    ))}
-                                </optgroup>
-                            )}
-                            
-                            {couriers.length > 0 && (
-                                <optgroup label="Send to Courier">
-                                    {couriers.map(courier => (
-                                        <option key={courier.id} value={`courier:${courier.id}`}>
-                                            {courier.label}
-                                        </option>
-                                    ))}
-                                </optgroup>
-                            )}
-                            
-                            <optgroup label="Actions">
-                                <option value="cancel">Cancel Orders</option>
-                                <option value="trash">Move to Trash</option>
-                            </optgroup>
-                            
-                            <optgroup label="Export">
-                                <option value="export">Export CSV</option>
-                                <option value="print">Print Orders</option>
-                            </optgroup>
-                        </>
-                    )}
-                </select>
-                <button
-                    type="button"
-                    onClick={handleApplyBulkAction}
-                    disabled={!bulkAction || bulkUpdate.isPending || bulkDispatch.isPending}
-                    className="btn btn-secondary"
-                    style={{ height: '32px', padding: '0 12px' }}
-                >
-                    {(bulkUpdate.isPending || bulkDispatch.isPending) ? 'Applying...' : 'Apply'}
-                </button>
+                {(() => {
+                    const chosen = selectedRows();
+                    const busy = bulkUpdate.isPending || bulkDispatch.isPending;
+                    const count = selectedOrders.length;
+                    const noun = `${count} order${count === 1 ? '' : 's'}`;
+
+                    /*
+                     * Offered only when the selection is one order.
+                     *
+                     * Editing is the one action with no sensible plural: there
+                     * is no single form to open for fifteen orders, and the
+                     * fields worth changing across a selection are already the
+                     * status and payment groups below.
+                     */
+                    // ?? null because the index signature is checked: chosen[0] is
+                    // Order | undefined, and 'not null' alone would not narrow it.
+                    const only = chosen.length === 1 ? (chosen[0] ?? null) : null;
+
+                    const single: BulkActionGroup[] =
+                        only !== null
+                            ? [
+                                  {
+                                      label: 'This order',
+                                      icon: 'note-pencil',
+                                      items: [
+                                          {
+                                              key: 'edit',
+                                              label: 'Open and edit',
+                                              icon: 'note-pencil',
+                                              description: `Order ${only.order_number}`,
+                                              onSelect: () => {
+                                                  setSelectedOrder(only);
+                                                  setEditing(true);
+                                                  setSelectedOrders([]);
+                                              },
+                                          },
+                                      ],
+                                  },
+                              ]
+                            : [];
+
+                    const documents: BulkActionGroup = {
+                        label: 'Documents',
+                        icon: 'file-text',
+                        items: [
+                            {
+                                key: 'export',
+                                label: 'Export as CSV',
+                                icon: 'download-simple',
+                                description: "The importer's own columns, so it round-trips",
+                                onSelect: () => exportOrders(chosen),
+                            },
+                            {
+                                key: 'invoice',
+                                label: 'Print invoices',
+                                icon: 'receipt',
+                                description: 'A4, one page per order',
+                                onSelect: () => printDocuments(chosen, 'invoice'),
+                            },
+                            {
+                                key: 'receipt',
+                                label: 'Print receipts',
+                                icon: 'ticket',
+                                description: '80mm, for a thermal printer',
+                                onSelect: () => printDocuments(chosen, 'receipt'),
+                            },
+                        ],
+                    };
+
+                    const groups: BulkActionGroup[] =
+                        tab === 'trashed'
+                            ? [
+                                  {
+                                      label: 'Trash',
+                                      icon: 'trash',
+                                      items: [
+                                          {
+                                              key: 'restore',
+                                              label: 'Restore to the order book',
+                                              icon: 'arrow-counter-clockwise',
+                                              onSelect: () =>
+                                                  bulkUpdate.mutate({
+                                                      order_ids: selectedOrders,
+                                                      action: 'restore',
+                                                  }),
+                                          },
+                                          {
+                                              key: 'delete',
+                                              label: 'Delete permanently',
+                                              icon: 'trash',
+                                              variant: 'danger',
+                                              description: 'Removed from the database, not recoverable',
+                                              onSelect: () => {
+                                                  if (
+                                                      window.confirm(
+                                                          `Permanently delete ${noun}? This cannot be undone.`,
+                                                      )
+                                                  ) {
+                                                      bulkUpdate.mutate({
+                                                          order_ids: selectedOrders,
+                                                          action: 'delete_permanently',
+                                                      });
+                                                  }
+                                              },
+                                          },
+                                      ],
+                                  },
+                              ]
+                            : [
+                                  ...single,
+
+                                  {
+                                      label: 'Order status',
+                                      icon: 'circle-notch',
+                                      items: allStatuses.map((status) => ({
+                                          key: `status-${status.value}`,
+                                          label: `${status.label}${status.custom ? ' (Custom)' : ''}`,
+                                          onSelect: () =>
+                                              bulkUpdate.mutate({
+                                                  order_ids: selectedOrders,
+                                                  action: 'update_status',
+                                                  status: status.value,
+                                              }),
+                                      })),
+                                  },
+
+                                  {
+                                      label: 'Payment',
+                                      icon: 'currency-dollar',
+                                      items: [
+                                          ...availablePaymentStatuses.map((status) => ({
+                                              key: `payment-${status.value}`,
+                                              label: status.label,
+                                              onSelect: () =>
+                                                  bulkUpdate.mutate({
+                                                      order_ids: selectedOrders,
+                                                      action: 'update_status',
+                                                      payment_status: status.value,
+                                                  }),
+                                          })),
+                                          {
+                                              key: 'mark_paid',
+                                              label: 'Mark as paid in full',
+                                              icon: 'check-circle',
+                                              onSelect: () =>
+                                                  bulkUpdate.mutate({
+                                                      order_ids: selectedOrders,
+                                                      action: 'mark_paid',
+                                                  }),
+                                          },
+                                      ],
+                                  },
+
+                                  ...(availableFulfilmentStatuses.length > 0
+                                      ? [
+                                            {
+                                                label: 'Fulfilment',
+                                                icon: 'package',
+                                                items: availableFulfilmentStatuses.map((status) => ({
+                                                    key: `fulfilment-${status.value}`,
+                                                    label: status.label,
+                                                    onSelect: () =>
+                                                        bulkUpdate.mutate({
+                                                            order_ids: selectedOrders,
+                                                            action: 'update_status',
+                                                            fulfilment_status: status.value,
+                                                        }),
+                                                })),
+                                            },
+                                        ]
+                                      : []),
+
+                                  ...(tab !== 'archived' && couriers.length > 0
+                                      ? [
+                                            {
+                                                label: 'Send to courier',
+                                                icon: 'truck',
+                                                items: couriers.map((courier) => ({
+                                                    key: `courier-${courier.id}`,
+                                                    label: courier.label,
+                                                    onSelect: () =>
+                                                        bulkDispatch.mutate({
+                                                            order_ids: selectedOrders,
+                                                            courier_id: courier.id,
+                                                        }),
+                                                })),
+                                            },
+                                        ]
+                                      : []),
+
+                                  documents,
+
+                                  {
+                                      label: 'Manage',
+                                      icon: 'gear',
+                                      items: [
+                                          ...(tab === 'archived'
+                                              ? [
+                                                    {
+                                                        key: 'unarchive',
+                                                        label: 'Move back to active',
+                                                        icon: 'arrow-u-up-left',
+                                                        onSelect: () =>
+                                                            bulkUpdate.mutate({
+                                                                order_ids: selectedOrders,
+                                                                action: 'unarchive',
+                                                            }),
+                                                    },
+                                                ]
+                                              : [
+                                                    {
+                                                        key: 'cancel',
+                                                        label: 'Cancel orders',
+                                                        icon: 'x-circle',
+                                                        onSelect: () => {
+                                                            if (window.confirm(`Cancel ${noun}?`)) {
+                                                                bulkUpdate.mutate({
+                                                                    order_ids: selectedOrders,
+                                                                    action: 'cancel',
+                                                                });
+                                                            }
+                                                        },
+                                                    },
+                                                ]),
+                                          {
+                                              key: 'trash',
+                                              label: 'Move to trash',
+                                              icon: 'trash',
+                                              variant: 'danger' as const,
+                                              description: 'Recoverable from the Trash tab',
+                                              onSelect: () => {
+                                                  if (window.confirm(`Move ${noun} to trash?`)) {
+                                                      bulkUpdate.mutate({
+                                                          order_ids: selectedOrders,
+                                                          action: 'trash',
+                                                      });
+                                                  }
+                                              },
+                                          },
+                                      ],
+                                  },
+                              ];
+
+                    return <BulkActionsMenu label="Actions" groups={groups} busy={busy} />;
+                })()}
             </BulkActions>
 
             {/* Detail Drawer */}
             <DetailDrawer
                 open={!!selectedOrder}
-                onClose={() => setSelectedOrder(null)}
+                onClose={() => {
+                    setSelectedOrder(null);
+                    // Closed, not remembered: the next order opens read-only
+                    // like every other one.
+                    setEditing(false);
+                }}
                 title={selectedOrder?.order_number ?? ''}
                 subtitle={selectedOrder ? `${selectedOrder.customer?.name ?? 'Walk-in'} · ${formatDate(selectedOrder.date)}` : ''}
                 tabs={[
@@ -1703,54 +1932,159 @@ export default function Orders() {
                         label: 'Overview',
                         content: selectedOrder && (
                             <div className="space-y-6">
-                                <DrawerSection title="Order Details">
-                                    <DrawerField
-                                        label="Order Number"
-                                        value={selectedOrder.order_number}
-                                        icon="hash"
-                                    />
-                                    <DrawerField
-                                        label="Date"
-                                        value={formatDate(selectedOrder.date)}
-                                        icon="calendar"
-                                    />
-                                    <DrawerField
-                                        label="Status"
-                                        value={<StatusBadge label={statusLabels[selectedOrder.status] ?? selectedOrder.status} variant={statusVariants[selectedOrder.status] ?? 'neutral'} />}
-                                        icon="circle-notch"
-                                    />
-                                    <DrawerField
-                                        label="Payment Status"
-                                        value={
-                                            <div className="flex items-center gap-2">
-                                                <StatusBadge 
-                                                    label={paymentLabels[selectedOrder.payment_status] ?? selectedOrder.payment_status} 
-                                                    variant={paymentVariants[selectedOrder.payment_status] ?? 'neutral'} 
-                                                    dot 
-                                                />
-                                                {selectedOrder.is_cod && (
-                                                    <span className="text-xs text-[var(--color-text-muted)] bg-[var(--color-background-subtle)] px-2 py-0.5 rounded">
-                                                        COD
-                                                    </span>
-                                                )}
-                                            </div>
-                                        }
-                                        icon="currency-dollar"
-                                    />
-                                    {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
-                                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
-                                            <p className="text-amber-900 font-medium">COD Order - Payment Pending</p>
-                                            <p className="text-amber-700 text-xs mt-1">
-                                                Mark as paid once courier settles the cash collected on delivery.
-                                            </p>
+                                {/*
+                                  What the order is, before what is in it.
+
+                                  ── Why a card and not more label/value rows ──
+
+                                  Somebody opening an order is nearly always
+                                  checking one of three things: what state it is
+                                  in, what it came to, and where it came from.
+                                  Those were three rows in a list of eight, given
+                                  no more weight at a glance than the channel.
+                                  Here they are the card, and everything else
+                                  sits under it.
+                                */}
+                                <div className="rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)] p-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <StatusBadge
+                                                label={statusLabels[selectedOrder.status] ?? selectedOrder.status}
+                                                variant={statusVariants[selectedOrder.status] ?? 'neutral'}
+                                            />
+                                            <StatusBadge
+                                                label={paymentLabels[selectedOrder.payment_status] ?? selectedOrder.payment_status}
+                                                variant={paymentVariants[selectedOrder.payment_status] ?? 'neutral'}
+                                                dot
+                                            />
+                                            {selectedOrder.is_cod && (
+                                                <span className="rounded-full bg-[var(--shell-muted)] px-2 py-0.5 text-[11px] font-semibold tracking-wide text-[var(--color-text-muted)]">
+                                                    COD
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
-                                    <DrawerField
-                                        label="Channel"
-                                        value={channelLabels[selectedOrder.channel]}
-                                        icon="storefront"
-                                    />
-                                </DrawerSection>
+
+                                        <div className="text-right">
+                                            {/* The amount charged, in the money it was charged in. */}
+                                            <p className="text-xl font-bold tabular-nums text-[var(--color-text-main)]">
+                                                {selectedOrder.source_symbol}
+                                                {selectedOrder.total_native.toLocaleString(undefined, {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}
+                                            </p>
+                                            {selectedOrder.is_converted && (
+                                                <p
+                                                    className="mt-0.5 text-xs tabular-nums text-[var(--color-text-muted)]"
+                                                    title={`In the books, converted to ${selectedOrder.currency}`}
+                                                >
+                                                    ≈ {formatMoney(selectedOrder.total)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--shell-border)] pt-3 text-xs text-[var(--color-text-muted)]">
+                                        <span className="inline-flex items-center gap-1">
+                                            <Icon name="storefront" size={13} />
+                                            {selectedOrder.store?.name ?? 'Walk-in / counter'}
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span className="inline-flex items-center gap-1">
+                                            <Icon name="calendar" size={13} />
+                                            {formatDate(selectedOrder.date)}
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span className="inline-flex items-center gap-1">
+                                            <Icon name="package" size={13} />
+                                            {selectedOrder.items_count} {selectedOrder.items_count === 1 ? 'item' : 'items'}
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span>{channelLabels[selectedOrder.channel]}</span>
+                                    </div>
+                                </div>
+
+                                {/*
+                                  Revealed by the pencil, rather than always on.
+
+                                  These two are the whole of what one order can
+                                  be changed to from here, and until now neither
+                                  could be: changing a single order's status
+                                  meant selecting it and reaching for a bulk
+                                  action, which is a strange way to edit one
+                                  thing.
+
+                                  The local copy is corrected alongside the
+                                  request, so the drawer does not sit showing the
+                                  old value while the list refetches behind it.
+                                */}
+                                {editing && (
+                                    <DrawerSection title="Change">
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                                                    Order status
+                                                </span>
+                                                <select
+                                                    className="field field-sm w-full"
+                                                    value={selectedOrder.status}
+                                                    disabled={bulkUpdate.isPending}
+                                                    onChange={(event) => {
+                                                        const status = event.target.value;
+                                                        setSelectedOrder({ ...selectedOrder, status });
+                                                        bulkUpdate.mutate({
+                                                            order_ids: [selectedOrder.id],
+                                                            action: 'update_status',
+                                                            status,
+                                                        });
+                                                    }}
+                                                >
+                                                    {allStatuses.map((status) => (
+                                                        <option key={status.value} value={status.value}>
+                                                            {status.label}
+                                                            {status.custom ? ' (Custom)' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                                                    Payment
+                                                </span>
+                                                <select
+                                                    className="field field-sm w-full"
+                                                    value={selectedOrder.payment_status}
+                                                    disabled={bulkUpdate.isPending}
+                                                    onChange={(event) => {
+                                                        const payment = event.target.value as 'paid' | 'unpaid';
+                                                        setSelectedOrder({ ...selectedOrder, payment_status: payment });
+                                                        bulkUpdate.mutate({
+                                                            order_ids: [selectedOrder.id],
+                                                            action: 'update_status',
+                                                            payment_status: payment,
+                                                        });
+                                                    }}
+                                                >
+                                                    {Object.entries(paymentLabels).map(([value, label]) => (
+                                                        <option key={value} value={value}>
+                                                            {label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                        </div>
+                                    </DrawerSection>
+                                )}
+
+                                {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
+                                    <div className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm">
+                                        <p className="font-medium text-amber-900">Cash on delivery — payment pending</p>
+                                        <p className="mt-1 text-xs text-amber-700">
+                                            Mark as paid once the courier settles the cash collected on delivery.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <DrawerSection title="Customer">
                                     <DrawerField
@@ -1769,18 +2103,49 @@ export default function Orders() {
                                     <DrawerSection title="Shipping Address">
                                         <DrawerField
                                             label="Address"
-                                            value={
-                                                <div className="text-sm">
-                                                    <div>{selectedOrder.shipping_address.line1}</div>
-                                                    {selectedOrder.shipping_address.line2 && (
-                                                        <div>{selectedOrder.shipping_address.line2}</div>
-                                                    )}
-                                                    <div>
-                                                        {selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.state} {selectedOrder.shipping_address.postal_code}
+                                            value={(() => {
+                                                /*
+                                                 * Assembled from the parts that
+                                                 * are actually there.
+                                                 *
+                                                 * As a fixed template this
+                                                 * printed punctuation for data
+                                                 * that does not exist: an order
+                                                 * with no city, state or
+                                                 * postcode still got a line
+                                                 * containing a lone comma, and
+                                                 * an empty one for the country
+                                                 * under it.
+                                                 */
+                                                const at = selectedOrder.shipping_address!;
+
+                                                const locality = [
+                                                    [at.city, at.state].filter(Boolean).join(', '),
+                                                    at.postal_code,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ');
+
+                                                const lines = [at.line1, at.line2, locality, at.country]
+                                                    .map((part) => (part ?? '').trim())
+                                                    .filter((part) => part !== '');
+
+                                                if (lines.length === 0) {
+                                                    return (
+                                                        <span className="text-sm text-[var(--color-text-muted)]">
+                                                            No address on this order
+                                                        </span>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <div className="text-sm">
+                                                        {lines.map((line, index) => (
+                                                            <div key={index}>{line}</div>
+                                                        ))}
                                                     </div>
-                                                    <div>{selectedOrder.shipping_address.country}</div>
-                                                </div>
-                                            }
+                                                );
+                                            })()}
                                             icon="map-pin"
                                         />
                                     </DrawerSection>
@@ -1857,17 +2222,112 @@ export default function Orders() {
                 ]}
                 activeTab={drawerTab}
                 onTabChange={setDrawerTab}
+                /*
+                 * The same four actions as the row, in the same order.
+                 *
+                 * ── Why identical to the table ───────────────────────────────
+                 *
+                 * Opening an order should not change what can be done to it, or
+                 * where. Two of these were previously buttons with no onClick
+                 * at all — they looked like the feature and did nothing, which
+                 * is worse than not offering it.
+                 *
+                 * Edit is the one that differs in meaning: in a row it opens
+                 * this drawer, and here that would do nothing, so it reveals the
+                 * fields that can actually be changed. Until now a single
+                 * order's status could only be changed by selecting it and
+                 * using a bulk action, which is a strange way to edit one thing.
+                 */
                 actions={
-                    <>
-                        <button className="btn btn-secondary">
-                            <Icon name="printer" size={16} />
-                            <span>Print</span>
-                        </button>
-                        <button className="btn btn-secondary">
-                            <Icon name="pencil-simple" size={16} />
-                            <span>Edit</span>
-                        </button>
-                    </>
+                    selectedOrder && (
+                        <RowActions>
+                            {tab === 'trashed' ? (
+                                <>
+                                    <RowAction
+                                        icon="arrow-counter-clockwise"
+                                        label="Restore from trash"
+                                        onClick={() => {
+                                            bulkUpdate.mutate({
+                                                order_ids: [selectedOrder.id],
+                                                action: 'restore',
+                                            });
+                                            setSelectedOrder(null);
+                                        }}
+                                    />
+                                    <RowAction
+                                        icon="trash"
+                                        label="Delete permanently"
+                                        variant="danger"
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    `Permanently delete order ${selectedOrder.order_number}? This cannot be undone.`,
+                                                )
+                                            ) {
+                                                bulkUpdate.mutate({
+                                                    order_ids: [selectedOrder.id],
+                                                    action: 'delete_permanently',
+                                                });
+                                                setSelectedOrder(null);
+                                            }
+                                        }}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <RowAction
+                                        icon="note-pencil"
+                                        label={editing ? 'Done editing' : 'Edit order'}
+                                        onClick={() => setEditing((was) => !was)}
+                                    />
+
+                                    <RowAction
+                                        icon="download-simple"
+                                        label="Export as an import-ready CSV"
+                                        onClick={() => exportOrders([selectedOrder])}
+                                    />
+
+                                    <RowActionMenu
+                                        icon="printer"
+                                        label="Print"
+                                        items={[
+                                            {
+                                                key: 'invoice',
+                                                label: 'Invoice',
+                                                icon: 'receipt',
+                                                onSelect: () => printDocuments([selectedOrder], 'invoice'),
+                                            },
+                                            {
+                                                key: 'receipt',
+                                                label: 'Receipt',
+                                                icon: 'ticket',
+                                                onSelect: () => printDocuments([selectedOrder], 'receipt'),
+                                            },
+                                        ]}
+                                    />
+
+                                    <RowAction
+                                        icon="trash"
+                                        label="Move to trash"
+                                        variant="danger"
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    `Move order ${selectedOrder.order_number} to trash?`,
+                                                )
+                                            ) {
+                                                bulkUpdate.mutate({
+                                                    order_ids: [selectedOrder.id],
+                                                    action: 'trash',
+                                                });
+                                                setSelectedOrder(null);
+                                            }
+                                        }}
+                                    />
+                                </>
+                            )}
+                        </RowActions>
+                    )
                 }
             >
                 <div />

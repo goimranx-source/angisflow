@@ -1,8 +1,42 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
+
+/**
+ * The menu behind the bulk action bar.
+ *
+ * ── Why not the select it replaces ───────────────────────────────────────────
+ *
+ * A native <select> full of <optgroup>s was carrying thirty-odd actions across
+ * six categories, and it made all of them look identical: "Move to Trash" and
+ * "Processing" were the same grey line of text, one scroll apart. Nothing could
+ * be marked destructive, nothing could carry an icon, and nothing could explain
+ * itself — so the only defence against picking the wrong one was reading
+ * carefully, every time, on an action that applies to everything selected.
+ *
+ * It also took two steps and a rule nobody was told: choose, then find Apply.
+ * Choosing and doing are one gesture here.
+ *
+ * ── Why it opens upward ──────────────────────────────────────────────────────
+ *
+ * Because the bar it belongs to is pinned to the bottom of the window, so there
+ * is never room beneath it. It flips down only if that is somehow the side with
+ * space, which is the same rule the row menus use, applied to the opposite
+ * default.
+ */
+
+export type BulkActionItem = {
+    key: string;
+    label: string;
+    icon?: string;
+    /** One short line, for actions whose name does not say enough. */
+    description?: string;
+    variant?: 'default' | 'danger';
+    disabled?: boolean;
+    onSelect: () => void;
+};
 
 export type BulkActionGroup = {
     label: string;
@@ -10,81 +44,52 @@ export type BulkActionGroup = {
     items: BulkActionItem[];
 };
 
-export type BulkActionItem = {
-    key: string;
-    label: string;
-    icon?: string;
-    description?: string;
-    onSelect: () => void;
-    disabled?: boolean;
-    variant?: 'default' | 'danger';
-};
-
-/**
- * Professional bulk actions menu triggered from the toolbar.
- *
- * ── Why this menu ──────────────────────────────────────────────────────────
- *
- * Bulk actions on orders have complex, context-dependent menus (statuses,
- * couriers, print options) that don't fit in a standard select dropdown.
- *
- * A portal-rendered menu with organized sections, icons, and descriptions
- * reads as a first-class feature, not an afterthought. It also stays
- * visible when filtering or scrolling, so users can apply bulk changes
- * without losing their place in the list.
- *
- * ── Organization ───────────────────────────────────────────────────────────
- *
- * - Order Status section: for status changes (Processing, Completed, etc.)
- * - Payment section: paid/unpaid status
- * - Fulfillment section: if applicable
- * - Shipment section: courier assignment
- * - Batch Actions section: print/export (icon-based, visual hierarchy)
- * - Destructive section: cancel/trash (danger variant, last)
- *
- * This mirrors how row actions are organized: read-only/informational first,
- * then changes, then destructive.
- */
 export function BulkActionsMenu({
-    trigger: TriggerComponent,
+    label,
+    icon = 'list',
     groups,
     disabled = false,
+    busy = false,
 }: {
-    trigger: React.ComponentType<{ onClick: () => void; disabled?: boolean }>;
+    label: string;
+    icon?: string;
     groups: BulkActionGroup[];
     disabled?: boolean;
+    busy?: boolean;
 }) {
     const [open, setOpen] = useState(false);
-    const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+    const [at, setAt] = useState<{ left: number; top: number } | null>(null);
     const trigger = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
 
+    /*
+     * Placed above the trigger, then kept inside the window.
+     *
+     * Measured after the menu exists rather than guessed from the item count:
+     * the height depends on how many groups this tab offers and whether their
+     * items carry descriptions, which is not knowable before layout.
+     */
     useLayoutEffect(() => {
-        if (!open || !trigger.current) {
+        if (!open || !trigger.current || !menu.current) {
             return;
         }
 
-        const rect = trigger.current.getBoundingClientRect();
-        setAt({ top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
-    }, [open]);
-
-    useLayoutEffect(() => {
-        if (!open || !at || !menu.current || !trigger.current) {
-            return;
-        }
-
+        const anchor = trigger.current.getBoundingClientRect();
         const box = menu.current.getBoundingClientRect();
 
-        if (box.bottom <= window.innerHeight - 8) {
-            return;
-        }
+        const above = anchor.top - box.height - 6;
+        const below = anchor.bottom + 6;
 
-        const above = Math.max(8, trigger.current.getBoundingClientRect().top - box.height - 4);
+        const top = above >= 8 ? above : Math.min(below, window.innerHeight - box.height - 8);
 
-        if (above !== at.top) {
-            setAt({ ...at, top: above });
+        // Clamped so a bar near the edge of a narrow window cannot push its own
+        // menu off the side.
+        const left = Math.max(8, Math.min(anchor.left, window.innerWidth - box.width - 8));
+
+        if (at === null || at.top !== top || at.left !== left) {
+            setAt({ top, left });
         }
-    }, [open, at]);
+    }, [open, at, groups]);
 
     useEffect(() => {
         if (!open) {
@@ -94,85 +99,95 @@ export function BulkActionsMenu({
         const close = () => setOpen(false);
         const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
 
-        window.addEventListener('scroll', close, true);
         window.addEventListener('resize', close);
         document.addEventListener('mousedown', close);
         document.addEventListener('keydown', onKey);
 
         return () => {
-            window.removeEventListener('scroll', close, true);
             window.removeEventListener('resize', close);
             document.removeEventListener('mousedown', close);
             document.removeEventListener('keydown', onKey);
         };
     }, [open]);
 
-    const handleSelectAction = (onSelect: () => void) => {
-        setOpen(false);
-        onSelect();
-    };
-
     return (
         <>
-            <div ref={trigger}>
-                <TriggerComponent
-                    onClick={() => setOpen((was) => !was)}
-                    disabled={disabled}
-                />
-            </div>
+            <button
+                ref={trigger}
+                type="button"
+                disabled={disabled || busy}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    setAt(null);
+                    setOpen((was) => !was);
+                }}
+                className="inline-flex h-8 items-center gap-2 rounded-[var(--shell-radius-sm)] border border-[var(--shell-border)] bg-[var(--color-card-bg)] px-3 text-sm font-medium text-[var(--color-text-body)] transition-colors hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+                <Icon name={busy ? 'circle-notch' : icon} size={15} className={busy ? 'animate-spin' : undefined} />
+                <span>{busy ? 'Applying…' : label}</span>
+                <Icon name="caret-down" size={11} />
+            </button>
 
             {open &&
-                at &&
                 createPortal(
                     <div
                         ref={menu}
                         role="menu"
-                        style={{ top: at.top, right: at.right }}
-                        className="fixed z-[var(--z-toast)] w-80 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] shadow-lg"
+                        style={{
+                            top: at?.top ?? -9999,
+                            left: at?.left ?? -9999,
+                            // Hidden for the single frame before it is measured,
+                            // so nobody sees it land in one place and jump.
+                            visibility: at === null ? 'hidden' : 'visible',
+                        }}
+                        className="fixed z-[var(--z-toast)] max-h-[70vh] w-72 overflow-y-auto rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        {/* Menu Groups */}
-                        {groups.map((group, groupIndex) => (
-                            <div key={group.label}>
-                                {/* Group Header */}
-                                <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                    {group.icon && <Icon name={group.icon} size={14} />}
-                                    <span>{group.label}</span>
-                                </div>
+                        {groups.map((group, index) => (
+                            <div
+                                key={group.label}
+                                className={cn(
+                                    index > 0 && 'mt-1 border-t border-[var(--color-border-light)] pt-1',
+                                )}
+                            >
+                                <p className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                    {group.icon && <Icon name={group.icon} size={12} />}
+                                    {group.label}
+                                </p>
 
-                                {/* Group Items */}
-                                <div className="space-y-0.5 border-b border-[var(--color-border-light)] px-1 py-1 last:border-b-0">
-                                    {group.items.map((item) => (
-                                        <button
-                                            key={item.key}
-                                            type="button"
-                                            role="menuitem"
-                                            disabled={item.disabled}
-                                            className={cn(
-                                                'flex w-full items-start gap-3 rounded-[var(--shell-radius-sm)] px-2 py-2 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-                                                item.variant === 'danger'
-                                                    ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger-subtle)]'
-                                                    : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
+                                {group.items.map((item) => (
+                                    <button
+                                        key={item.key}
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={item.disabled}
+                                        onClick={() => {
+                                            setOpen(false);
+                                            item.onSelect();
+                                        }}
+                                        className={cn(
+                                            'flex w-full items-start gap-2.5 px-3 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                            item.variant === 'danger'
+                                                ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger-subtle)]'
+                                                : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
+                                        )}
+                                    >
+                                        <span className="mt-0.5 w-4 shrink-0">
+                                            {item.icon && <Icon name={item.icon} size={15} />}
+                                        </span>
+                                        <span className="min-w-0">
+                                            <span className="block text-sm">{item.label}</span>
+                                            {item.description && (
+                                                <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                                                    {item.description}
+                                                </span>
                                             )}
-                                            onClick={() => handleSelectAction(item.onSelect)}
-                                        >
-                                            {item.icon && (
-                                                <div className="mt-0.5 shrink-0">
-                                                    <Icon name={item.icon} size={16} />
-                                                </div>
-                                            )}
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="text-sm font-medium">{item.label}</span>
-                                                {item.description && (
-                                                    <span className="text-xs text-[var(--color-text-muted)]">
-                                                        {item.description}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
+                                        </span>
+                                    </button>
+                                ))}
                             </div>
                         ))}
                     </div>,
