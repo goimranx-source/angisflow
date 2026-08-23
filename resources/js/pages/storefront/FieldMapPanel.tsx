@@ -795,7 +795,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[65.5rem] table-fixed"
+                        className="table table-framed w-full min-w-[67rem] table-fixed"
                     >
                         {/*
                           ── Widths the content needs, not shares of what is
@@ -829,7 +829,18 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                               overflow while "⇄ Both" plainly reads "⇄ Botl".
                             */}
                             <col style={{ width: '8rem' }} />
-                            <col style={{ width: '6.5rem' }} />
+                            {/*
+                              Room for the heading *and* its padding.
+
+                              At 6.5rem the words "Show on form" wanted one pixel
+                              more than the content box had, so they spilled into
+                              the padding and sat flush against the table's right
+                              edge while the first column kept its inset. The
+                              lopsidedness was the heading overflowing, not the
+                              column being misplaced — the same failure the
+                              actions column had, in the column that replaced it.
+                            */}
+                            <col style={{ width: '8rem' }} />
                         </colgroup>
 
                         {/*
@@ -887,8 +898,23 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                   wording was cut to "On edit pag", which taught
                                   nobody anything.
                                 */}
+                                {/*
+                                  Aligned to the right edge, not centred.
+
+                                  Centred, the words sat 37px from the table's
+                                  edge while the first column's sat 17px from the
+                                  other one, and no column width makes those
+                                  agree — a centred thing is placed by how much
+                                  room is left over, not by the margin anybody is
+                                  looking at.
+
+                                  Against the edge it mirrors the first column
+                                  exactly: the × at 17px in on the left, the
+                                  checkbox at 17px in on the right, and the row
+                                  reads as bounded rather than as drifting.
+                                */}
                                 <th
-                                    className="text-center"
+                                    className="text-right"
                                     title="Tick to show this field on the add and edit page for an order or product. Unticking hides it there — the field still syncs either way."
                                 >
                                     Show on form
@@ -1207,7 +1233,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                             </select>
                                         </td>
 
-                                        <td className="text-center">
+                                        <td className="text-right">
                                             {/*
                                               Checked unless somebody says
                                               otherwise.
