@@ -6,7 +6,22 @@ import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions'
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
-type PathOption = { path: string; sample: string | null };
+type PathOption = {
+    path: string;
+    sample: string | null;
+    /** The shop's own name for it — "Date Created Gmt" rather than the path. */
+    label?: string | null;
+    /** The shop refuses writes to it, whether or not it says so at the time. */
+    readonly?: boolean;
+    /** The type the shop's description implies. */
+    suggest?: string | null;
+    /** The fixed set of values it accepts, when it has one. */
+    choices?: FieldOption[];
+    /** What the shop's documentation says this field is. */
+    note?: string | null;
+    /** Described by the shop, but absent from every record read so far. */
+    unused?: boolean;
+};
 type Target = { value: string; label: string; transform: string; custom?: boolean };
 type MapRow = {
     source: string;
@@ -35,6 +50,8 @@ type Sample = {
     needs_options: string[];
     /** Types whose value is a picture or a file. */
     media_types: string[];
+    /** Whether this shop was able to describe its own fields. */
+    described: boolean;
     maps: MapRow[];
 };
 
@@ -231,17 +248,23 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
         setRows((current) => [
             ...current,
             ...suggestions.map((option) => ({
+                ...{
+                    // The shop's own word on the type and the choices, where it
+                    // had one. Custom meta rarely does — no schema lists a
+                    // plugin's invented keys — so this mostly falls through to
+                    // the guess below, and costs nothing when it does.
+                    transform: option.suggest ?? guessType(option.sample),
+                    options: option.choices ?? [],
+                    direction: option.readonly ? 'in' : 'both',
+                },
                 source: option.path,
                 // Named after the field itself, minus any leading underscore —
                 // WordPress hides its private meta that way and the underscore
                 // means nothing here.
                 target: `custom.${(option.path.split('.').pop() ?? 'field').replace(/^_+/, '')}`,
-                transform: guessType(option.sample),
-                direction: 'both',
                 label: null,
                 enabled: true,
                 also: [],
-                options: [],
                 visible: true,
             })),
         ]);
@@ -255,6 +278,42 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
      */
     const needsOptions = (transform: string): boolean =>
         (sample?.needs_options ?? ['select', 'radio', 'checkbox']).includes(transform);
+
+    /** What the shop said about the field this row reads from. */
+    const described = (row: MapRow): PathOption | undefined =>
+        sample?.paths.find((p) => p.path === row.source);
+
+    /*
+     * Everything the shop's description implies for a row that points at it.
+     *
+     * ── Why the direction is forced ──────────────────────────────────────────
+     *
+     * A read-only field is not a mapping that fails loudly. WooCommerce accepts
+     * the write, answers 200, and discards it — which is exactly how product
+     * prices appeared to sync for an afternoon while every one of them was
+     * being thrown away. If the shop says it will not take a value, the only
+     * honest direction is inbound.
+     *
+     * ── Why the type is only a default ───────────────────────────────────────
+     *
+     * Applied when the row is still on the untouched default, and left alone
+     * otherwise. Somebody who set a field to Textarea did so deliberately, and
+     * a description arriving later must not quietly undo them.
+     */
+    const applyDescription = (row: MapRow, option: PathOption | undefined): Partial<MapRow> => {
+        if (!option) return {};
+
+        const patch: Partial<MapRow> = {};
+
+        if (option.readonly) patch.direction = 'in';
+
+        if (option.suggest && row.transform === 'trim') patch.transform = option.suggest;
+
+        // The one case where choices need not be typed: the shop stated them.
+        if (option.choices?.length && !row.options?.length) patch.options = option.choices;
+
+        return patch;
+    };
 
     // What the sample value becomes once the row's transform has run. Shown so a
     // wrong mapping is visible before it is saved rather than after a sync.
@@ -317,6 +376,22 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
               documented sample rather than a real record deserves a second look
               once orders start arriving, so the screen says which it is.
             */}
+            {/*
+              What this shop was able to say for itself.
+
+              Worth stating plainly, because the difference is large and
+              otherwise invisible: a shop that describes its own fields offers
+              every one it has, including the ones no record has used, while a
+              shop that cannot offers only what has actually been through it.
+            */}
+            {sample?.described && (
+                <p className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+                    <Icon name="check" size={12} />
+                    This shop describes its own fields, so everything it has is listed below —
+                    including fields no order or product has used yet.
+                </p>
+            )}
+
             {sample && sample.source !== 'live' && (
                 <p className="text-xs text-[var(--color-text-muted)]">
                     {sample.source === 'sample'
@@ -360,7 +435,17 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                             <select
                                                 className="field w-full min-w-[13rem]"
                                                 value={row.source}
-                                                onChange={(e) => update(index, { source: e.target.value })}
+                                                onChange={(e) => {
+                                                    const source = e.target.value;
+                                                    const option = sample.paths.find(
+                                                        (p) => p.path === source,
+                                                    );
+
+                                                    update(index, {
+                                                        source,
+                                                        ...applyDescription(row, option),
+                                                    });
+                                                }}
                                             >
                                                 <option value="">—</option>
                                                 {/* A path already mapped but no
@@ -374,13 +459,37 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                 {sample.paths.map((option) => (
                                                     <option key={option.path} value={option.path}>
                                                         {option.path}
+                                                        {/* Marked, because a field with no value
+                                                            beside it looks broken otherwise. It is
+                                                            not — this shop has simply never had a
+                                                            coupon, or a variable product. */}
+                                                        {option.unused ? ' — not used yet' : ''}
+                                                        {option.readonly ? ' — read-only' : ''}
                                                     </option>
                                                 ))}
                                             </select>
                                         </td>
 
-                                        <td className="max-w-[12rem] truncate text-xs text-[var(--color-text-muted)]">
-                                            {preview(row)}
+                                        <td className="max-w-[12rem] text-xs text-[var(--color-text-muted)]">
+                                            <div className="truncate" title={described(row)?.note ?? undefined}>
+                                                {preview(row)}
+                                            </div>
+
+                                            {/*
+                                              Why there is nothing to show.
+
+                                              A blank cell reads as a fault. This
+                                              one is the shop describing a field
+                                              no record has used — which is the
+                                              whole reason it can be mapped at
+                                              all before the first coupon or the
+                                              first variable product exists.
+                                            */}
+                                            {described(row)?.unused && (
+                                                <div className="mt-0.5 italic opacity-70">
+                                                    described, not used yet
+                                                </div>
+                                            )}
                                         </td>
 
                                         <td>

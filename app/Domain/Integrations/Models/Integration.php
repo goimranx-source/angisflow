@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Integrations\Models;
 
 use App\Domain\Delivery\Models\CourierConnection;
+use App\Domain\Integrations\Support\FieldPath;
 use App\Domain\Integrations\Support\StatusMap;
 use App\Domain\Shared\Concerns\HasPublicId;
 use App\Domain\Tenancy\Concerns\BelongsToAccount;
@@ -312,7 +313,121 @@ class Integration extends Model
             'body' => $payload,
         ]);
 
+        data_set($metadata, 'seen_fields.'.$entity, $this->mergeSeenFields($metadata, $payload, $entity));
+
         $this->metadata = $metadata;
+    }
+
+    /**
+     * Add a record's custom fields to the remembered set without adopting it as
+     * the current example record.
+     *
+     * Exists for backfilling. A connection made before fields were remembered
+     * still has its last record stored, and reading the keys out of it is the
+     * difference between the memory starting full and starting empty and taking
+     * a week of orders to become useful.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function rememberFieldsOnly(array $payload, string $entity = 'order'): void
+    {
+        if ($payload === []) {
+            return;
+        }
+
+        $metadata = $this->metadata ?? [];
+
+        data_set($metadata, 'seen_fields.'.$entity, $this->mergeSeenFields($metadata, $payload, $entity));
+
+        $this->metadata = $metadata;
+    }
+
+    /**
+     * Every custom field this shop has ever sent, not only the last one's.
+     *
+     * ── Why one record is not enough ─────────────────────────────────────────
+     *
+     * Keeping only the newest record means the list of mappable custom fields
+     * changes with every order that arrives. An order placed through the website
+     * carries a delivery slot; one taken over the phone does not; and whichever
+     * landed most recently decides whether anybody can map delivery slots today.
+     * A mapping screen that offers a field in the morning and not in the
+     * afternoon is not a screen anybody can trust, and the field it drops is
+     * usually the one somebody was looking for.
+     *
+     * Standard fields do not have this problem any more — the shop describes
+     * those whether or not a record uses them. Custom fields are exactly the
+     * ones no schema lists, so they can only be learned by watching, and
+     * watching means remembering.
+     *
+     * ── Why only the keys and one example ────────────────────────────────────
+     *
+     * Because that is all a mapping screen shows. Keeping every value of every
+     * field would grow without limit and turn a settings aid into a copy of the
+     * order history, in a metadata column, with none of the protections real
+     * order storage has.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function mergeSeenFields(array $metadata, array $payload, string $entity): array
+    {
+        $seen = data_get($metadata, 'seen_fields.'.$entity, []);
+        $seen = is_array($seen) ? $seen : [];
+
+        foreach (FieldPath::flatten($payload) as $path => $value) {
+            // Only the invented ones. Standard fields come from the schema, and
+            // duplicating them here would double the size for nothing.
+            if (! self::isCustomPath($path)) {
+                continue;
+            }
+
+            /*
+             * First example wins.
+             *
+             * A field seen with a value keeps that value as its example even
+             * when a later order leaves it blank — an example of "" teaches
+             * nobody anything, and the guess at what type the field is depends
+             * on having something to look at.
+             */
+            if (filled($seen[$path] ?? null)) {
+                continue;
+            }
+
+            $seen[$path] = is_scalar($value) ? Str::limit((string) $value, 60) : null;
+        }
+
+        /*
+         * A ceiling, because this grows with a shop's plugins rather than with
+         * anything this application controls. Five hundred custom fields is far
+         * past the point where a mapping screen is the problem.
+         */
+        return count($seen) > 500 ? array_slice($seen, 0, 500, true) : $seen;
+    }
+
+    /** Is this path one of a shop's own invented fields rather than a standard one? */
+    private static function isCustomPath(string $path): bool
+    {
+        foreach (['meta_data', 'metafields', 'note_attributes', 'custom_fields', 'attributes'] as $container) {
+            if (str_contains($path, $container.'.')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The custom fields this shop has been seen to send, with an example of each.
+     *
+     * @return array<string, mixed> path => example value
+     */
+    public function seenFields(string $entity = 'order'): array
+    {
+        $seen = data_get($this->metadata ?? [], 'seen_fields.'.$entity, []);
+
+        return is_array($seen) ? $seen : [];
     }
 
     /**

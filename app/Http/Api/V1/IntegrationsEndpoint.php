@@ -16,12 +16,14 @@ use App\Domain\Integrations\Support\EntityFields;
 use App\Domain\Integrations\Support\FieldMap;
 use App\Domain\Integrations\Support\FieldMapSet;
 use App\Domain\Integrations\Support\FieldPath;
+use App\Domain\Integrations\Support\PlatformSchema;
 use App\Domain\Integrations\Support\StatusMap;
 use App\Domain\Integrations\Support\Transform;
 use App\Domain\Integrations\WebhookProvisioner;
 use App\Domain\Storefront\StorefrontService;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -471,14 +473,97 @@ class IntegrationsEndpoint
         $live = $integration->lastPayload($entity);
         $payload = $live ?? DemoPayloads::for((string) $integration->provider, $entity) ?? [];
 
+        /*
+         * What the shop says about itself, on top of what it has sent.
+         *
+         * These answer different questions and neither replaces the other. The
+         * record knows which custom fields this shop's plugins invented, which
+         * no schema anywhere lists. The schema knows every standard field —
+         * including the ones that happen to be empty on the record, which is
+         * how a shop with no coupon on its last order ends up unable to map
+         * coupons at all.
+         */
+        $described = $this->describe($integration, $entity);
+
+        /*
+         * A connection that predates remembering starts its memory from the
+         * record it already has, rather than from nothing. Otherwise the first
+         * person to open this screen after the change sees fewer fields than
+         * before it, which is a strange way to deliver an improvement.
+         */
+        if ($live !== null && $integration->seenFields($entity) === []) {
+            $integration->rememberFieldsOnly($live, $entity);
+            $integration->saveQuietly();
+        }
+
         $paths = [];
+        $seen = [];
 
         foreach (FieldPath::flatten($payload) as $path => $sample) {
+            $field = $described[$path] ?? null;
+            $seen[$path] = true;
+
             $paths[] = [
                 'path' => $path,
                 // Trimmed: a description field can run to a page, and this is a
                 // dropdown label rather than the record itself.
                 'sample' => is_scalar($sample) ? Str::limit((string) $sample, 60) : null,
+                'label' => $field?->label,
+                'readonly' => $field?->readonly ?? false,
+                'suggest' => $field?->transform(),
+                'choices' => $field?->choices() ?? [],
+                'note' => $field?->description,
+            ];
+        }
+
+        /*
+         * Then the custom fields this shop has sent before but not this time.
+         *
+         * Without this the list changes with every order that arrives: an order
+         * placed on the website carries a delivery slot, one taken over the
+         * phone does not, and whichever landed most recently decides whether
+         * anybody can map delivery slots today. Remembered keys make the screen
+         * the same screen each time it is opened.
+         */
+        foreach ($integration->seenFields($entity) as $path => $example) {
+            if (isset($seen[$path])) {
+                continue;
+            }
+
+            $seen[$path] = true;
+
+            $paths[] = [
+                'path' => $path,
+                'sample' => is_scalar($example) ? Str::limit((string) $example, 60) : null,
+                'label' => null,
+                'readonly' => false,
+                'suggest' => null,
+                'choices' => [],
+                'note' => 'Sent by this shop before, though not on the record read here.',
+            ];
+        }
+
+        /*
+         * Then the described fields no record showed.
+         *
+         * Marked so the screen can say why they have no value beside them —
+         * "this shop has never had a coupon" reads very differently from "this
+         * field is broken", and without the distinction the second is assumed.
+         */
+        foreach ($described as $path => $field) {
+            if (isset($seen[$path])) {
+                continue;
+            }
+
+            $paths[] = [
+                'path' => $path,
+                'sample' => null,
+                'label' => $field->label,
+                'readonly' => $field->readonly,
+                'suggest' => $field->transform(),
+                'choices' => $field->choices(),
+                'note' => $field->description,
+                'unused' => true,
             ];
         }
 
@@ -487,6 +572,11 @@ class IntegrationsEndpoint
                 'entity' => $entity,
                 'paths' => $paths,
                 'source' => $live !== null ? 'live' : ($payload === [] ? 'none' : 'sample'),
+
+                // Whether this shop was able to describe itself, so the screen
+                // can offer a refresh rather than leaving somebody wondering
+                // why another shop lists more fields than theirs.
+                'described' => $described !== [],
                 'captured_at' => $integration->lastPayloadAt($entity),
 
                 // What a mapping may point at, and how a value may be treated.
@@ -523,6 +613,77 @@ class IntegrationsEndpoint
                 'maps' => FieldMapSet::for($integration, $entity)->toArray(),
             ],
         ]);
+    }
+
+    /**
+     * What this shop says about its own fields, read at most once a day.
+     *
+     * ── Why it is cached ─────────────────────────────────────────────────────
+     *
+     * It is a network round trip to somebody else's shop, and the field mapping
+     * screen is opened repeatedly while a mapping is worked out. A schema
+     * changes when a plugin is installed or WooCommerce is updated — measured
+     * in months — so fetching it on every page open would spend a second of
+     * somebody's time to learn nothing, several times an hour.
+     *
+     * Stored against the integration rather than in the cache store, because it
+     * describes that shop rather than this request, and a cache flush should
+     * not silently shrink the list of fields somebody can map.
+     *
+     * @return array<string, PlatformSchema>
+     */
+    private function describe(Integration $integration, string $entity, bool $refresh = false): array
+    {
+        $key = 'field_schema.'.$entity;
+        $stored = data_get($integration->metadata ?? [], $key);
+
+        $fresh = is_array($stored)
+            && filled($stored['at'] ?? null)
+            && now()->diffInHours(Carbon::parse($stored['at']), true) < 24;
+
+        if (! $refresh && $fresh) {
+            return PlatformSchema::mappable(PlatformSchema::flatten(
+                PlatformSchema::fromJsonSchema($stored['properties'] ?? []),
+            ));
+        }
+
+        $driver = $this->registry->driver((string) $integration->provider);
+
+        // Only some platforms can answer. The screen worked before any of them
+        // could, and works unchanged for the ones that cannot.
+        $described = method_exists($driver, 'describeFields')
+            ? $driver->describeFields($integration, $entity)
+            : null;
+
+        if ($described === null) {
+            /*
+             * Keep whatever was stored before.
+             *
+             * A shop that answered last week and is briefly unreachable today
+             * should not lose every field it described — the list would shrink
+             * without explanation and mappings would look as though they point
+             * at nothing.
+             */
+            return is_array($stored)
+                ? PlatformSchema::mappable(PlatformSchema::flatten(PlatformSchema::fromJsonSchema($stored['properties'] ?? [])))
+                : [];
+        }
+
+        $metadata = $integration->metadata ?? [];
+        data_set($metadata, $key, ['at' => now()->toIso8601String(), 'properties' => $described]);
+
+        /*
+         * Saved without touching updated_at.
+         *
+         * Reading a schema is this application looking something up, not the
+         * shop changing — and every screen that shows when a connection was
+         * last touched would otherwise report a change that nobody made, every
+         * day, for ever.
+         */
+        $integration->metadata = $metadata;
+        $integration->saveQuietly();
+
+        return PlatformSchema::mappable(PlatformSchema::flatten(PlatformSchema::fromJsonSchema($described)));
     }
 
     /**

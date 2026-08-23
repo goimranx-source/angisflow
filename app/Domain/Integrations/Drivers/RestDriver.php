@@ -6,6 +6,7 @@ namespace App\Domain\Integrations\Drivers;
 
 use App\Domain\Integrations\Contracts\PlatformDriver;
 use App\Domain\Integrations\Models\Integration;
+use App\Domain\Integrations\Support\PlatformSchema;
 use App\Domain\Integrations\Support\ConnectionResult;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
@@ -463,6 +464,34 @@ abstract class RestDriver implements PlatformDriver
             Http::timeout($timeout ?? self::TIMEOUT)->acceptJson()->asJson(),
             $integration,
         );
+    }
+
+    /**
+     * What this shop says about its own fields, without being shown a record.
+     *
+     * ── Why this is asked of the driver rather than worked out here ──────────
+     *
+     * Every platform describes itself differently, and several do not describe
+     * themselves at all. WordPress answers an OPTIONS request with a JSON
+     * Schema; Shopify publishes a fixed schema per API version rather than
+     * serving one; a bare REST endpoint somebody wired up last week has nothing
+     * to say for itself.
+     *
+     * So the base declines. A driver that can do better overrides this, and the
+     * mapping screen falls back to what it has always done — reading the last
+     * record — for the ones that cannot.
+     *
+     * Returned raw, as the JSON Schema `properties` block the platform serves,
+     * rather than as anything interpreted. Raw survives being stored and read
+     * back a week later without a class needing to know how to rebuild itself,
+     * and PlatformSchema reads it wherever it is wanted.
+     *
+     * @return array<string, mixed>|null  Null when unsupported, which is not an
+     *                                    error.
+     */
+    public function describeFields(Integration $integration, string $entity): ?array
+    {
+        return null;
     }
 
     /**

@@ -10,8 +10,10 @@ use App\Domain\Integrations\Contracts\PullsRecords;
 use App\Domain\Integrations\Contracts\PushesRecords;
 use App\Domain\Integrations\Contracts\ReadsRecord;
 use App\Domain\Integrations\Models\Integration;
+use App\Domain\Integrations\Models\IntegrationLink;
 use App\Domain\Integrations\Support\Capabilities;
 use App\Domain\Integrations\Support\ConfigField;
+use App\Domain\Integrations\Support\PlatformSchema;
 use App\Domain\Integrations\Support\PullPage;
 use App\Domain\Integrations\Support\RemoteWebhook;
 use Carbon\CarbonInterface;
@@ -258,6 +260,70 @@ class WooCommerceDriver extends RestDriver implements ListsStatuses, ManagesWebh
                 secret: true,
             ),
         ];
+    }
+
+    /**
+     * Ask the shop to describe its own fields.
+     *
+     * ── What this buys ───────────────────────────────────────────────────────
+     *
+     * WordPress answers an OPTIONS request on any REST route with the JSON
+     * Schema for that resource, and WooCommerce's is unusually complete: 47
+     * fields for an order and 72 for a product, every one of them carrying a
+     * description, most carrying whether they are writable, and several
+     * carrying the fixed set of values they accept.
+     *
+     * Three of those matter enough on their own to justify the request.
+     *
+     * Read-only. Twenty-nine of an order's forty-seven fields cannot be
+     * written. Woo does not refuse a write to them — it answers 200 and
+     * discards it, which is how this application spent an afternoon convinced
+     * that product prices were syncing when every one of them was being thrown
+     * away. The schema states it outright.
+     *
+     * Fixed values. An order's status is one of eleven words and a product's
+     * type is one of four. Read from a record, each looks like free text.
+     *
+     * Fields that are empty today. A shop with no coupon on its most recent
+     * order still has coupon_lines, with a code and a discount underneath it,
+     * and the schema describes them whether or not anybody has used one.
+     *
+     * ── Failure is silent on purpose ─────────────────────────────────────────
+     *
+     * A security plugin blocking OPTIONS, an older WooCommerce, a proxy that
+     * strips the method — none of those are worth an error on a settings
+     * screen, because the screen worked before this existed and still does. It
+     * simply offers fewer fields.
+     *
+     * @return array<string, mixed>|null  The raw JSON Schema properties block.
+     */
+    public function describeFields(Integration $integration, string $entity): ?array
+    {
+        $route = match ($entity) {
+            IntegrationLink::ORDER => 'orders',
+            IntegrationLink::PRODUCT => 'products',
+            'customer' => 'customers',
+            default => null,
+        };
+
+        if ($route === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->client($integration)
+                ->send('OPTIONS', $this->baseUrl($integration).'/'.$route);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $properties = $response->json('schema.properties');
+
+        return is_array($properties) && $properties !== [] ? $properties : null;
     }
 
     protected function baseUrl(Integration $integration): string
