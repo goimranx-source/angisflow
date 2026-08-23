@@ -21,6 +21,9 @@ type Editor = {
         shop: string | null;
         symbol: string;
         statuses: Array<{ value: string; label: string; custom?: boolean }>;
+        storefronts: Array<{ id: string; name: string }>;
+        couriers: Array<{ id: string; label: string | null }>;
+        dispatch: { courier: string | null; status: string | null } | null;
     };
 };
 
@@ -57,6 +60,8 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
     const [custom, setCustom] = useState<Record<string, unknown>>({});
     const [lines, setLines] = useState<OrderLine[]>([]);
     const [dirty, setDirty] = useState(false);
+    const [courier, setCourier] = useState('');
+    const [dispatching, setDispatching] = useState(false);
 
     useEffect(() => {
         if (!data) {
@@ -91,6 +96,30 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
         },
         onError: (error: Error) => toast.error(error.message || 'That could not be saved.'),
     });
+
+    /*
+     * Handing the order to a courier.
+     *
+     * Its own request rather than a field on the form: dispatching creates a
+     * shipment and cannot be undone by pressing Cancel, so folding it into
+     * "unsaved changes" would misrepresent what pressing it does.
+     */
+    const sendToCourier = async (): Promise<void> => {
+        setDispatching(true);
+
+        try {
+            await api.post(`/orders/${orderId}/dispatch`, { courier_id: courier });
+
+            toast.success('Sent to the courier.');
+
+            void queryClient.invalidateQueries({ queryKey: ['order-editor', orderId] });
+            void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'That could not be sent.');
+        } finally {
+            setDispatching(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -293,22 +322,25 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                         { value: 'unpaid', label: 'Unpaid' },
                                     ]}
                                 />
+                                {/*
+                                  The shop, not a channel.
+
+                                  Channel asked whether a sale was "online" or
+                                  "phone" — a distinction nobody maintained and
+                                  which said nothing the shop did not already
+                                  say. The storefront is the real answer: it
+                                  decides the tag on the order number, the
+                                  currency, and where a push travels.
+                                */}
                                 <Choice
-                                    name="fulfilment_status"
-                                    label="Fulfilment"
+                                    name="storefront_id"
+                                    label="Store"
                                     options={[
-                                        { value: 'unfulfilled', label: 'Not dispatched' },
-                                        { value: 'fulfilled', label: 'Dispatched' },
-                                    ]}
-                                />
-                                <Choice
-                                    name="channel"
-                                    label="Channel"
-                                    options={[
-                                        { value: 'online', label: 'Online' },
-                                        { value: 'pos', label: 'Point of sale' },
-                                        { value: 'phone', label: 'Phone' },
-                                        { value: 'api', label: 'API' },
+                                        { value: '', label: 'Walk-in / counter' },
+                                        ...editor.storefronts.map((shop) => ({
+                                            value: shop.id,
+                                            label: shop.name,
+                                        })),
                                     ]}
                                 />
                                 <Text name="ordered_on" label="Order date" type="date" />
@@ -484,6 +516,73 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                     travel back when you save.
                                 </span>
                             </p>
+                        )}
+                    </Card>
+
+                    {/*
+                      Sending it, rather than declaring it sent.
+
+                      This replaced a Fulfilment dropdown offering "dispatched"
+                      and "not dispatched" as though they were things somebody
+                      decides. They are not — they are what becomes true once an
+                      order is actually handed to a courier, and a field that
+                      let you claim either without doing it could only ever
+                      disagree with the courier.
+
+                      Dispatching is its own action against its own endpoint, so
+                      it is not part of the form's unsaved changes: it happens
+                      when pressed, not when saved.
+                    */}
+                    <Card title="Delivery">
+                        {editor.dispatch ? (
+                            <div className="text-sm">
+                                <p className="font-medium text-[var(--color-text-main)]">
+                                    {editor.dispatch.courier ?? 'A courier'}
+                                </p>
+                                <p className="mt-0.5 text-xs capitalize text-[var(--color-text-muted)]">
+                                    {editor.dispatch.status ?? 'Sent'}
+                                </p>
+                            </div>
+                        ) : editor.couriers.length === 0 ? (
+                            <p className="text-xs text-[var(--color-text-subtle)]">
+                                No couriers are connected yet.
+                            </p>
+                        ) : (
+                            <div>
+                                <label
+                                    htmlFor="f-send-to"
+                                    className="mb-1.5 block text-[13px] font-medium text-[var(--color-text-body)]"
+                                >
+                                    Send to
+                                </label>
+                                <select
+                                    id="f-send-to"
+                                    className="field w-full"
+                                    value={courier}
+                                    disabled={dispatching}
+                                    onChange={(event) => setCourier(event.target.value)}
+                                >
+                                    <option value="">Choose a courier…</option>
+                                    {editor.couriers.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.label ?? 'Courier'}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary mt-2 w-full text-sm"
+                                    disabled={courier === '' || dispatching}
+                                    onClick={() => sendToCourier()}
+                                >
+                                    {dispatching ? 'Sending…' : 'Send this order'}
+                                </button>
+
+                                <p className="mt-2 text-[11px] text-[var(--color-text-subtle)]">
+                                    Sends straight away — it is not part of your unsaved changes.
+                                </p>
+                            </div>
                         )}
                     </Card>
 

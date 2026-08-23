@@ -996,6 +996,18 @@ class OrdersEndpoint
                     'notes' => $model->notes,
                     'currency' => $model->currency,
 
+                    /*
+                     * Which shop this order belongs to.
+                     *
+                     * It replaced the channel field, which asked whether a sale
+                     * was "online" or "phone" - a distinction nobody here
+                     * maintained and which said nothing the shop did not
+                     * already say. The storefront is the real answer: it
+                     * decides the tag on the order number, the currency, and
+                     * which shop a push travels to.
+                     */
+                    'storefront_id' => $model->storefront?->public_id,
+
                     'shipping_name' => $model->shipping_name,
                     'shipping_phone' => $model->shipping_phone,
                     'shipping_address' => $model->shipping_address,
@@ -1071,6 +1083,44 @@ class OrdersEndpoint
                 'shop' => $model->storefront?->name,
                 'symbol' => Currencies::symbol((string) $model->currency),
 
+                /*
+                 * The shops this business sells through, so the field offers
+                 * real choices rather than a vocabulary somebody has to know.
+                 */
+                'storefronts' => Storefront::query()
+                    ->where('business_id', $business->id)
+                    ->orderBy('name')
+                    ->get(['public_id', 'name'])
+                    ->map(fn ($shop): array => ['id' => $shop->public_id, 'name' => $shop->name])
+                    ->all(),
+
+                /*
+                 * Where this order stands with a courier, and who it could go
+                 * to.
+                 *
+                 * This replaced the fulfilment dropdown, which offered
+                 * "dispatched" and "not dispatched" as though they were things
+                 * somebody decides rather than things that happen when an order
+                 * is actually handed to a courier. Sending it is the real
+                 * action; the status follows from it.
+                 */
+                'dispatch' => $model->shipments()->latest('id')->first() === null ? null : [
+                    'courier' => $model->shipments()->latest('id')->first()?->courierConnection?->label,
+                    'status' => $model->shipments()->latest('id')->first()?->status,
+                ],
+
+                'couriers' => CourierConnection::query()
+                    ->where('business_id', $business->id)
+                    ->usable()
+                    ->with('courier:id,name,slug')
+                    ->orderBy('label')
+                    ->get()
+                    ->map(fn ($conn): array => [
+                        'id' => $conn->public_id,
+                        'label' => $conn->label ?? $conn->courier?->name,
+                    ])
+                    ->all(),
+
                 'statuses' => array_values(collect(OrderStatuses::for($business))
                     ->map(fn (array $s, string $k): array => [
                         'value' => $k,
@@ -1112,7 +1162,7 @@ class OrdersEndpoint
             'status' => ['sometimes', 'string', 'max:40'],
             'payment_status' => ['sometimes', 'string', 'in:paid,unpaid'],
             'fulfilment_status' => ['sometimes', 'string', 'in:fulfilled,unfulfilled'],
-            'channel' => ['sometimes', 'string', 'max:20'],
+            'storefront_id' => ['sometimes', 'nullable', 'string', 'max:40'],
             'is_cod' => ['sometimes', 'boolean'],
             'ordered_on' => ['sometimes', 'nullable', 'date'],
             'external_ref' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -1158,7 +1208,7 @@ class OrdersEndpoint
 
         $changes = [];
 
-        foreach (['status', 'payment_status', 'fulfilment_status', 'channel', 'is_cod',
+        foreach (['status', 'payment_status', 'is_cod',
             'external_ref', 'notes', 'shipping_name', 'shipping_phone', 'shipping_address',
             'shipping_city', 'shipping_postcode', 'shipping_country'] as $field) {
             if (array_key_exists($field, $validated)) {
@@ -1168,6 +1218,24 @@ class OrdersEndpoint
 
         if (array_key_exists('ordered_on', $validated)) {
             $changes['ordered_on'] = $validated['ordered_on'];
+        }
+
+        if (array_key_exists('storefront_id', $validated)) {
+            if (blank($validated['storefront_id'])) {
+                // Null is a real answer: the order was taken at the counter.
+                $changes['storefront_id'] = null;
+            } else {
+                // Looked up within this business, so an id from somebody else's
+                // account cannot move an order into their shop.
+                $shop = Storefront::query()
+                    ->where('business_id', $business->id)
+                    ->where('public_id', $validated['storefront_id'])
+                    ->first();
+
+                abort_if($shop === null, 422, 'That shop does not belong to this business.');
+
+                $changes['storefront_id'] = $shop->id;
+            }
         }
 
         // Typed back into minor units here, so the rest of the application
@@ -1258,8 +1326,20 @@ class OrdersEndpoint
             return $pushes->jobsFor($model->fresh());
         });
 
+        /*
+         * Queued when something is listening, carried out here when not.
+         *
+         * dispatch() alone reports success whether or not a worker exists, so
+         * on a machine with none the job lands in the table and stays there —
+         * which is exactly what happened to an edited quantity: saved, owed,
+         * and never sent. The debt makes that visible rather than silent, but
+         * visible is not the same as delivered.
+         *
+         * See PushDispatcher, which draws the same distinction for every other
+         * path into a shop.
+         */
         foreach ($jobs as $job) {
-            dispatch($job);
+            $pushes->hasWorker() ? dispatch($job) : dispatch($job)->afterResponse();
         }
 
         return response()->json([
@@ -1443,8 +1523,20 @@ class OrdersEndpoint
             ], 422);
         }
 
+        /*
+         * Queued when something is listening, carried out here when not.
+         *
+         * dispatch() alone reports success whether or not a worker exists, so
+         * on a machine with none the job lands in the table and stays there —
+         * which is exactly what happened to an edited quantity: saved, owed,
+         * and never sent. The debt makes that visible rather than silent, but
+         * visible is not the same as delivered.
+         *
+         * See PushDispatcher, which draws the same distinction for every other
+         * path into a shop.
+         */
         foreach ($jobs as $job) {
-            dispatch($job);
+            $pushes->hasWorker() ? dispatch($job) : dispatch($job)->afterResponse();
         }
 
         return response()->json([
