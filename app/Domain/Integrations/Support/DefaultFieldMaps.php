@@ -266,14 +266,44 @@ final class DefaultFieldMaps
                  * fields a shop's own plugins added cannot be guessed.
                  */
                 self::row('sku', 'variant.sku'),
-                self::row('price', 'variant.price_minor'),
-                self::row('regular_price', 'variant.compare_at_minor'),
+                /*
+                 * ── Which of WooCommerce's three prices is the real one ──────
+                 *
+                 * `price` is read-only. WooCommerce computes it from the other
+                 * two — regular_price normally, sale_price while a sale is on —
+                 * and silently discards anything written to it. Mapped both
+                 * ways, as it was, a price changed here was sent, accepted with
+                 * a 200, and ignored: the shop kept the old figure and nothing
+                 * anywhere said why.
+                 *
+                 * So it is read only, and `regular_price` — the writable one —
+                 * carries our price in both directions.
+                 *
+                 * compare_at_minor is our "was" price and belongs against
+                 * sale_price's counterpart, not against regular_price; mapping
+                 * it there made a discount overwrite the normal price.
+                 */
+                self::row('regular_price', 'variant.price_minor'),
+                self::row('sale_price', 'variant.compare_at_minor', FieldMap::IN),
                 self::row('weight', 'variant.weight_grams'),
 
-                // Images, per shop, on the link — two shops list the same
-                // product with different photography.
-                self::row('images', 'custom.image'),
-                self::row('images', 'custom.gallery'),
+                /*
+                 * Images, per shop, on the link — two shops list the same
+                 * product with different photography.
+                 *
+                 * Brought in only, by default. A shop's media library is its
+                 * own: sending the URLs back makes it fetch and store the same
+                 * pictures again as fresh attachments, so a catalogue quietly
+                 * grows a duplicate of every image each time a product is
+                 * saved here.
+                 *
+                 * Anybody who genuinely wants to publish photography from this
+                 * side can set these to Both ways on the mapping screen, and
+                 * the transform now sends the shape a shop expects rather than
+                 * the joined text we store.
+                 */
+                self::row('images', 'custom.image', FieldMap::IN),
+                self::row('images', 'custom.gallery', FieldMap::IN),
             ],
         ];
     }
@@ -335,8 +365,12 @@ final class DefaultFieldMaps
                 self::row('variants.0.compare_at_price', 'variant.compare_at_minor'),
                 self::row('variants.0.barcode', 'variant.barcode'),
 
-                self::row('images', 'custom.image'),
-                self::row('images', 'custom.gallery'),
+                // Brought in only, for the reason given on the WooCommerce
+                // block above: a shop's media library is its own, and sending
+                // the URLs back has it re-fetch every picture as a new
+                // attachment.
+                self::row('images', 'custom.image', FieldMap::IN),
+                self::row('images', 'custom.gallery', FieldMap::IN),
             ],
         ];
     }

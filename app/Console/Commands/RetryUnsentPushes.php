@@ -48,7 +48,18 @@ final class RetryUnsentPushes extends Command
         $cutoff = now()->subMinutes((int) $this->option('minutes'));
 
         $links = IntegrationLink::withoutGlobalScopes()
-            ->where('entity', IntegrationLink::ORDER)
+            /*
+             * Every kind of record, not only orders.
+             *
+             * This was written when orders were the only thing that pushed, and
+             * silently stopped covering the catalogue the moment products began
+             * to. A product whose push never ran would have stayed owed for
+             * ever with a sweep running every five minutes past it.
+             *
+             * The job takes the entity as a parameter, so nothing else here has
+             * to know which kinds exist.
+             */
+            ->whereIn('entity', [IntegrationLink::ORDER, IntegrationLink::PRODUCT])
             ->whereNotNull('push_pending_at')
             ->where('push_pending_at', '<=', $cutoff)
             ->when(! $this->option('include-failed'), fn ($q) => $q->whereNull('push_error'))

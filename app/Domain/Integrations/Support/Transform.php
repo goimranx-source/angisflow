@@ -129,8 +129,68 @@ final class Transform
             'date' => self::toIsoDate($value),
             'boolean' => (bool) $value,
             'integer' => is_numeric($value) ? (int) $value : $value,
+
+            /*
+             * Media goes back as a list of objects, not as the text we stored.
+             *
+             * ── Why the stored form cannot simply be sent ────────────────────
+             *
+             * Coming in, a gallery is flattened to one readable string so it
+             * can live in a single column. Sent back unchanged that string is
+             * what the shop receives — and WooCommerce answers a joined string
+             * in `images` with "Invalid parameter(s): images" and rejects the
+             * entire request, so a price change travelling beside it never
+             * lands either.
+             *
+             * Every platform in the catalogue that accepts images at all wants
+             * the same shape: a list of objects carrying a src. Restoring it
+             * here means the reverse of an import is an export, which is what
+             * a transform is for.
+             */
+            'image', 'image_list' => self::toImageList($value),
+            'list' => self::toList($value),
+
             default => $value,
         };
+    }
+
+    /**
+     * The shape a platform expects a gallery in.
+     *
+     * @return list<array{src: string}>
+     */
+    private static function toImageList(mixed $value): array
+    {
+        return array_values(array_map(
+            static fn (string $url): array => ['src' => $url],
+            self::toList($value),
+        ));
+    }
+
+    /**
+     * Back to the separate values a joined string was made from.
+     *
+     * @return list<string>
+     */
+    private static function toList(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map(
+                static fn ($item): string => is_string($item) ? trim($item) : '',
+                $value,
+            )));
+        }
+
+        if (! is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        // Split on the separator the inbound side joins with. Newlines too,
+        // because a value edited by hand in a text box will have them.
+        return array_values(array_filter(array_map(
+            'trim',
+            preg_split('/[,\n]+/', $value) ?: [],
+        )));
     }
 
     /**
