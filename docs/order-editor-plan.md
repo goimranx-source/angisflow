@@ -222,3 +222,115 @@ own those keys — worth testing one plugin field before trusting the pattern. A
 a 141-field form is unusable however well grouped; the built-ins stay hand-laid,
 the shop's own fields get their own section, and the long tail lives behind
 "show everything".
+
+---
+
+## 10. How a field nobody wrote code for gets the right control
+
+Every shop is different. One business adds *Order Source* and *Expected
+Delivery*; the next adds *Gift Wrap* and *Warehouse Bay*. None of them can be
+hard-coded, and all of them must appear with the right control — a date picker
+for a date, a dropdown with the actual options for a choice, a file picker for a
+file.
+
+**The hard part: WooCommerce meta carries no type.** It is a flat list of
+`{key, value}`. Nothing in the payload says *Order Priority is a dropdown of
+three options*. Woo core keeps no registry of order meta, and the plugins that
+add checkout fields each store their definitions privately — so there is nothing
+to read. The type has to be worked out.
+
+Three layers, each correcting the one before.
+
+### Layer 1 — Read the value (works on the first order, no setup)
+
+| Value seen | Control |
+|---|---|
+| `30/08/2026`, `2026-08-30` | date |
+| `yes` / `no`, `1` / `0`, `true` | switch |
+| `https://…/photo.jpg` | image |
+| `https://…/spec.pdf` | file |
+| `https://…` | link |
+| text with newlines, or > 120 chars | textarea |
+| purely numeric | number |
+| anything else | text |
+
+Right often enough to be useful immediately, and never blocking: a wrong guess is
+a text box where a nicer control belonged, not a broken field.
+
+### Layer 2 — Learn from what has been seen (improves by itself)
+
+A key whose value is drawn from a small fixed set is a dropdown, and the set is
+its options. Nobody has to say so — it can be observed.
+
+Every synced order already stores its meta on the link. Counting distinct values
+per key across a connection's orders:
+
+- `order_source` → facebook, whatsapp, phone, website ⇒ **select** with those four
+- `order_customer_priority` → low, medium, high ⇒ **select**
+- `order_team_note` → 200 orders, 200 different values ⇒ **free text**
+
+Rule: **20 or more orders seen, 12 or fewer distinct values, none longer than 40
+characters ⇒ offer it as a select** with the observed values, plus whatever is
+already on the order being edited so an unseen value is never silently dropped.
+
+Below that threshold it stays as Layer 1 decided. Today you have one order stored,
+so this contributes nothing yet — it starts paying as orders accumulate.
+
+### Layer 3 — Say what it is (always wins)
+
+A **Shop fields** screen per connection, listing every meta key seen, with:
+
+- **Label** — `order_expected_delivery` → "Expected Delivery"
+- **Type** — the guess, changeable, including image / file / video
+- **Options** — for a select, editable list
+- **Editable?** — or read-only
+- **Where** — form, media column, or hidden
+
+Saved against the connection, so the answer is given once and every future order
+uses it. This is what makes the system genuinely per-store: two businesses on
+WooCommerce with entirely different fields each configure their own, and neither
+needs anything built for them.
+
+### Grouping — by key prefix
+
+`billing_thana` belongs with the billing address, not in a bucket of leftovers.
+Keys are grouped on their first segment:
+
+- `billing_*` → into the Billing card
+- `shipping_*` → into the Delivery card
+- `order_*` → "Order details"
+- everything else → "Shop fields"
+
+So your `billing_thana` and `shipping_thana` land inside the address blocks where
+somebody looking for them would expect them.
+
+### Your fields, as the three layers would handle them
+
+| Key | Value | Layer 1 guess | After Layer 2 | Where |
+|---|---|---|---|---|
+| `order_source` | `facebook` | text | **select**: facebook, whatsapp, … | Order details |
+| `order_customer_priority` | `medium` | text | **select**: low, medium, high | Order details |
+| `order_expected_delivery` | `30/08/2026` | **date** ✓ | date | Order details |
+| `order_team_note` | `fdada` | text | free text (many values) | Order details |
+| `customer_payment_amount` | `0, COD, N/A;` | text ✓ | free text | Order details |
+| `billing_thana` | `BD-58-05` | text ✓ | select once enough seen | **Billing card** |
+| `shipping_thana` | `BD-58-05` | text ✓ | select once enough seen | **Delivery card** |
+| `commission_data` | *(nested object)* | JSON, read-only | — | hidden |
+
+Four of the eight land correctly with no configuration at all. Two more become
+dropdowns on their own as orders accumulate. Only relabelling — turning
+`order_expected_delivery` into "Expected Delivery" — genuinely wants a human, and
+that is one screen visited once.
+
+### Writing back
+
+WooCommerce takes meta as `meta_data: [{key, value}]`, merged rather than
+replaced — sending a partial list must not erase keys the form never showed.
+
+Two cautions:
+
+- Many keys exist twice, `_billing_thana` alongside `billing_thana`. Which one a
+  plugin reads varies; write the public one and test one field before trusting
+  the pattern across all of them.
+- Meta owned by a plugin (`_commission_data`) stays read-only. Writing another
+  system's bookkeeping by hand is how its records stop adding up.
