@@ -456,6 +456,17 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
      */
     Route::post('orders/{order}/retry-push', [OrdersEndpoint::class, 'retryPush'])
         ->middleware('can:sales.edit')->name('orders.retry-push');
+    /*
+     * The edit screen: what to draw, and where to save it.
+     *
+     * The schema is a read and the save is a write, so they carry different
+     * permissions — somebody who may look at the order book can open the form
+     * and see it filled in, and only somebody who may change it can submit.
+     */
+    Route::get('orders/{order}/editor', [OrdersEndpoint::class, 'editor'])
+        ->middleware('can:sales.view')->name('orders.editor');
+    Route::patch('orders/{order}', [OrdersEndpoint::class, 'updateOrder'])
+        ->middleware('can:sales.edit')->name('orders.update');
     Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])
         ->middleware('can:sales.view')->name('orders.bulk-progress');
     Route::post('orders/{orderId}/dispatch', [OrdersEndpoint::class, 'dispatch'])

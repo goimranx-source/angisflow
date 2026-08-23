@@ -7,11 +7,8 @@ import {
     FilterSelect,
     ViewToggleButton,
     DetailDrawer,
-    DrawerSection,
-    DrawerField,
     StatusBadge,
     BulkActions,
-    BulkActionButton,
     SelectCheckbox,
     QuickCreateModal,
     QuickActionButton,
@@ -23,6 +20,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useMoney } from '@/hooks/useMoney';
 import { RowAction, RowActionMenu, RowActions } from '@/components/modules/RowActions';
 import { BulkActionsMenu, type BulkActionGroup } from '@/components/modules/BulkActionsMenu';
+import { OrderEditor } from './orders/OrderEditor';
 import {
     downloadCsv,
     orderImportCsv,
@@ -232,7 +230,14 @@ export default function Orders() {
      * Off by default: an order is read far more often than it is edited, and a
      * screen full of dropdowns invites a change nobody came to make.
      */
-    const [editing, setEditing] = useState(false);
+    /*
+     * The order open in the full editor, if any.
+     *
+     * Held by id rather than by object: the editor fetches its own copy, so
+     * what it shows is the order as it is now rather than as the list last saw
+     * it.
+     */
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
@@ -1441,7 +1446,7 @@ export default function Orders() {
                                                     <RowAction
                                                         icon="note-pencil"
                                                         label="Edit order"
-                                                        onClick={() => setSelectedOrder(order)}
+                                                        onClick={() => setEditingId(order.id)}
                                                     />
                                                     <RowAction
                                                         icon="arrow-counter-clockwise"
@@ -1476,7 +1481,7 @@ export default function Orders() {
                                                     <RowAction
                                                         icon="note-pencil"
                                                         label="Edit order"
-                                                        onClick={() => setSelectedOrder(order)}
+                                                        onClick={() => setEditingId(order.id)}
                                                     />
 
                                                     <RowAction
@@ -1798,8 +1803,7 @@ export default function Orders() {
                                               icon: 'note-pencil',
                                               description: `Order ${only.order_number}`,
                                               onSelect: () => {
-                                                  setSelectedOrder(only);
-                                                  setEditing(true);
+                                                  setEditingId(only.id);
                                                   setSelectedOrders([]);
                                               },
                                           },
@@ -2014,15 +2018,30 @@ export default function Orders() {
                 })()}
             </BulkActions>
 
+            {/*
+              The full editor, in a panel wide enough for two columns.
+
+              Its own drawer rather than a mode inside the detail one: reading
+              an order and editing it want different widths, and stacking them
+              in the same panel meant the read view inherited a form's
+              proportions or the form inherited a reading panel's.
+            */}
+            <DetailDrawer
+                open={editingId !== null}
+                onClose={() => setEditingId(null)}
+                title="Edit order"
+                subtitle={editingId ? orders.find((o) => o.id === editingId)?.order_number ?? '' : ''}
+                size="2xl"
+            >
+                {editingId && (
+                    <OrderEditor orderId={editingId} onClose={() => setEditingId(null)} />
+                )}
+            </DetailDrawer>
+
             {/* Detail Drawer */}
             <DetailDrawer
                 open={!!selectedOrder}
-                onClose={() => {
-                    setSelectedOrder(null);
-                    // Closed, not remembered: the next order opens read-only
-                    // like every other one.
-                    setEditing(false);
-                }}
+                onClose={() => setSelectedOrder(null)}
                 title={selectedOrder?.order_number ?? ''}
                 subtitle={selectedOrder ? `${selectedOrder.customer?.name ?? 'Walk-in'} · ${formatDate(selectedOrder.date)}` : ''}
                 tabs={[
@@ -2102,79 +2121,6 @@ export default function Orders() {
                                         <span>{channelLabels[selectedOrder.channel]}</span>
                                     </div>
                                 </div>
-
-                                {/*
-                                  Revealed by the pencil, rather than always on.
-
-                                  These two are the whole of what one order can
-                                  be changed to from here, and until now neither
-                                  could be: changing a single order's status
-                                  meant selecting it and reaching for a bulk
-                                  action, which is a strange way to edit one
-                                  thing.
-
-                                  The local copy is corrected alongside the
-                                  request, so the drawer does not sit showing the
-                                  old value while the list refetches behind it.
-                                */}
-                                {editing && (
-                                    <DrawerSection title="Change">
-                                        <div className="grid gap-3 sm:grid-cols-2">
-                                            <label className="block">
-                                                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                                                    Order status
-                                                </span>
-                                                <select
-                                                    className="field field-sm w-full"
-                                                    value={selectedOrder.status}
-                                                    disabled={bulkUpdate.isPending}
-                                                    onChange={(event) => {
-                                                        const status = event.target.value;
-                                                        setSelectedOrder({ ...selectedOrder, status });
-                                                        bulkUpdate.mutate({
-                                                            order_ids: [selectedOrder.id],
-                                                            action: 'update_status',
-                                                            status,
-                                                        });
-                                                    }}
-                                                >
-                                                    {allStatuses.map((status) => (
-                                                        <option key={status.value} value={status.value}>
-                                                            {status.label}
-                                                            {status.custom ? ' (Custom)' : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-
-                                            <label className="block">
-                                                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                                                    Payment
-                                                </span>
-                                                <select
-                                                    className="field field-sm w-full"
-                                                    value={selectedOrder.payment_status}
-                                                    disabled={bulkUpdate.isPending}
-                                                    onChange={(event) => {
-                                                        const payment = event.target.value as 'paid' | 'unpaid';
-                                                        setSelectedOrder({ ...selectedOrder, payment_status: payment });
-                                                        bulkUpdate.mutate({
-                                                            order_ids: [selectedOrder.id],
-                                                            action: 'update_status',
-                                                            payment_status: payment,
-                                                        });
-                                                    }}
-                                                >
-                                                    {Object.entries(paymentLabels).map(([value, label]) => (
-                                                        <option key={value} value={value}>
-                                                            {label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                        </div>
-                                    </DrawerSection>
-                                )}
 
                                 {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
                                     <div className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -2587,8 +2533,8 @@ export default function Orders() {
                                 <>
                                     <RowAction
                                         icon="note-pencil"
-                                        label={editing ? 'Done editing' : 'Edit order'}
-                                        onClick={() => setEditing((was) => !was)}
+                                        label="Edit order"
+                                        onClick={() => setEditingId(selectedOrder.id)}
                                     />
 
                                     <RowAction

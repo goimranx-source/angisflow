@@ -10,7 +10,9 @@ use App\Domain\Delivery\Models\CourierConnection;
 use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Delivery\ShipmentTracker;
 use App\Domain\Integrations\PushDispatcher;
+use App\Domain\Integrations\Support\FieldMapSet;
 use App\Domain\Integrations\Support\OrderStatuses;
+use App\Domain\Integrations\Support\Transform;
 use App\Domain\Money\Currencies;
 use App\Domain\Money\CurrencyService;
 use App\Domain\Sales\Models\Order;
@@ -894,6 +896,290 @@ class OrdersEndpoint
                 'pushes' => count($queued),
             ],
         ], $failed > 0 && $updated === 0 ? 422 : 200);
+    }
+
+    /**
+     * Everything the edit screen needs to draw itself, for one order.
+     *
+     * ── Why the form is described here and not hard-coded in the page ────────
+     *
+     * Because what an order carries is not the same from one business to the
+     * next. The built-in fields are fixed and can be laid out by hand — every
+     * shop has a status, an address, a total. Custom fields are not: a business
+     * defines its own, gives each one a type, and a screen that does not know
+     * about them either ignores what its owner told it to keep or has to be
+     * rewritten every time somebody adds one.
+     *
+     * So the page gets the definitions and renders by type. A delivery slot is
+     * a text box, a gift-wrap flag is a switch, a proof-of-delivery photo goes
+     * in the media column — decided from the type, not from a list of names
+     * somebody has to maintain.
+     *
+     * `mapped` says which built-in fields this shop actually sends. Nothing is
+     * hidden on the strength of it — an order can be edited here whether or not
+     * a shop fills the field — but it lets the screen lead with what this
+     * business really uses instead of showing every field at equal weight.
+     */
+    public function editor(string $order): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $model = Order::query()
+            ->with(['customer', 'storefront'])
+            ->where('business_id', $business->id)
+            ->where('public_id', $order)
+            ->firstOrFail();
+
+        $scale = 10 ** Currencies::scale((string) $model->currency);
+
+        $money = fn (?int $minor): float => round(((int) $minor) / $scale, 2);
+
+        /*
+         * The link carries the custom values, not the order.
+         *
+         * Custom fields belong to the shop's mapping rather than to our schema,
+         * so they live alongside the link that ties this order to that shop.
+         * An order placed at the counter has no link and therefore no customs,
+         * which is correct rather than a gap.
+         */
+        $link = IntegrationLink::query()
+            ->where('entity', IntegrationLink::ORDER)
+            ->where('linkable_id', $model->id)
+            ->first();
+
+        $integration = $link?->integration;
+
+        $mapped = [];
+
+        if ($integration !== null) {
+            foreach (FieldMapSet::for($integration, 'order')->toArray() as $map) {
+                $mapped[] = $map['target'] ?? null;
+            }
+        }
+
+        /*
+         * A business's own fields, each with the type it was given.
+         *
+         * The type is a transform name — the same vocabulary the mapping screen
+         * uses — so a field defined once is understood the same way by the
+         * sync, the push and this form.
+         */
+        $customFields = collect($business->custom_fields['order'] ?? [])
+            ->map(fn (array $field): array => [
+                'key' => (string) ($field['key'] ?? ''),
+                'label' => (string) ($field['label'] ?? $field['key'] ?? ''),
+                'type' => (string) ($field['type'] ?? 'trim'),
+                // The same human name the mapping screen shows, so a field
+                // means one thing in both places.
+                'type_label' => Transform::options()[(string) ($field['type'] ?? 'trim')] ?? 'Text',
+            ])
+            ->filter(fn (array $field): bool => $field['key'] !== '')
+            ->values()
+            ->all();
+
+        return response()->json([
+            'data' => [
+                'id' => $model->public_id,
+                'number' => $model->number,
+
+                'values' => [
+                    'status' => $model->status,
+                    'payment_status' => $model->payment_status,
+                    'fulfilment_status' => $model->fulfilment_status,
+                    'channel' => $model->channel,
+                    'is_cod' => (bool) $model->is_cod,
+                    'ordered_on' => $model->ordered_on?->toDateString(),
+                    'external_ref' => $model->external_ref,
+                    'notes' => $model->notes,
+                    'currency' => $model->currency,
+
+                    'shipping_name' => $model->shipping_name,
+                    'shipping_phone' => $model->shipping_phone,
+                    'shipping_address' => $model->shipping_address,
+                    'shipping_city' => $model->shipping_city,
+                    'shipping_postcode' => $model->shipping_postcode,
+                    'shipping_country' => $model->shipping_country,
+
+                    // Sent as decimals, in the order's own currency, because
+                    // that is what somebody types. Scaled back on the way in.
+                    'subtotal' => $money($model->subtotal_minor),
+                    'discount' => $money($model->discount_minor),
+                    'shipping' => $money($model->shipping_minor),
+                    'tax' => $money($model->tax_minor),
+                    'total' => $money($model->total_minor),
+                    'paid' => $money($model->paid_minor),
+
+                    'customer_name' => $model->customer?->name,
+                    'customer_email' => $model->customer?->email,
+                    'customer_phone' => $model->customer?->phone,
+                ],
+
+                'custom' => (object) ($link?->custom_fields ?? []),
+                'custom_fields' => $customFields,
+
+                // What this shop actually sends, so the form can lead with it.
+                'mapped' => array_values(array_filter(array_unique($mapped))),
+
+                'shop' => $model->storefront?->name,
+                'symbol' => Currencies::symbol((string) $model->currency),
+
+                'statuses' => array_values(collect(OrderStatuses::for($business))
+                    ->map(fn (array $s, string $k): array => [
+                        'value' => $k,
+                        'label' => $s['label'],
+                        'custom' => $s['custom'] ?? false,
+                    ])
+                    ->all()),
+            ],
+        ]);
+    }
+
+    /**
+     * Save one order's fields.
+     *
+     * ── Why this is not the bulk endpoint with a list of one ─────────────────
+     *
+     * Bulk exists to apply a single decision to many orders — a status, a
+     * courier — and its whole shape is that of one instruction repeated.
+     * Editing is the opposite: many fields, one order, most of them unchanged.
+     * Squeezing it through the other would mean either sending every field as
+     * its own bulk call or inventing an action per field.
+     *
+     * Only what is present in the request is written, so a form that sends the
+     * three fields somebody touched does not blank the twenty they did not.
+     */
+    public function updateOrder(Request $request, string $order, PushDispatcher $pushes): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $model = Order::query()
+            ->with('customer')
+            ->where('business_id', $business->id)
+            ->where('public_id', $order)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'status' => ['sometimes', 'string', 'max:40'],
+            'payment_status' => ['sometimes', 'string', 'in:paid,unpaid'],
+            'fulfilment_status' => ['sometimes', 'string', 'in:fulfilled,unfulfilled'],
+            'channel' => ['sometimes', 'string', 'max:20'],
+            'is_cod' => ['sometimes', 'boolean'],
+            'ordered_on' => ['sometimes', 'nullable', 'date'],
+            'external_ref' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
+
+            'shipping_name' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'shipping_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'shipping_address' => ['sometimes', 'nullable', 'string', 'max:400'],
+            'shipping_city' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'shipping_postcode' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'shipping_country' => ['sometimes', 'nullable', 'string', 'max:80'],
+
+            'subtotal' => ['sometimes', 'numeric', 'min:0'],
+            'discount' => ['sometimes', 'numeric', 'min:0'],
+            'shipping' => ['sometimes', 'numeric', 'min:0'],
+            'tax' => ['sometimes', 'numeric', 'min:0'],
+            'total' => ['sometimes', 'numeric', 'min:0'],
+            'paid' => ['sometimes', 'numeric', 'min:0'],
+
+            'customer_name' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'customer_email' => ['sometimes', 'nullable', 'email', 'max:190'],
+            'customer_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+
+            'custom' => ['sometimes', 'array'],
+        ]);
+
+        $scale = 10 ** Currencies::scale((string) $model->currency);
+
+        $changes = [];
+
+        foreach (['status', 'payment_status', 'fulfilment_status', 'channel', 'is_cod',
+            'external_ref', 'notes', 'shipping_name', 'shipping_phone', 'shipping_address',
+            'shipping_city', 'shipping_postcode', 'shipping_country'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $changes[$field] = $validated[$field];
+            }
+        }
+
+        if (array_key_exists('ordered_on', $validated)) {
+            $changes['ordered_on'] = $validated['ordered_on'];
+        }
+
+        // Typed back into minor units here, so the rest of the application
+        // never sees a float where it expects an integer number of paisa.
+        foreach (['subtotal', 'discount', 'shipping', 'tax', 'total', 'paid'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $changes[$field.'_minor'] = (int) round(((float) $validated[$field]) * $scale);
+            }
+        }
+
+        /*
+         * Archiving follows the status, in both directions.
+         *
+         * The same rule the bulk endpoint applies: a terminal status files the
+         * order away, and moving it back off one brings it out. Without this an
+         * order completed from the edit screen would stay in the active list,
+         * and an order rescued from Completed would stay filed.
+         */
+        if (array_key_exists('status', $validated)) {
+            $isFinal = in_array($validated['status'], [Order::COMPLETED, Order::CANCELLED], true);
+
+            if ($isFinal && $model->archived_at === null) {
+                $changes['archived_at'] = now();
+            }
+
+            if (! $isFinal && $model->archived_at !== null) {
+                $changes['archived_at'] = null;
+            }
+        }
+
+        $jobs = DB::transaction(function () use ($model, $changes, $validated, $pushes): array {
+            if ($changes !== []) {
+                $model->update($changes);
+            }
+
+            // The customer is its own record; only the three fields this form
+            // offers are touched, and only when it has one to touch.
+            if ($model->customer !== null) {
+                $person = array_filter([
+                    'name' => $validated['customer_name'] ?? null,
+                    'email' => $validated['customer_email'] ?? null,
+                    'phone' => $validated['customer_phone'] ?? null,
+                ], fn ($v): bool => $v !== null);
+
+                if ($person !== []) {
+                    $model->customer->update($person);
+                }
+            }
+
+            if (array_key_exists('custom', $validated)) {
+                $link = IntegrationLink::query()
+                    ->where('entity', IntegrationLink::ORDER)
+                    ->where('linkable_id', $model->id)
+                    ->first();
+
+                // Merged, not replaced: a form sending the two fields it shows
+                // must not erase a third the shop set and this screen never
+                // displayed.
+                $link?->mergeCustom($validated['custom']);
+                $link?->save();
+            }
+
+            return $pushes->jobsFor($model->fresh());
+        });
+
+        foreach ($jobs as $job) {
+            dispatch($job);
+        }
+
+        return response()->json([
+            'message' => "Order {$model->number} saved.",
+            'data' => ['pushes' => count($jobs)],
+        ]);
     }
 
     /**

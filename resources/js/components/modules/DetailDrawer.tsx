@@ -26,7 +26,7 @@ type DetailDrawerProps = {
     /** Footer actions (save, cancel, etc.) */
     footer?: ReactNode;
     /** Width size */
-    size?: 'sm' | 'md' | 'lg' | 'xl';
+    size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 };
 
 /**
@@ -112,6 +112,15 @@ export function DetailDrawer({
         md: 'max-w-2xl',
         lg: 'max-w-3xl',
         xl: 'max-w-5xl',
+        /*
+         * Wide enough for two working columns.
+         *
+         * An edit form for an order is not a reading panel: the fields on the
+         * left need room to sit two abreast, and what the order carries —
+         * pictures, attachments, the lines — needs a column of its own beside
+         * them rather than a scroll past them.
+         */
+        '2xl': 'max-w-[92rem]',
     };
 
     return (
