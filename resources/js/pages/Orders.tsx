@@ -2534,7 +2534,15 @@ export default function Orders() {
                                     <RowAction
                                         icon="note-pencil"
                                         label="Edit order"
-                                        onClick={() => setEditingId(selectedOrder.id)}
+                                        onClick={() => {
+                                            setEditingId(selectedOrder.id);
+                                            // Closed, not stacked: two drawers at the
+                                            // same depth render in DOM order, so the
+                                            // editor appeared beneath the panel that
+                                            // opened it. Reading and editing are
+                                            // consecutive, not simultaneous.
+                                            setSelectedOrder(null);
+                                        }}
                                     />
 
                                     <RowAction

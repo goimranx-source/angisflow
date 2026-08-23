@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Icon } from '@/components/ui/Icon';
@@ -25,41 +25,28 @@ type Editor = {
 /**
  * Editing everything an order carries.
  *
- * ── Why two columns and not a longer form ────────────────────────────────────
+ * ── Why two columns ──────────────────────────────────────────────────────────
  *
- * Because an order has two kinds of content and they do not read the same way.
- * Most of it is fields — short, labelled, scanned in pairs — and a single
- * column of those on a wide screen is a narrow ribbon with half the window
- * empty beside it. The rest is what the order *has*: the lines, pictures,
- * attachments. Those want space and are looked at rather than filled in.
+ * An order holds two kinds of content that do not read the same way. Most of it
+ * is fields — short, labelled, scanned in pairs — and a single column of those
+ * on a wide screen is a narrow ribbon with half the window empty beside it. The
+ * rest is what the order *has*: pictures, attachments, where it came from.
+ * Those want space and are looked at rather than filled in.
  *
- * So the form runs down the left in pairs, and everything visual sits in a
- * column of its own on the right where it can be seen at a useful size instead
- * of interrupting the fields.
+ * ── Why every field, and not a chosen few ────────────────────────────────────
  *
- * ── Why the built-in fields are laid out by hand ─────────────────────────────
- *
- * Every shop has a status, an address, a total, and those deserve a considered
- * order — who the customer is, where it goes, what state it is in, what it
- * costs. Generating that from a schema would produce a correct form nobody
- * enjoys using. Custom fields are the opposite: unknown at build time, so they
- * are placed by type. The two approaches meet in the middle rather than one
- * being forced to do the other's job.
+ * Because a shop can map any of them, and a form offering three of the twelve
+ * fields a shop sends is a form that cannot edit what the shop is allowed to
+ * change. The built-in ones are laid out by hand — in the order somebody thinks
+ * about them, not the order the table stores them — and the business's own are
+ * placed by type, since they are unknown here.
  */
-export function OrderEditor({
-    orderId,
-    onClose,
-}: {
-    orderId: string;
-    onClose: () => void;
-}) {
+export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: () => void }) {
     const queryClient = useQueryClient();
 
     const { data, isLoading, isError } = useQuery<Editor>({
         queryKey: ['order-editor', orderId],
         queryFn: ({ signal }) => api.get(`/orders/${orderId}/editor`, { signal }),
-        // Always fresh: an order edited from two places must not be saved from
-        // a form that was filled in before the other change landed.
         staleTime: 0,
         refetchOnWindowFocus: false,
     });
@@ -79,7 +66,13 @@ export function OrderEditor({
     }, [data]);
 
     const save = useMutation({
-        mutationFn: () => api.patch(`/orders/${orderId}`, { ...form, custom }),
+        mutationFn: () => {
+            // number is shown for identification and is the shop's to issue;
+            // sending it back would be this form claiming to set it.
+            const { number: _identifier, ...editable } = form;
+
+            return api.patch(`/orders/${orderId}`, { ...editable, custom });
+        },
         onSuccess: (result) => {
             const shaped = (result ?? null) as { message?: string } | null;
 
@@ -113,17 +106,12 @@ export function OrderEditor({
 
     const editor = data.data;
 
-    const set = (key: string, value: unknown) => {
-        setForm((current) => ({ ...current, [key]: value }));
+    const set = (key: string, next: unknown) => {
+        setForm((current) => ({ ...current, [key]: next }));
         setDirty(true);
     };
 
-    const setCustomValue = (key: string, value: unknown) => {
-        setCustom((current) => ({ ...current, [key]: value }));
-        setDirty(true);
-    };
-
-    const value = (key: string): string => {
+    const val = (key: string): string => {
         const raw = form[key];
 
         return raw === null || raw === undefined ? '' : String(raw);
@@ -132,278 +120,379 @@ export function OrderEditor({
     /*
      * A field this shop actually sends is worth marking.
      *
-     * Nothing is hidden on the strength of it — an order can be edited here
-     * whether or not the shop fills the field — but a small mark tells somebody
-     * which of these will travel back and which are only ours.
+     * Nothing is hidden on the strength of it, but it says which of these will
+     * travel back when the order is saved and which are only ours.
      */
-    const synced = (key: string) =>
+    const sync = (key: string) =>
         editor.mapped.includes(key) ? (
             <span
-                // inline-flex, not a bare icon: an svg is block-level by
-                // default and would drop the marker onto its own line under
-                // the label rather than sitting beside it.
-                className="inline-flex items-center text-[var(--color-text-subtle)]"
-                title="This shop sends this field"
+                className="inline-flex items-center text-[var(--color-brand)]"
+                title="This shop sends this field, so changes travel back to it"
             >
                 <Icon name="arrows-left-right" size={11} />
             </span>
         ) : null;
 
-    const field = (key: string, label: string, type = 'text', extra?: React.ReactNode) => (
+    // ── The pieces a row is built from ──────────────────────────────────────
+
+    const Label = ({ id, text, mapKey }: { id: string; text: string; mapKey?: string }) => (
+        <label
+            htmlFor={id}
+            className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-text-body)]"
+        >
+            {text}
+            {mapKey ? sync(mapKey) : null}
+        </label>
+    );
+
+    const Text = ({
+        name,
+        label,
+        type = 'text',
+        mapKey,
+        readOnly,
+    }: {
+        name: string;
+        label: string;
+        type?: string;
+        mapKey?: string;
+        readOnly?: boolean;
+    }) => (
         <div>
-            <label
-                htmlFor={`f-${key}`}
-                className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-main)]"
-            >
-                {label}
-                {synced(key)}
-            </label>
-            {extra ?? (
-                <input
-                    id={`f-${key}`}
-                    type={type}
-                    step={type === 'number' ? 'any' : undefined}
-                    className="field w-full"
-                    value={value(key)}
-                    onChange={(event) => set(key, event.target.value === '' ? null : event.target.value)}
-                />
-            )}
+            <Label id={`f-${name}`} text={label} mapKey={mapKey ?? name} />
+            <input
+                id={`f-${name}`}
+                type={type}
+                readOnly={readOnly}
+                className={`field w-full ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}
+                value={val(name)}
+                onChange={(event) => set(name, event.target.value === '' ? null : event.target.value)}
+            />
         </div>
     );
 
-    const money = (key: string, label: string) =>
-        field(
-            key,
-            label,
-            'number',
+    const Money = ({ name, label }: { name: string; label: string }) => (
+        <div>
+            <Label id={`f-${name}`} text={label} mapKey={`${name}_minor`} />
             <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--color-text-muted)]">
                     {editor.symbol}
                 </span>
                 <input
-                    id={`f-${key}`}
+                    id={`f-${name}`}
                     type="number"
                     step="any"
-                    className="field w-full pl-7"
-                    value={value(key)}
-                    onChange={(event) => set(key, event.target.value === '' ? null : Number(event.target.value))}
+                    className="field w-full pl-7 text-right tabular-nums"
+                    value={val(name)}
+                    onChange={(event) =>
+                        set(name, event.target.value === '' ? null : Number(event.target.value))
+                    }
                 />
-            </div>,
-        );
+            </div>
+        </div>
+    );
 
-    const section = (title: string, children: React.ReactNode) => (
-        <section>
-            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-                {title}
-            </h3>
-            {children}
+    const Choice = ({
+        name,
+        label,
+        options,
+    }: {
+        name: string;
+        label: string;
+        options: Array<{ value: string; label: string }>;
+    }) => (
+        <div>
+            <Label id={`f-${name}`} text={label} mapKey={name} />
+            <select
+                id={`f-${name}`}
+                className="field w-full"
+                value={val(name)}
+                onChange={(event) => set(name, event.target.value)}
+            >
+                {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+        </div>
+    );
+
+    const Area = ({ name, label, rows = 3 }: { name: string; label: string; rows?: number }) => (
+        <div>
+            <Label id={`f-${name}`} text={label} mapKey={name} />
+            <textarea
+                id={`f-${name}`}
+                rows={rows}
+                className="field w-full"
+                value={val(name)}
+                onChange={(event) => set(name, event.target.value || null)}
+            />
+        </div>
+    );
+
+    /*
+     * A card per group, rather than headings on an open page.
+     *
+     * Twelve customer fields and eight delivery fields in one flat column is a
+     * wall — the eye has nothing to stop at, and two fields with similar names
+     * a screen apart look like the same field twice. Boxing each group gives
+     * every one a boundary and a name.
+     */
+    const Card = ({
+        title,
+        hint,
+        children,
+    }: {
+        title: string;
+        hint?: string;
+        children: ReactNode;
+    }) => (
+        <section className="rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-card-bg)]">
+            <header className="flex items-baseline justify-between gap-3 border-b border-[var(--shell-border)] px-4 py-2.5">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                    {title}
+                </h3>
+                {hint && <span className="text-[11px] text-[var(--color-text-subtle)]">{hint}</span>}
+            </header>
+            <div className="p-4">{children}</div>
         </section>
     );
+
+    const grid = (children: ReactNode) => <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
 
     const mediaFields = editor.custom_fields.filter((f) => isMedia(f.type));
     const plainFields = editor.custom_fields.filter((f) => !isMedia(f.type));
 
+    const statusOptions = editor.statuses.map((s) => ({
+        value: s.value,
+        label: s.custom ? `${s.label} (Custom)` : s.label,
+    }));
+
     return (
         <div className="flex h-full flex-col">
-            <div className="grid flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                {/* ── The form ─────────────────────────────────────────────── */}
-                <div className="space-y-7">
-                    {section(
-                        'Customer',
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            {field('customer_name', 'Name')}
-                            {field('customer_email', 'Email', 'email')}
-                            {field('customer_phone', 'Phone', 'tel')}
-                        </div>,
-                    )}
-
-                    {section(
-                        'Delivery',
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            {field('shipping_name', 'Recipient')}
-                            {field('shipping_phone', 'Phone', 'tel')}
-                            <div className="sm:col-span-2">{field('shipping_address', 'Address')}</div>
-                            {field('shipping_city', 'City')}
-                            {field('shipping_postcode', 'Postcode')}
-                            {field('shipping_country', 'Country')}
-                        </div>,
-                    )}
-
-                    {section(
-                        'Order',
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <label
-                                    htmlFor="f-status"
-                                    className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-main)]"
-                                >
-                                    Status
-                                    {synced('status')}
-                                </label>
-                                <select
-                                    id="f-status"
-                                    className="field w-full"
-                                    value={value('status')}
-                                    onChange={(event) => set('status', event.target.value)}
-                                >
-                                    {editor.statuses.map((s) => (
-                                        <option key={s.value} value={s.value}>
-                                            {s.label}
-                                            {s.custom ? ' (Custom)' : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label
-                                    htmlFor="f-payment"
-                                    className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-main)]"
-                                >
-                                    Payment
-                                    {synced('payment_status')}
-                                </label>
-                                <select
-                                    id="f-payment"
-                                    className="field w-full"
-                                    value={value('payment_status')}
-                                    onChange={(event) => set('payment_status', event.target.value)}
-                                >
-                                    <option value="paid">Paid</option>
-                                    <option value="unpaid">Unpaid</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label
-                                    htmlFor="f-fulfilment"
-                                    className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-main)]"
-                                >
-                                    Fulfilment
-                                    {synced('fulfilment_status')}
-                                </label>
-                                <select
-                                    id="f-fulfilment"
-                                    className="field w-full"
-                                    value={value('fulfilment_status')}
-                                    onChange={(event) => set('fulfilment_status', event.target.value)}
-                                >
-                                    <option value="unfulfilled">Not dispatched</option>
-                                    <option value="fulfilled">Dispatched</option>
-                                </select>
-                            </div>
-
-                            {field('ordered_on', 'Order date', 'date')}
-                            {field('external_ref', 'External reference')}
-
-                            <label className="flex items-center gap-2.5 pt-6">
-                                <input
-                                    type="checkbox"
-                                    className="size-4"
-                                    checked={form.is_cod === true}
-                                    onChange={(event) => set('is_cod', event.target.checked)}
+            <div className="grid flex-1 items-start gap-5 overflow-y-auto pb-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                {/* ── Fields ───────────────────────────────────────────────── */}
+                <div className="space-y-5">
+                    <Card title="Order" hint={editor.number}>
+                        {grid(
+                            <>
+                                <Choice name="status" label="Status" options={statusOptions} />
+                                <Choice
+                                    name="payment_status"
+                                    label="Payment"
+                                    options={[
+                                        { value: 'paid', label: 'Paid' },
+                                        { value: 'unpaid', label: 'Unpaid' },
+                                    ]}
                                 />
-                                <span className="text-sm font-medium text-[var(--color-text-main)]">
-                                    Cash on delivery
-                                </span>
-                            </label>
-                        </div>,
-                    )}
+                                <Choice
+                                    name="fulfilment_status"
+                                    label="Fulfilment"
+                                    options={[
+                                        { value: 'unfulfilled', label: 'Not dispatched' },
+                                        { value: 'fulfilled', label: 'Dispatched' },
+                                    ]}
+                                />
+                                <Choice
+                                    name="channel"
+                                    label="Channel"
+                                    options={[
+                                        { value: 'online', label: 'Online' },
+                                        { value: 'pos', label: 'Point of sale' },
+                                        { value: 'phone', label: 'Phone' },
+                                        { value: 'api', label: 'API' },
+                                    ]}
+                                />
+                                <Text name="ordered_on" label="Order date" type="date" />
+                                <Text name="external_ref" label="External reference" />
 
-                    {section(
-                        `Money — ${editor.values.currency ?? ''}`,
+                                <label className="flex items-center gap-2.5 sm:col-span-2">
+                                    <input
+                                        type="checkbox"
+                                        className="size-4"
+                                        checked={form.is_cod === true}
+                                        onChange={(event) => set('is_cod', event.target.checked)}
+                                    />
+                                    <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-text-body)]">
+                                        Cash on delivery
+                                        {sync('is_cod')}
+                                    </span>
+                                </label>
+                            </>,
+                        )}
+                    </Card>
+
+                    <Card title="Customer">
+                        {grid(
+                            <>
+                                <Text name="customer_name" label="Name" mapKey="customer.name" />
+                                <Text
+                                    name="customer_email"
+                                    label="Email"
+                                    type="email"
+                                    mapKey="customer.email"
+                                />
+                                <Text
+                                    name="customer_phone"
+                                    label="Phone"
+                                    type="tel"
+                                    mapKey="customer.phone"
+                                />
+                                <Text
+                                    name="customer_company"
+                                    label="Company"
+                                    mapKey="customer.company"
+                                />
+                                <Text
+                                    name="customer_tax_number"
+                                    label="Tax number"
+                                    mapKey="customer.tax_number"
+                                />
+                            </>,
+                        )}
+                    </Card>
+
+                    <Card title="Billing address" hint="On the customer record">
+                        {grid(
+                            <>
+                                <div className="sm:col-span-2">
+                                    <Text
+                                        name="customer_billing_address"
+                                        label="Address"
+                                        mapKey="customer.billing_address"
+                                    />
+                                </div>
+                                <Text
+                                    name="customer_billing_city"
+                                    label="City"
+                                    mapKey="customer.billing_city"
+                                />
+                                <Text
+                                    name="customer_billing_postcode"
+                                    label="Postcode"
+                                    mapKey="customer.billing_postcode"
+                                />
+                                <Text
+                                    name="customer_billing_country"
+                                    label="Country"
+                                    mapKey="customer.billing_country"
+                                />
+                            </>,
+                        )}
+                    </Card>
+
+                    <Card title="Delivery address" hint="On this order">
+                        {grid(
+                            <>
+                                <Text name="shipping_name" label="Recipient" />
+                                <Text name="shipping_phone" label="Phone" type="tel" />
+                                <div className="sm:col-span-2">
+                                    <Text name="shipping_address" label="Address" />
+                                </div>
+                                <Text name="shipping_city" label="City" />
+                                <Text name="shipping_postcode" label="Postcode" />
+                                <Text name="shipping_country" label="Country" />
+                            </>,
+                        )}
+                    </Card>
+
+                    <Card title="Money" hint={String(editor.values.currency ?? '')}>
                         <div className="grid gap-4 sm:grid-cols-3">
-                            {money('subtotal', 'Subtotal')}
-                            {money('discount', 'Discount')}
-                            {money('shipping', 'Shipping')}
-                            {money('tax', 'Tax')}
-                            {money('total', 'Total')}
-                            {money('paid', 'Paid')}
-                        </div>,
-                    )}
+                            <Money name="subtotal" label="Subtotal" />
+                            <Money name="discount" label="Discount" />
+                            <Money name="shipping" label="Shipping" />
+                            <Money name="tax" label="Tax" />
+                            <Money name="total" label="Total" />
+                            <Money name="paid" label="Paid" />
+                        </div>
+                        <p className="mt-3 border-t border-[var(--shell-border)] pt-3 text-xs text-[var(--color-text-subtle)]">
+                            Most shops derive these from the order&rsquo;s lines and will recalculate them
+                            from their own copy.
+                        </p>
+                    </Card>
 
-                    {section(
-                        'Notes',
-                        <textarea
-                            className="field w-full"
-                            rows={3}
-                            value={value('notes')}
-                            onChange={(event) => set('notes', event.target.value || null)}
-                        />,
-                    )}
+                    <Card title="Notes">
+                        <div className="space-y-4">
+                            <Area name="notes" label="Order notes" />
+                            <Area name="customer_notes" label="Customer notes" rows={2} />
+                        </div>
+                    </Card>
 
-                    {/*
-                      This business's own fields, placed by type.
-
-                      Wide types get the full row; the rest pair up like the
-                      built-in fields above, so a custom field does not announce
-                      itself as an afterthought.
-                    */}
-                    {plainFields.length > 0 &&
-                        section(
-                            'Additional fields',
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                {plainFields.map((f) => (
+                    {plainFields.length > 0 && (
+                        <Card title="Additional fields" hint="Defined by this business">
+                            {grid(
+                                plainFields.map((f) => (
                                     <div key={f.key} className={isWide(f.type) ? 'sm:col-span-2' : undefined}>
                                         <CustomField
                                             field={f}
                                             value={custom[f.key]}
-                                            onChange={(next) => setCustomValue(f.key, next)}
+                                            onChange={(next) => {
+                                                setCustom((current) => ({ ...current, [f.key]: next }));
+                                                setDirty(true);
+                                            }}
                                         />
                                     </div>
-                                ))}
-                            </div>,
-                        )}
+                                )),
+                            )}
+                        </Card>
+                    )}
                 </div>
 
                 {/* ── What the order carries ───────────────────────────────── */}
-                <div className="space-y-7 lg:border-l lg:border-[var(--shell-border)] lg:pl-6">
-                    {section(
-                        'Where it came from',
-                        <div className="rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)] p-3 text-sm">
-                            <p className="font-medium text-[var(--color-text-main)]">
-                                {editor.shop ?? 'Walk-in / counter'}
-                            </p>
-                            <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                                Order {editor.number}
-                            </p>
-                            {editor.mapped.length > 0 && (
-                                <p className="mt-2 flex items-center gap-1.5 border-t border-[var(--shell-border)] pt-2 text-xs text-[var(--color-text-muted)]">
+                <div className="space-y-5">
+                    <Card title="Source">
+                        <p className="text-sm font-medium text-[var(--color-text-main)]">
+                            {editor.shop ?? 'Walk-in / counter'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                            Order {editor.number}
+                        </p>
+                        {editor.mapped.length > 0 && (
+                            <p className="mt-3 flex items-start gap-1.5 border-t border-[var(--shell-border)] pt-3 text-xs text-[var(--color-text-muted)]">
+                                <span className="mt-0.5 text-[var(--color-brand)]">
                                     <Icon name="arrows-left-right" size={12} />
-                                    {editor.mapped.length} fields sync with this shop
-                                </p>
-                            )}
-                        </div>,
-                    )}
+                                </span>
+                                <span>
+                                    {editor.mapped.length} fields sync with this shop. Marked fields
+                                    travel back when you save.
+                                </span>
+                            </p>
+                        )}
+                    </Card>
 
-                    {mediaFields.length > 0
-                        ? section(
-                              'Attachments',
-                              <div className="space-y-4">
-                                  {mediaFields.map((f) => (
-                                      <CustomField
-                                          key={f.key}
-                                          field={f}
-                                          value={custom[f.key]}
-                                          onChange={(next) => setCustomValue(f.key, next)}
-                                      />
-                                  ))}
-                              </div>,
-                          )
-                        : section(
-                              'Attachments',
-                              <p className="rounded-[var(--shell-radius)] border border-dashed border-[var(--shell-border)] p-4 text-center text-xs text-[var(--color-text-subtle)]">
-                                  Pictures and files appear here when this business defines a field for
-                                  them.
-                              </p>,
-                          )}
+                    <Card title="Attachments" hint={mediaFields.length > 0 ? undefined : 'None defined'}>
+                        {mediaFields.length > 0 ? (
+                            <div className="space-y-4">
+                                {mediaFields.map((f) => (
+                                    <CustomField
+                                        key={f.key}
+                                        field={f}
+                                        value={custom[f.key]}
+                                        onChange={(next) => {
+                                            setCustom((current) => ({ ...current, [f.key]: next }));
+                                            setDirty(true);
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-[var(--color-text-subtle)]">
+                                Pictures, files and videos appear here when this business defines a field
+                                for them.
+                            </p>
+                        )}
+                    </Card>
                 </div>
             </div>
 
             {/* ── Save ─────────────────────────────────────────────────────── */}
-            <div className="mt-5 flex items-center justify-end gap-3 border-t border-[var(--shell-border)] pt-4">
+            <div className="mt-4 flex items-center justify-end gap-3 border-t border-[var(--shell-border)] pt-4">
                 {dirty && (
-                    <span className="mr-auto text-xs text-[var(--color-text-muted)]">Unsaved changes</span>
+                    <span className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+                        <Icon name="circle" size={8} className="text-[var(--color-brand)]" />
+                        Unsaved changes
+                    </span>
                 )}
 
                 <button type="button" className="btn btn-secondary" onClick={onClose}>

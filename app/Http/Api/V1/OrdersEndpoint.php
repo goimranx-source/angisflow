@@ -1011,9 +1011,29 @@ class OrdersEndpoint
                     'total' => $money($model->total_minor),
                     'paid' => $money($model->paid_minor),
 
+                    /*
+                     * The buyer, in full.
+                     *
+                     * A shop repeats these on every order it sends and the
+                     * mapping screen offers all of them, so a form showing
+                     * three of the twelve cannot edit what the shop is allowed
+                     * to change.
+                     */
                     'customer_name' => $model->customer?->name,
                     'customer_email' => $model->customer?->email,
                     'customer_phone' => $model->customer?->phone,
+                    'customer_company' => $model->customer?->company,
+                    'customer_tax_number' => $model->customer?->tax_number,
+                    'customer_billing_address' => $model->customer?->billing_address,
+                    'customer_billing_city' => $model->customer?->billing_city,
+                    'customer_billing_postcode' => $model->customer?->billing_postcode,
+                    'customer_billing_country' => $model->customer?->billing_country,
+                    'customer_notes' => $model->customer?->notes,
+
+                    // Shown but not editable: these identify the order, and a
+                    // form that hides them makes somebody look elsewhere to be
+                    // sure they are changing the right one.
+                    'number' => $model->number,
                 ],
 
                 'custom' => (object) ($link?->custom_fields ?? []),
@@ -1089,6 +1109,13 @@ class OrdersEndpoint
             'customer_name' => ['sometimes', 'nullable', 'string', 'max:160'],
             'customer_email' => ['sometimes', 'nullable', 'email', 'max:190'],
             'customer_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'customer_company' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'customer_tax_number' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'customer_billing_address' => ['sometimes', 'nullable', 'string', 'max:400'],
+            'customer_billing_city' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'customer_billing_postcode' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'customer_billing_country' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'customer_notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
 
             'custom' => ['sometimes', 'array'],
         ]);
@@ -1145,11 +1172,30 @@ class OrdersEndpoint
             // The customer is its own record; only the three fields this form
             // offers are touched, and only when it has one to touch.
             if ($model->customer !== null) {
-                $person = array_filter([
-                    'name' => $validated['customer_name'] ?? null,
-                    'email' => $validated['customer_email'] ?? null,
-                    'phone' => $validated['customer_phone'] ?? null,
-                ], fn ($v): bool => $v !== null);
+                $person = [];
+
+                /*
+                 * Keyed by what the form sends, written under the column name.
+                 *
+                 * Only keys the request actually carried, so a screen showing
+                 * six of these cannot blank the other four.
+                 */
+                foreach ([
+                    'customer_name' => 'name',
+                    'customer_email' => 'email',
+                    'customer_phone' => 'phone',
+                    'customer_company' => 'company',
+                    'customer_tax_number' => 'tax_number',
+                    'customer_billing_address' => 'billing_address',
+                    'customer_billing_city' => 'billing_city',
+                    'customer_billing_postcode' => 'billing_postcode',
+                    'customer_billing_country' => 'billing_country',
+                    'customer_notes' => 'notes',
+                ] as $sent => $column) {
+                    if (array_key_exists($sent, $validated)) {
+                        $person[$column] = $validated[$sent];
+                    }
+                }
 
                 if ($person !== []) {
                     $model->customer->update($person);
