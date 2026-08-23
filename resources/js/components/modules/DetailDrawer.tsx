@@ -192,7 +192,26 @@ export function DetailDrawer({
                 )}
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto px-6 py-4">
+                {/*
+                  ── Even margins, with a scrollbar in the way ────────────────
+
+                  A vertical scrollbar lives inside this box and takes its width
+                  off the content, so equal left and right padding does not
+                  produce equal left and right margins: the left is 24px and the
+                  right is 24px plus however wide the scrollbar happens to be.
+                  On a page of prose nobody notices. On a wide table it is
+                  plainly lopsided, and it is the sort of wrongness that is
+                  easier to see than to name.
+
+                  `stable both-edges` reserves the gutter on both sides whether
+                  or not a scrollbar is showing, which costs a few pixels of
+                  width and buys margins that match — and stops the content
+                  shifting sideways when a drawer grows long enough to scroll.
+                */}
+                <div
+                    className="flex-1 overflow-y-auto px-6 py-4"
+                    style={{ scrollbarGutter: 'stable both-edges' }}
+                >
                     {tabs && tabs.length > 0 && activeTab ? (
                         tabs.find((t) => t.key === activeTab)?.content ?? children
                     ) : (
