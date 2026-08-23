@@ -1198,7 +1198,9 @@ class OrdersEndpoint
             }
         }
 
-        $jobs = DB::transaction(function () use ($model, $changes, $validated, $pushes): array {
+        // $scale travels in too: the line writer needs it to turn the decimals
+        // the form sends back into minor units.
+        $jobs = DB::transaction(function () use ($model, $changes, $validated, $pushes, $scale): array {
             if ($changes !== []) {
                 $model->update($changes);
             }

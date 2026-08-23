@@ -246,20 +246,23 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
     const Card = ({
         title,
         hint,
+        flush,
         children,
     }: {
         title: string;
         hint?: string;
+        /** For a table that should meet its own box, with no padding between. */
+        flush?: boolean;
         children: ReactNode;
     }) => (
-        <section className="rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-card-bg)]">
-            <header className="flex items-baseline justify-between gap-3 border-b border-[var(--shell-border)] px-4 py-2.5">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-                    {title}
-                </h3>
-                {hint && <span className="text-[11px] text-[var(--color-text-subtle)]">{hint}</span>}
+        <section className="overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-card-bg)]">
+            <header className="flex items-baseline justify-between gap-3 border-b border-[var(--shell-border)] bg-[var(--color-site-bg)] px-4 py-2.5">
+                <h3 className="text-[13px] font-semibold text-[var(--color-text-main)]">{title}</h3>
+                {hint && (
+                    <span className="text-[11px] tabular-nums text-[var(--color-text-muted)]">{hint}</span>
+                )}
             </header>
-            <div className="p-4">{children}</div>
+            <div className={flush ? '' : 'p-4'}>{children}</div>
         </section>
     );
 
@@ -408,10 +411,11 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                       then what that came to. The reverse asks somebody to
                       accept a total before seeing the lines behind it.
                     */}
-                    <Card title="Items" hint={`${lines.length} line${lines.length === 1 ? '' : 's'}`}>
+                    <Card title="Items" hint={`${lines.length} line${lines.length === 1 ? '' : 's'}`} flush>
                         <LineItems
                             lines={lines}
                             currency={String(editor.values.currency ?? '')}
+                            symbol={editor.symbol}
                             onChange={(next) => {
                                 setLines(next);
                                 setDirty(true);
