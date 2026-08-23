@@ -103,7 +103,18 @@ final class EntityFields
             ],
 
             'product' => [
-                'name' => ['Name', 'trim'],
+                /*
+                 * "Product name", not "Name".
+                 *
+                 * There is a "Variant name" a few rows below it in the same
+                 * dropdown, and between the two of them a bare "Name" is a
+                 * question rather than an answer — the name of what? The
+                 * distinction matters more here than the shortness does: mapping
+                 * a shop's title onto the variant instead of the product puts it
+                 * on the thing with the SKU and leaves the catalogue entry
+                 * blank.
+                 */
+                'name' => ['Product name', 'trim'],
                 'slug' => ['Handle or slug', 'slug'],
 
                 // Rich text, not stripped: a product description is formatted
