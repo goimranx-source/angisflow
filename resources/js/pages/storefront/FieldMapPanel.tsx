@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Fragment, useEffect, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
 import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions';
@@ -456,21 +456,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
         ).length,
     };
 
-    /**
-     * Where the column headings sit once the page scrolls.
-     *
-     * Directly beneath the toolbar, whose height it measured for itself — that
-     * height changes when the shop-fields button appears or the counts wrap, so
-     * a guessed offset would leave a gap on one screen and hide the first row on
-     * another.
-     */
-    const headCell: CSSProperties = {
-        position: 'sticky',
-        top: 'calc(var(--store-tabs-height, 0px) + var(--toolbar-height, 6rem))',
-        zIndex: 10,
-        background: 'var(--color-card-bg)',
-    };
-
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
         sample?.paths.find((p) => p.path === row.source);
@@ -740,20 +725,25 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
             {isLoading && <div className="h-40 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />}
 
             {/*
-              Horizontal scrolling only where it is needed.
+              ── Scrolling sideways, and what it costs ──────────────────────
+              This wrapper scrolls at every width, and it has to.
 
-              `overflow-x: auto` computes `overflow-y: auto` alongside it, and
-              that makes a scroll container — which silently stops the column
-              headings sticking, because sticky positions against the nearest
-              scrolling ancestor and that ancestor never scrolls vertically.
+              It used to get out of the way above a breakpoint, so that the
+              column headings could stay pinned — `overflow-x: auto` computes
+              `overflow-y: auto` beside it, that makes a scroll container, and a
+              sticky heading then positions against a box that never scrolls
+              vertically. Getting out of the way fixed the headings and broke the
+              scrolling: above the breakpoint the table simply overflowed, and
+              the last column was cut off by the drawer rather than reachable.
 
-              The table is `w-full` with a 40rem floor, so it only genuinely
-              overflows on a panel narrower than that. Above the breakpoint the
-              wrapper gets out of the way and the headings pin properly; below
-              it, scrolling sideways matters more than pinned headings do.
+              CSS gives no way to have both on one element. A grid with its own
+              height and both scrollbars would, and would put a second scrollbar
+              inside a drawer that already has one. Being able to reach every
+              column is worth more than headings that stay put, so the headings
+              scroll away with the rows.
             */}
             {sample && (
-                <div className="overflow-x-auto rounded-[var(--shell-radius)] md:overflow-visible">
+                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
                     {/*
                       Fixed layout, with the widths stated.
 
@@ -768,28 +758,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[54rem] table-fixed"
-                        /*
-                         * ── The one line that makes the headings pin ─────────
-                         *
-                         * `.table-framed` sets `overflow: hidden` on the table,
-                         * to clip its rows inside its rounded corners. A box
-                         * with overflow other than visible is a scroll
-                         * container, and a sticky element positions against the
-                         * nearest one — so every heading cell was sticking to
-                         * the table itself, which never scrolls.
-                         *
-                         * The failure gave no sign of itself: position computed
-                         * as sticky, top computed to the right offset, and the
-                         * row scrolled away regardless. A plain sticky div in
-                         * the same place pinned perfectly, which is what
-                         * narrowed it to the table.
-                         *
-                         * The corners are rounded by the wrapper instead, which
-                         * costs nothing — the rows have no background of their
-                         * own to spill past them.
-                         */
-                        style={{ overflow: 'visible' }}
+                        className="table table-framed w-full min-w-[52rem] table-fixed"
                     >
                         {/*
                           Shares, with a floor.
@@ -813,7 +782,17 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 "⇄ Both" in much less than this showed as "⇄ B". */}
                             <col style={{ width: '11%' }} />
                             <col style={{ width: '8%' }} />
-                            <col style={{ width: '7%' }} />
+                            {/*
+                              No width, on purpose.
+
+                              Seven percentages that add to a hundred do not add
+                              to the pixels available: each is rounded up on its
+                              own, and the four pixels they gain between them are
+                              enough for a scrollbar to appear on a table that
+                              fits. The last column takes whatever is left
+                              instead, which is exact by definition.
+                            */}
+                            <col />
                         </colgroup>
 
                         {/*
@@ -853,11 +832,11 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                   Stacked, they read as one thing, which is what
                                   they are: this shop's field, and its value.
                                 */}
-                                <th style={headCell}>This shop&rsquo;s field</th>
-                                <th style={headCell}>Value there</th>
-                                <th style={headCell}>Becomes</th>
-                                <th style={headCell}>Treated as</th>
-                                <th style={headCell}>Way</th>
+                                <th>This shop&rsquo;s field</th>
+                                <th>Value there</th>
+                                <th>Becomes</th>
+                                <th>Treated as</th>
+                                <th>Way</th>
                                 {/* Not "Enabled". Every row here syncs; this
                                     governs only whether somebody editing an
                                     order is shown a box for it. */}
@@ -871,12 +850,12 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 */}
                                 <th
                                     className="text-center"
-                                    style={headCell}
+                                   
                                     title="Show this field when editing an order or product"
                                 >
                                     Show
                                 </th>
-                                <th style={headCell} />
+                                <th />
                             </tr>
                         </thead>
 
