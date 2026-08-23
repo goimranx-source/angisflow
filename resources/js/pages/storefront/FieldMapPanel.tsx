@@ -507,7 +507,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
      */
     const headCell: CSSProperties = {
         position: 'sticky',
-        top: 'var(--toolbar-height, 6rem)',
+        top: 'calc(var(--store-tabs-height, 0px) + var(--toolbar-height, 6rem))',
         zIndex: 10,
         background: 'var(--color-card-bg)',
     };
@@ -597,8 +597,11 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
               the top of forty rows to save the change just made at the bottom.
             */}
             <div
-                className="sticky top-0 z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
-                style={{ background: 'var(--color-card-bg)' }}
+                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
+                style={{
+                    top: 'var(--store-tabs-height, 0px)',
+                    background: 'var(--color-card-bg)',
+                }}
                 ref={(node) => {
                     /*
                      * The toolbar measures itself, and the column headings stick
@@ -832,9 +835,12 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                         <colgroup>
                             <col style={{ width: '29%' }} />
                             <col style={{ width: '22%' }} />
-                            <col style={{ width: '19%' }} />
-                            <col style={{ width: '11%' }} />
-                            <col style={{ width: '11%' }} />
+                            <col style={{ width: '20%' }} />
+                            {/* Wider than it looks like it needs: a select
+                                renders its own chevron inside the box, so
+                                "⇄ Both" in 95px showed as "⇄ B". */}
+                            <col style={{ width: '13%' }} />
+                            <col style={{ width: '9%' }} />
                             <col style={{ width: '7%' }} />
                         </colgroup>
 
@@ -882,8 +888,20 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 {/* Not "Enabled". Every row here syncs; this
                                     governs only whether somebody editing an
                                     order is shown a box for it. */}
-                                <th className="text-center" style={headCell}>
-                                    On edit page
+                                {/*
+                                  "Show", not "On edit page".
+
+                                  The longer wording is clearer and did not fit —
+                                  it rendered as "On edit pag", which is neither.
+                                  The full sentence lives on the hover, where
+                                  there is room for it.
+                                */}
+                                <th
+                                    className="text-center"
+                                    style={headCell}
+                                    title="Show this field when editing an order or product"
+                                >
+                                    Show
                                 </th>
                                 <th style={headCell} />
                             </tr>
@@ -923,7 +941,18 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                     <tr>
                                         <th
                                             colSpan={6}
-                                            className="!py-2 text-left"
+                                            /*
+                                             * The same horizontal padding as the
+                                             * cells below it.
+                                             *
+                                             * A heading flush against the table
+                                             * edge while every row beneath starts
+                                             * an inch in does not read as a
+                                             * heading — it reads as a mistake,
+                                             * and the eye has two left margins to
+                                             * follow instead of one.
+                                             */
+                                            className="!px-4 !py-2 text-left"
                                             style={{ background: 'var(--shell-tint)' }}
                                         >
                                             <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-main)]">

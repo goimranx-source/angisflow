@@ -851,7 +851,66 @@ export default function Storefronts() {
                           three different sets.
                         */}
                         {selectedStorefront.is_connected && selectedStorefront.connection_id && (
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--shell-border)] pb-3">
+                            /*
+                             * Pinned, and measuring itself.
+                             *
+                             * Scrolling the mapping used to carry these tabs off
+                             * the top while the mapping's own toolbar stayed —
+                             * leaving a strip of empty drawer between the shop's
+                             * name and the first control, and no way back to
+                             * Details without scrolling to the top first.
+                             *
+                             * The height is published rather than assumed
+                             * because the toolbar inside the mapping stacks
+                             * directly beneath it, and that toolbar in turn
+                             * carries the column headings. Three sticky layers,
+                             * each needing to know the height of the one above,
+                             * and none of them a constant: this row wraps on a
+                             * narrow drawer, and the toolbar grows a button when
+                             * there are shop fields to add.
+                             */
+                            <div
+                                className="sticky top-0 z-30 -mx-6 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--shell-border)] px-6 pb-3"
+                                style={{
+                                    background: 'var(--color-card-bg)',
+                                    /*
+                                     * The strip above, painted rather than
+                                     * occupied.
+                                     *
+                                     * The drawer body has 16px of top padding,
+                                     * and rows scroll up through it — so a bar
+                                     * pinned at the scrollport top still had
+                                     * content sliding past above it. The obvious
+                                     * fix, a negative top margin, does nothing:
+                                     * sticky constrains the *margin* box, so
+                                     * pulling the box up by 16px moves where it
+                                     * pins down by exactly the same 16px.
+                                     *
+                                     * A shadow paints over that strip without
+                                     * being part of layout at all, which is the
+                                     * only thing here that cannot be undone by
+                                     * the positioning it is trying to cover.
+                                     */
+                                    boxShadow: '0 -1rem 0 0 var(--color-card-bg)',
+                                }}
+                                ref={(node) => {
+                                    if (!node) return;
+
+                                    const publish = () =>
+                                        document.documentElement.style.setProperty(
+                                            '--store-tabs-height',
+                                            `${Math.round(node.getBoundingClientRect().height)}px`,
+                                        );
+
+                                    publish();
+
+                                    // Republished on resize, since wrapping
+                                    // changes the height without anything here
+                                    // re-rendering.
+                                    const observer = new ResizeObserver(publish);
+                                    observer.observe(node);
+                                }}
+                            >
                                 <div className="flex flex-wrap gap-1.5">
                                 {(['details', 'fields', 'statuses'] as const).map((key) => (
                                     <button
