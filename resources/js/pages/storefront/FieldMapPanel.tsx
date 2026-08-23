@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
+import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
@@ -15,6 +16,10 @@ type MapRow = {
     label: string | null;
     enabled: boolean;
     also: string[];
+    /** The choices, for a type that has any. */
+    options: FieldOption[];
+    /** Shown on the order or product edit screen. Never affects syncing. */
+    visible: boolean;
     display_label?: string;
 };
 
@@ -26,11 +31,73 @@ type Sample = {
     captured_at: string | null;
     targets: Target[];
     transforms: Record<string, string>;
+    /** Types that are meaningless without choices — sent so this list cannot drift. */
+    needs_options: string[];
+    /** Types whose value is a picture or a file. */
+    media_types: string[];
     maps: MapRow[];
 };
 
 /** Chosen in the target list to define a field rather than pick one. */
 const NEW_FIELD = '__new_field__';
+
+/**
+ * A first guess at what a field is, from the one value the shop sent.
+ *
+ * ── Why guess at all ─────────────────────────────────────────────────────────
+ *
+ * WooCommerce meta is a flat list of key and value. Nothing in it says that
+ * Expected Delivery is a date — Woo keeps no registry of order meta, and the
+ * plugins that add checkout fields each keep their definitions to themselves.
+ * So either every discovered field starts life as a text box, or the value is
+ * read and something better is offered.
+ *
+ * Deliberately conservative. A wrong guess is a text box where a date picker
+ * belonged and is corrected in one click; a confident wrong guess is a date
+ * picker refusing a value that was never a date.
+ *
+ * What it cannot do is spot a dropdown. One order shows one value, and a single
+ * "facebook" is indistinguishable from free text — which is precisely why the
+ * choices are typed in rather than inferred.
+ */
+function guessType(sample: string | null): string {
+    const text = (sample ?? '').trim();
+
+    if (text === '') return 'trim';
+
+    if (/^https?:\/\/\S+$/i.test(text)) {
+        if (/\.(jpe?g|png|gif|webp|avif|svg)(\?|$)/i.test(text)) return 'image';
+        if (/\.(mp4|mov|webm|m4v)(\?|$)/i.test(text)) return 'video';
+        if (/\.(pdf|docx?|xlsx?|csv|zip)(\?|$)/i.test(text)) return 'file';
+
+        return 'url';
+    }
+
+    if (/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(text)) return 'email';
+
+    // Both orders written, plus the ISO form. Day-first and month-first cannot
+    // be told apart from a single value, so only the type is decided here — the
+    // reading of it belongs to the transform, which knows the shop's locale.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text) || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(text)) {
+        return 'date';
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(text)) return 'datetime';
+
+    // Only the unambiguous words. '0' and '1' are left alone, because a
+    // quantity of 1 turning into a switch is worse than a flag showing as a
+    // number.
+    if (/^(yes|no|true|false)$/i.test(text)) return 'boolean';
+
+    if (/^#?[0-9a-f]{6}$/i.test(text)) return 'colour';
+
+    if (/^-?\d+$/.test(text)) return 'integer';
+    if (/^-?\d+\.\d+$/.test(text)) return 'decimal';
+
+    if (/[\r\n]/.test(text) || text.length > 120) return 'textarea';
+
+    return 'trim';
+}
 
 /*
  * Two, not three.
@@ -128,7 +195,17 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
     const add = () =>
         setRows((current) => [
             ...current,
-            { source: '', target: '', transform: 'trim', direction: 'both', label: null, enabled: true, also: [] },
+            {
+                source: '',
+                target: '',
+                transform: 'trim',
+                direction: 'both',
+                label: null,
+                enabled: true,
+                also: [],
+                options: [],
+                visible: true,
+            },
         ]);
 
     /*
@@ -159,13 +236,25 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                 // WordPress hides its private meta that way and the underscore
                 // means nothing here.
                 target: `custom.${(option.path.split('.').pop() ?? 'field').replace(/^_+/, '')}`,
-                transform: 'trim',
+                transform: guessType(option.sample),
                 direction: 'both',
                 label: null,
                 enabled: true,
                 also: [],
+                options: [],
+                visible: true,
             })),
         ]);
+
+    /*
+     * Which types are asking for choices.
+     *
+     * Read from the response rather than listed here, so adding a type on the
+     * server is the whole change. The fallback matters only for the moment
+     * before the first response lands.
+     */
+    const needsOptions = (transform: string): boolean =>
+        (sample?.needs_options ?? ['select', 'radio', 'checkbox']).includes(transform);
 
     // What the sample value becomes once the row's transform has run. Shown so a
     // wrong mapping is visible before it is saved rather than after a sync.
@@ -248,6 +337,10 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 <th>Becomes</th>
                                 <th>Treated as</th>
                                 <th>Direction</th>
+                                {/* Not "Enabled". Every row here syncs; this
+                                    governs only whether somebody editing an
+                                    order is shown a box for it. */}
+                                <th className="text-center">On edit page</th>
                                 <th />
                             </tr>
                         </thead>
@@ -255,13 +348,14 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                         <tbody>
                             {rows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
+                                    <td colSpan={7} className="text-center text-[var(--color-text-muted)]">
                                         Nothing mapped yet.
                                     </td>
                                 </tr>
                             ) : (
                                 rows.map((row, index) => (
-                                    <tr key={index}>
+                                    <Fragment key={index}>
+                                    <tr>
                                         <td>
                                             <select
                                                 className="field w-full min-w-[13rem]"
@@ -385,6 +479,36 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                             </select>
                                         </td>
 
+                                        <td className="text-center">
+                                            {/*
+                                              Checked unless somebody says
+                                              otherwise.
+
+                                              A shop sends its plugin's
+                                              bookkeeping and audit trails
+                                              alongside the eight fields a
+                                              person actually fills in, and
+                                              starting everything hidden means
+                                              an edit screen that shows nothing
+                                              until each field is found and
+                                              ticked. Starting everything shown
+                                              means a screen that is complete
+                                              from the first sync and gets
+                                              tidier as the noise is unticked.
+                                            */}
+                                            <input
+                                                type="checkbox"
+                                                checked={row.visible !== false}
+                                                onChange={(e) =>
+                                                    update(index, { visible: e.target.checked })
+                                                }
+                                                aria-label={`Show ${
+                                                    row.display_label ?? (row.source || 'this field')
+                                                } when editing`}
+                                                className="size-4 cursor-pointer align-middle accent-[var(--color-brand)]"
+                                            />
+                                        </td>
+
                                         <td className="text-right">
                                             <button
                                                 type="button"
@@ -396,6 +520,29 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                             </button>
                                         </td>
                                     </tr>
+
+                                    {/*
+                                      A second row, only for the types that need
+                                      one.
+
+                                      Under the mapping rather than inside its
+                                      cell, because a list of choices grows and
+                                      a table column does not — twelve delivery
+                                      areas inside a 10rem cell is a scrollbar
+                                      nobody finds.
+                                    */}
+                                    {needsOptions(row.transform) && (
+                                        <tr>
+                                            <td />
+                                            <td colSpan={6} className="pt-0">
+                                                <FieldOptions
+                                                    value={row.options ?? []}
+                                                    onChange={(options) => update(index, { options })}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </Fragment>
                                 ))
                             )}
                         </tbody>

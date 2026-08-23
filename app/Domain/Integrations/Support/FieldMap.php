@@ -60,6 +60,42 @@ final readonly class FieldMap
          * @var list<string>
          */
         public array $also = [],
+
+        /**
+         * The choices, for a type that has any.
+         *
+         * ── Why these are entered rather than discovered ─────────────────────
+         *
+         * An order carries the one value it happens to have. An order whose
+         * priority is Medium says nothing whatsoever about Low and High
+         * existing, and no amount of reading that order will reveal them —
+         * a shop's own definition of its dropdown lives in the plugin that
+         * created it, which is not something any API exposes.
+         *
+         * So the options are stated here, once, against the mapping. Every
+         * order thereafter renders a real dropdown instead of a text box, and
+         * a value that arrives from the shop is matched against them.
+         *
+         * Shape is [['label' => 'Facebook', 'value' => 'facebook'], ...] —
+         * label for a person, value for the shop, because a shop that stores
+         * 'facebook' should still read "Facebook" on screen.
+         *
+         * @var list<array{label: string, value: string}>
+         */
+        public array $options = [],
+
+        /**
+         * Show this field on the order or product edit screen.
+         *
+         * Not everything that syncs is worth editing. A shop sends bookkeeping
+         * meta, plugin internals and audit trails alongside the fields somebody
+         * actually fills in, and putting all of it on one screen buries the
+         * eight fields that matter under forty that do not.
+         *
+         * Unchecking hides the field from the form. It keeps syncing — this
+         * governs what is shown, never what is exchanged.
+         */
+        public bool $visible = true,
     ) {}
 
     /**
@@ -92,7 +128,57 @@ final readonly class FieldMap
                 array_map(strval(...), (array) ($row['also'] ?? [])),
                 fn (string $path): bool => trim($path) !== '',
             )),
+            options: self::readOptions($row['options'] ?? []),
+
+            // Absent means shown. Every mapping that predates this setting was
+            // written when there was no way to hide anything, and defaulting
+            // them to hidden would empty the edit screen of every shop.
+            visible: (bool) ($row['visible'] ?? true),
         );
+    }
+
+    /**
+     * Clean a stored or submitted option list.
+     *
+     * Accepts either the full shape or a bare list of strings, so a mapping
+     * hand-written as ['low', 'medium'] still works and simply reads back with
+     * the value doing duty as the label.
+     *
+     * Blank values are dropped and duplicates collapse, because a dropdown with
+     * an empty choice in it is a dropdown somebody will pick by accident.
+     *
+     * @param  mixed  $raw
+     * @return list<array{label: string, value: string}>
+     */
+    public static function readOptions(mixed $raw): array
+    {
+        $clean = [];
+
+        foreach ((array) $raw as $row) {
+            if (is_array($row)) {
+                $value = trim((string) ($row['value'] ?? ''));
+                $label = trim((string) ($row['label'] ?? ''));
+            } else {
+                $value = $label = trim((string) $row);
+            }
+
+            if ($value === '') {
+                continue;
+            }
+
+            // Keyed by value so a list pasted twice does not double, and the
+            // first spelling wins — a duplicate arriving later must not quietly
+            // relabel a choice already saved against live orders.
+            $clean[$value] ??= ['label' => $label !== '' ? $label : $value, 'value' => $value];
+        }
+
+        return array_values($clean);
+    }
+
+    /** Does this mapping's type want options that have not been given? */
+    public function needsOptions(): bool
+    {
+        return Transform::needsOptions($this->transform) && $this->options === [];
     }
 
     /** @return array<string, mixed> */
@@ -106,6 +192,8 @@ final readonly class FieldMap
             'label' => $this->label,
             'enabled' => $this->enabled,
             'also' => $this->also,
+            'options' => $this->options,
+            'visible' => $this->visible,
         ];
     }
 

@@ -510,6 +510,16 @@ class IntegrationsEndpoint
                 ],
                 'transforms' => Transform::options(),
 
+                /*
+                 * Which types the screen has to ask more about.
+                 *
+                 * Sent rather than repeated in the front end, so that adding a
+                 * type here is the whole change — a list duplicated in
+                 * TypeScript is a list that drifts the first time one is added.
+                 */
+                'needs_options' => Transform::NEEDS_OPTIONS,
+                'media_types' => Transform::MEDIA,
+
                 'maps' => FieldMapSet::for($integration, $entity)->toArray(),
             ],
         ]);

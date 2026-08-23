@@ -34,60 +34,111 @@ final class Transform
      *
      * @return array<string, string>
      */
+    /**
+     * What a mapping may ask for, and what to call it on screen.
+     *
+     * ── Why these names and not descriptive ones ─────────────────────────────
+     *
+     * They were written as descriptions of what happens to the value — "Text —
+     * Title Case", "Reference — without a leading #". Accurate, and unusable:
+     * somebody setting up a shop is looking for the name of a form field, and
+     * the vocabulary they already have is the one every form builder uses.
+     * Select, Radio, Textarea, WYSIWYG.
+     *
+     * The keys are untouched. They are stored in every existing mapping, and
+     * renaming them would silently unmap every connected shop.
+     *
+     * ── The types that need options ──────────────────────────────────────────
+     *
+     * A select is not a select without its choices, and one order only ever
+     * shows the one value it happens to carry — there is no way to learn from a
+     * single order that Priority can also be High. So the types listed in
+     * NEEDS_OPTIONS ask for them, and the mapping screen shows a place to enter
+     * them.
+     *
+     * @return array<string, string>
+     */
     public static function options(): array
     {
         return [
             // Text
-            'none' => 'Text — as sent',
-            'trim' => 'Text — trimmed',
-            'upper' => 'Text — UPPERCASE',
-            'lower' => 'Text — lowercase',
-            'title' => 'Text — Title Case',
-            'strip_tags' => 'Text — HTML removed',
-            'first_line' => 'Text — first line only',
-            'strip_hash' => 'Reference — without a leading #',
-            'slug' => 'Slug — url-safe-name',
+            'trim' => 'Text',
+            'none' => 'Text (unchanged)',
+            'textarea' => 'Textarea',
+            'rich_text' => 'WYSIWYG (formatted)',
+            'strip_tags' => 'Text (HTML removed)',
+            'first_line' => 'Text (first line only)',
+            'upper' => 'Text (UPPERCASE)',
+            'lower' => 'Text (lowercase)',
+            'title' => 'Text (Title Case)',
+            'slug' => 'Slug',
+            'strip_hash' => 'Reference',
+
+            // Choices — the ones that carry options
+            'select' => 'Select',
+            'radio' => 'Radio',
+            'checkbox' => 'Checkbox (multiple)',
+            'boolean' => 'Switch (yes/no)',
 
             // Numbers and money
-            'integer' => 'Whole number',
-            'decimal' => 'Decimal number',
+            'integer' => 'Number (whole)',
+            'decimal' => 'Number (decimal)',
             'money_minor' => 'Money',
             'percent' => 'Percentage',
 
             // Identity and contact
-            'email' => 'Email address',
-            'digits' => 'Phone number',
-            'url' => 'Web address',
+            'email' => 'Email',
+            'digits' => 'Phone',
+            'url' => 'URL',
 
             // Dates
             'date' => 'Date',
             'datetime' => 'Date and time',
 
-            'boolean' => 'Yes or no',
-
             /*
              * ── Media and rich content ───────────────────────────────────────
              *
-             * A shop's product images arrive as a URL, or a list of them, or an
-             * object with a `src` inside — and a description arrives as HTML
-             * that must survive rather than be flattened. Treating either as
-             * plain text is how a catalogue imports with no pictures and its
-             * formatting stripped.
+             * A shop's images arrive as a URL, or a list of them, or an object
+             * with a src inside — and a description arrives as HTML that must
+             * survive rather than be flattened. Treating either as plain text is
+             * how a catalogue imports with no pictures and its formatting
+             * stripped.
              */
-            'image' => 'Image — one',
-            'image_list' => 'Images — gallery',
-            'file' => 'File or attachment',
-            'video' => 'Video link',
+            'image' => 'Image',
+            'image_list' => 'Gallery',
+            'file' => 'File',
+            'video' => 'Video',
 
-            // The WYSIWYG type: markup is kept, not stripped. Scripts and event
-            // handlers are removed, because this HTML is rendered on our pages
-            // and a shop is not a source we can trust with a <script> tag.
-            'rich_text' => 'Rich text (formatted)',
-
-            'list' => 'List — tags or values',
+            'list' => 'Tags / list',
             'colour' => 'Colour',
-            'json' => 'Structured data (JSON)',
+            'json' => 'JSON',
         ];
+    }
+
+    /**
+     * Types that are meaningless without their choices.
+     *
+     * @var list<string>
+     */
+    public const NEEDS_OPTIONS = ['select', 'radio', 'checkbox'];
+
+    /** Does this type want a list of options entered against it? */
+    public static function needsOptions(?string $transform): bool
+    {
+        return in_array((string) $transform, self::NEEDS_OPTIONS, true);
+    }
+
+    /**
+     * Types whose value is a picture or a file, so a screen can put them
+     * somewhere a picture belongs rather than in a row of inputs.
+     *
+     * @var list<string>
+     */
+    public const MEDIA = ['image', 'image_list', 'file', 'video'];
+
+    public static function isMedia(?string $transform): bool
+    {
+        return in_array((string) $transform, self::MEDIA, true);
     }
 
     public static function exists(string $name): bool
@@ -148,7 +199,10 @@ final class Transform
              * a transform is for.
              */
             'image', 'image_list' => self::toImageList($value),
-            'list' => self::toList($value),
+
+            // A checkbox holds several chosen values; a list holds several of
+            // anything. Both go back as the separate values they were made from.
+            'list', 'checkbox' => self::toList($value),
 
             default => $value,
         };
@@ -249,7 +303,7 @@ final class Transform
         if (is_array($value)) {
             return match ($transform) {
                 'image' => self::firstUrl($value),
-                'image_list', 'list' => self::urlList($value, $transform === 'image_list'),
+                'image_list', 'list', 'checkbox' => self::urlList($value, $transform === 'image_list'),
                 'json' => $value,
                 'integer', 'decimal', 'money_minor', 'percent' => null,
                 default => $value,
@@ -260,6 +314,25 @@ final class Transform
 
         return match ($transform) {
             'trim' => trim($text),
+
+            /*
+             * ── The types that describe a control rather than a conversion ───
+             *
+             * A select, a radio and a textarea all hold text. What separates
+             * them from 'trim' is not what happens to the value — it is what
+             * the person editing an order is shown: a dropdown of the mapped
+             * options, a row of radios, a box with room to type.
+             *
+             * Trimmed and otherwise left alone, because a chosen value has to
+             * come back byte-identical or it stops matching its option.
+             */
+            'select', 'radio' => self::blankToNull(trim($text)),
+
+            // Newlines are the point of a textarea, so only the ends are cut.
+            'textarea' => self::blankToNull(trim($text)),
+
+            // Several chosen values arriving already flattened to a string.
+            'checkbox' => self::blankToNull(implode(', ', array_filter(array_map('trim', explode(',', $text))))),
             'upper' => mb_strtoupper($text),
             'lower' => mb_strtolower($text),
             'title' => mb_convert_case(mb_strtolower(trim($text)), MB_CASE_TITLE, 'UTF-8'),

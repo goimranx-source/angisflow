@@ -3,8 +3,16 @@
     "configurations": [
         {
             "name": "prism",
+            "runtimeExecutable": "php",
+            "runtimeArgs": ["artisan", "serve", "--port=8000"],
             "port": 8000,
             "url": "http://127.0.0.1:8000"
+        },
+        {
+            "name": "vite",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "dev"],
+            "port": 5173
         }
     ]
 }
