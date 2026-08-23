@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Api\V1;
 
+use App\Domain\Catalogue\Models\ProductVariant;
 use App\Domain\Delivery\Adapters\TestCourierAdapter;
 use App\Domain\Delivery\CourierAdapterResolver;
 use App\Domain\Delivery\Models\CourierConnection;
@@ -1036,6 +1037,31 @@ class OrdersEndpoint
                     'number' => $model->number,
                 ],
 
+                /*
+                 * What was actually bought, editable.
+                 *
+                 * An order is its lines — change them and the money changes
+                 * with them — so a screen that edits everything except what was
+                 * bought can only ever adjust the paperwork around a sale it
+                 * cannot correct.
+                 *
+                 * Priced in the order's own currency, as decimals, because that
+                 * is what somebody types into a price box.
+                 */
+                'lines' => $model->lines()
+                    ->orderBy('line_no')
+                    ->get()
+                    ->map(fn ($line): array => [
+                        'id' => (int) $line->id,
+                        'variant_id' => $line->product_variant_id,
+                        'sku' => $line->sku,
+                        'description' => (string) $line->description,
+                        'quantity' => (float) $line->quantity,
+                        'unit_price' => round(((int) $line->unit_price_minor) / $scale, 2),
+                        'total' => round(((int) $line->total_minor) / $scale, 2),
+                    ])
+                    ->all(),
+
                 'custom' => (object) ($link?->custom_fields ?? []),
                 'custom_fields' => $customFields,
 
@@ -1118,6 +1144,14 @@ class OrdersEndpoint
             'customer_notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
 
             'custom' => ['sometimes', 'array'],
+
+            'lines' => ['sometimes', 'array'],
+            'lines.*.id' => ['nullable', 'integer'],
+            'lines.*.variant_id' => ['nullable', 'integer'],
+            'lines.*.sku' => ['nullable', 'string', 'max:120'],
+            'lines.*.description' => ['required_with:lines', 'string', 'max:400'],
+            'lines.*.quantity' => ['required_with:lines', 'numeric', 'min:0'],
+            'lines.*.unit_price' => ['required_with:lines', 'numeric', 'min:0'],
         ]);
 
         $scale = 10 ** Currencies::scale((string) $model->currency);
@@ -1202,6 +1236,10 @@ class OrdersEndpoint
                 }
             }
 
+            if (array_key_exists('lines', $validated)) {
+                $this->writeLines($model, $validated['lines'], $scale);
+            }
+
             if (array_key_exists('custom', $validated)) {
                 $link = IntegrationLink::query()
                     ->where('entity', IntegrationLink::ORDER)
@@ -1226,6 +1264,148 @@ class OrdersEndpoint
             'message' => "Order {$model->number} saved.",
             'data' => ['pushes' => count($jobs)],
         ]);
+    }
+
+    /**
+     * The catalogue, searchable, for putting a product on an order.
+     *
+     * ── Why variants and not products ────────────────────────────────────────
+     *
+     * Because a line on an order is a thing with a SKU and a price, and that is
+     * the variant. "Mustard oil" is not orderable; the litre bottle is. A picker
+     * offering products would make somebody choose twice, or guess which size
+     * they meant.
+     *
+     * Capped and query-driven rather than paginated: this fills a dropdown
+     * somebody is typing into, and a second page of results is not something
+     * they will ever scroll to.
+     */
+    public function catalogueSearch(Request $request): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $term = trim((string) $request->query('q', ''));
+
+        $variants = ProductVariant::query()
+            ->where('business_id', $business->id)
+            ->where('is_active', true)
+            ->when($term !== '', function (Builder $query) use ($term): void {
+                $like = '%'.$term.'%';
+
+                $query->where(function (Builder $inner) use ($like): void {
+                    $inner->where('sku', 'like', $like)
+                        ->orWhere('name', 'like', $like)
+                        ->orWhereHas('product', fn (Builder $p) => $p->where('name', 'like', $like));
+                });
+            })
+            ->with('product:id,name')
+            ->orderBy('name')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'data' => $variants->map(fn (ProductVariant $v): array => [
+                'id' => (int) $v->id,
+                'sku' => $v->sku,
+                /*
+                 * The product's name, with the variant's appended only when it
+                 * adds something.
+                 *
+                 * A variant is often called just "1l", which means nothing on
+                 * its own — but it is just as often called exactly what the
+                 * product is called, and joining those blindly produces
+                 * "Mustard Oil 1l Mustard Oil 1l".
+                 */
+                'name' => self::variantName($v),
+                'price' => round(((int) $v->price_minor) / (10 ** Currencies::scale((string) ($v->currency ?? $business->base_currency ?? 'USD'))), 2),
+                'currency' => $v->currency,
+            ])->all(),
+        ]);
+    }
+
+    /** One readable name for a variant, without repeating the product's. */
+    private static function variantName(ProductVariant $variant): string
+    {
+        $product = trim((string) ($variant->product?->name ?? ''));
+        $own = trim((string) ($variant->name ?? ''));
+
+        if ($product === '') {
+            return $own !== '' ? $own : (string) ($variant->sku ?? 'Item');
+        }
+
+        // Contains rather than equals: "Mustard Oil" and "Mustard Oil 1l" are
+        // the same repetition, one of them just carries the size as well.
+        if ($own === '' || str_contains(mb_strtolower($product), mb_strtolower($own))) {
+            return $product;
+        }
+
+        if (str_contains(mb_strtolower($own), mb_strtolower($product))) {
+            return $own;
+        }
+
+        return $product.' — '.$own;
+    }
+
+    /**
+     * Replace an order's lines with the set the form submitted.
+     *
+     * ── Why rows are matched by id rather than rebuilt ───────────────────────
+     *
+     * Because a line carries more than the four things this form edits. It
+     * holds the shop's own id for that row, the variant it came from, what it
+     * cost us, any stock reservation against it — none of which the browser
+     * ever sees. Deleting every line and inserting the submitted ones would be
+     * simpler here and would throw all of that away, and the shop's ids going
+     * missing is the failure that creates duplicate items on the next push.
+     *
+     * So rows that came back with an id are updated in place, rows without one
+     * are new, and rows the form no longer carries are the ones that were
+     * removed.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function writeLines(Order $model, array $lines, int $scale): void
+    {
+        $existing = $model->lines()->get()->keyBy('id');
+
+        $keep = [];
+        $position = 0;
+
+        foreach ($lines as $row) {
+            $position++;
+
+            $quantity = (float) ($row['quantity'] ?? 0);
+            $unit = (int) round(((float) ($row['unit_price'] ?? 0)) * $scale);
+
+            $attributes = [
+                'line_no' => $position,
+                'description' => (string) ($row['description'] ?? ''),
+                'sku' => $row['sku'] ?? null,
+                'product_variant_id' => $row['variant_id'] ?? null,
+                'quantity' => $quantity,
+                'unit_price_minor' => $unit,
+                // Derived, never taken from the browser: a total that disagrees
+                // with its own quantity and price is a line nobody can audit.
+                'total_minor' => (int) round($unit * $quantity),
+                'currency' => $model->currency,
+            ];
+
+            $line = isset($row['id']) ? $existing->get((int) $row['id']) : null;
+
+            if ($line !== null) {
+                $line->update($attributes);
+                $keep[] = (int) $line->id;
+
+                continue;
+            }
+
+            $keep[] = (int) $model->lines()->create($attributes)->id;
+        }
+
+        // Whatever the form did not send back was removed on the screen.
+        $model->lines()->whereNotIn('id', $keep === [] ? [0] : $keep)->delete();
     }
 
     /**

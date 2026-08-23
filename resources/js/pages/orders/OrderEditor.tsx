@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
 import { CustomField, type CustomFieldDef } from './CustomField';
+import { LineItems, type OrderLine } from './LineItems';
 import { isMedia, isWide } from './fieldTypes';
 
 type Editor = {
@@ -15,6 +16,7 @@ type Editor = {
         values: Record<string, unknown>;
         custom: Record<string, unknown>;
         custom_fields: CustomFieldDef[];
+        lines: OrderLine[];
         mapped: string[];
         shop: string | null;
         symbol: string;
@@ -53,6 +55,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
     const [form, setForm] = useState<Record<string, unknown>>({});
     const [custom, setCustom] = useState<Record<string, unknown>>({});
+    const [lines, setLines] = useState<OrderLine[]>([]);
     const [dirty, setDirty] = useState(false);
 
     useEffect(() => {
@@ -62,6 +65,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
         setForm({ ...data.data.values });
         setCustom({ ...data.data.custom });
+        setLines(data.data.lines.map((line) => ({ ...line })));
         setDirty(false);
     }, [data]);
 
@@ -71,7 +75,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
             // sending it back would be this form claiming to set it.
             const { number: _identifier, ...editable } = form;
 
-            return api.patch(`/orders/${orderId}`, { ...editable, custom });
+            return api.patch(`/orders/${orderId}`, { ...editable, custom, lines });
         },
         onSuccess: (result) => {
             const shaped = (result ?? null) as { message?: string } | null;
@@ -395,6 +399,24 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 <Text name="shipping_country" label="Country" />
                             </>,
                         )}
+                    </Card>
+
+                    {/*
+                      Placed above the money, because it produces it.
+
+                      Reading down the column the order is: what was bought,
+                      then what that came to. The reverse asks somebody to
+                      accept a total before seeing the lines behind it.
+                    */}
+                    <Card title="Items" hint={`${lines.length} line${lines.length === 1 ? '' : 's'}`}>
+                        <LineItems
+                            lines={lines}
+                            currency={String(editor.values.currency ?? '')}
+                            onChange={(next) => {
+                                setLines(next);
+                                setDirty(true);
+                            }}
+                        />
                     </Card>
 
                     <Card title="Money" hint={String(editor.values.currency ?? '')}>

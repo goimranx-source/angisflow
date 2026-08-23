@@ -465,6 +465,15 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
      */
     Route::get('orders/{order}/editor', [OrdersEndpoint::class, 'editor'])
         ->middleware('can:sales.view')->name('orders.editor');
+    /*
+     * The catalogue, for putting a product on an order.
+     *
+     * Lives beside orders rather than under a products prefix because that is
+     * the only thing it serves — a picker on the order editor, capped at what
+     * fits in a dropdown. A real catalogue API is a different surface.
+     */
+    Route::get('orders/catalogue/search', [OrdersEndpoint::class, 'catalogueSearch'])
+        ->middleware('can:sales.view')->name('orders.catalogue-search');
     Route::patch('orders/{order}', [OrdersEndpoint::class, 'updateOrder'])
         ->middleware('can:sales.edit')->name('orders.update');
     Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])
