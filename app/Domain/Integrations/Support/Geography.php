@@ -37,18 +37,35 @@ namespace App\Domain\Integrations\Support;
  *   BD-58        Satkhira            from WooCommerce, 2,040 across 69 countries
  *   BD-58-05     Satkhira Sadar      from the shop's own plugin, 581 for Bangladesh
  *
- * The first two are WooCommerce's own lists, taken from a live shop so they
- * match exactly what arrives on an order. The third is not WooCommerce's at all
- * — no platform models a third level, and this one comes from the address plugin
- * this business wrote. Which is precisely why it is kept separately: a different
- * shop with a different plugin has a different third level, or none.
+ * ── One of the three is shared, and two are not ──────────────────────────────
+ *
+ * Countries are ISO alpha-2 on every platform here, so `BD` is `BD` whether it
+ * came from WooCommerce, Shopify or a bespoke site. There is nothing to split.
+ *
+ * Sub-divisions are where platforms diverge, so they are stored per scheme and
+ * read through AddressScheme. WooCommerce is not even consistent with itself:
+ * 23 of the 69 countries it lists use `BD-58`, and the other 46 use bare codes
+ * where `CA` means California. A bare code cannot be read without knowing its
+ * country, and this refuses to guess rather than returning Canada for it.
+ *
+ * Areas belong to no platform at all. Wherever a third level exists — a thana,
+ * an upazila, a barangay, a ward — a shop owner added a plugin that invented
+ * its own codes, so these are keyed by country and a second business with a
+ * different plugin gets a different file rather than a different scheme.
+ *
+ * ── Names as well as codes ───────────────────────────────────────────────────
+ *
+ * A platform that sends "Ontario" where another sends "ON" is not a platform
+ * that needs its own list built for it. Every lookup falls back to matching the
+ * written name with case and punctuation set aside, which covers Webflow, which
+ * has no codes at all, and the Shopify codes this list happens not to carry.
  */
 final class Geography
 {
     /** @var array<string, string>|null */
     private static ?array $countries = null;
 
-    /** @var array<string, array<string, string>> */
+    /** @var array<string, array<string, string>> keyed 'scheme/country' */
     private static array $states = [];
 
     /** @var array<string, array<string, array<string, string>>> */
@@ -70,12 +87,27 @@ final class Geography
      * names a state without a country is common — this shop's own orders do
      * exactly that.
      */
-    public static function stateName(string $code, ?string $country = null): ?string
+    public static function stateName(string $code, ?string $country = null, ?string $scheme = null): ?string
     {
         $code = self::clean($code);
         $country = self::countryFor($code, $country);
 
-        return $country === null ? null : (self::states($country)[$code] ?? null);
+        if ($country === null) {
+            return null;
+        }
+
+        $states = self::states($country, $scheme);
+
+        /*
+         * The code, then the name.
+         *
+         * Not every platform sends a code. Webflow has no geography endpoint at
+         * all and sends 'Ontario'; Shopify sends both, and its code is
+         * occasionally one this list does not carry. Recognising the name costs
+         * one pass over at most 128 entries, and is the difference between a
+         * platform working and needing its own list built for it.
+         */
+        return $states[$code] ?? self::matchByName($states, $code);
     }
 
     /** 'BD-58-05' → 'Satkhira Sadar'. */
@@ -92,6 +124,12 @@ final class Geography
             if (isset($inState[$code])) {
                 return $inState[$code];
             }
+
+            $byName = self::matchByName($inState, $code);
+
+            if ($byName !== null) {
+                return $byName;
+            }
         }
 
         return null;
@@ -104,13 +142,121 @@ final class Geography
      * screen showing "whatever this address field holds" does not have to know
      * which of the three it was handed.
      */
-    public static function name(string $code, ?string $country = null): ?string
+    public static function name(string $code, ?string $country = null, ?string $scheme = null): ?string
     {
-        return match (substr_count(self::clean($code), '-')) {
-            0 => self::countryName($code),
-            1 => self::stateName($code, $country),
-            default => self::areaName($code, $country),
+        $clean = self::clean($code);
+
+        if ($clean === '') {
+            return null;
+        }
+
+        /*
+         * The shape of a code says which level it is — but only for platforms
+         * that use a shape.
+         *
+         * BD, BD-58 and BD-58-05 are told apart by their dashes. A bare `CA` is
+         * not: it is Canada as a country and California as a state of the US,
+         * and nothing in those two characters says which was meant. So a bare
+         * code is read as a subdivision when a country is known and as a
+         * country otherwise — a caller who supplied the country is asking about
+         * a place inside it, or they would not have said which country.
+         */
+        $dashes = substr_count($clean, '-');
+
+        if ($dashes >= 2) {
+            return self::areaName($clean, $country);
+        }
+
+        if ($dashes === 1) {
+            return self::stateName($clean, $country, $scheme) ?? self::areaName($clean, $country);
+        }
+
+        if ($country !== null && self::clean($country) !== $clean) {
+            $inside = self::stateName($clean, $country, $scheme) ?? self::areaName($clean, $country);
+
+            if ($inside !== null) {
+                return $inside;
+            }
+        }
+
+        return self::countryName($clean) ?? self::stateName($clean, $country, $scheme);
+    }
+
+    /**
+     * A place written out rather than coded.
+     *
+     * Compared with case and punctuation removed, because the same district is
+     * written "Cox's Bazar", "Coxs Bazar" and "COX'S BAZAR" by three different
+     * shops and all three mean the one place.
+     *
+     * @param  array<string, string>  $map
+     */
+    private static function matchByName(array $map, string $wanted): ?string
+    {
+        $needle = self::fold($wanted);
+
+        if ($needle === '') {
+            return null;
+        }
+
+        foreach ($map as $name) {
+            if (self::fold($name) === $needle) {
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The code a written name stands for.
+     *
+     * The reverse journey, for sending a value back to a shop that wants a code
+     * where a person chose a name.
+     */
+    public static function codeForName(string $name, string $country, string $level = 'state', ?string $scheme = null): ?string
+    {
+        $needle = self::fold($name);
+
+        if ($needle === '') {
+            return null;
+        }
+
+        $map = match ($level) {
+            'country' => self::countries(),
+            'area' => self::flatAreas($country),
+            default => self::states($country, $scheme),
         };
+
+        foreach ($map as $code => $label) {
+            if (self::fold($label) === $needle) {
+                return (string) $code;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every area of a country, with which district it sits in set aside.
+     *
+     * @return array<string, string>
+     */
+    private static function flatAreas(string $country): array
+    {
+        $flat = [];
+
+        foreach (self::areas($country) as $inState) {
+            $flat += $inState;
+        }
+
+        return $flat;
+    }
+
+    /** Case, spacing and punctuation removed, for comparing two written names. */
+    private static function fold(string $value): string
+    {
+        return (string) preg_replace('/[^a-z0-9]/', '', mb_strtolower(trim($value)));
     }
 
     // ── Lists, for a dropdown ───────────────────────────────────────────────
@@ -122,9 +268,9 @@ final class Geography
     }
 
     /** @return list<array{label: string, value: string}> */
-    public static function stateOptions(string $country): array
+    public static function stateOptions(string $country, ?string $scheme = null): array
     {
-        return self::asOptions(self::states(self::clean($country)));
+        return self::asOptions(self::states(self::clean($country), $scheme));
     }
 
     /**
@@ -155,11 +301,14 @@ final class Geography
     }
 
     /** @return array<string, string> */
-    public static function states(string $country): array
+    public static function states(string $country, ?string $scheme = null): array
     {
         $country = self::clean($country);
+        $scheme = AddressScheme::for($scheme);
 
-        return self::$states[$country] ??= self::read('states/'.mb_strtolower($country).'.json');
+        return self::$states[$scheme.'/'.$country] ??= self::read(
+            'subdivisions/'.$scheme.'/'.mb_strtolower($country).'.json',
+        );
     }
 
     /** @return array<string, array<string, string>> */

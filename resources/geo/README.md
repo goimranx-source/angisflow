@@ -1,66 +1,96 @@
 # Places
 
-Lists of countries, sub-divisions and areas, keyed by the codes shops store.
+Countries, sub-divisions and areas, keyed by the codes shops store them under.
 
 Read through `App\Domain\Integrations\Support\Geography`, never by opening these
-files directly — it handles the messy input real orders carry (stray spaces,
-lower case, a district arriving without its country) and returns `null` rather
-than throwing for a code nothing knows.
+files directly — it handles what real orders carry (stray spaces, wrong case, a
+district arriving without its country, a name where a code was expected) and
+returns `null` rather than throwing for anything it does not know.
 
-## Why files rather than an API call
-
-WooCommerce will serve its country list on request. Doing that for every screen
-showing an address would be one round trip to somebody else's shop, per page, to
-learn something that changes when a country does.
-
-Held here, they work for a shop that is offline, for a platform with no such
-endpoint at all, and for an order read out of the database long after the
-connection it arrived through was deleted.
-
-## The three levels
+## Layout
 
 ```
-BD           Bangladesh          countries.json
-BD-58        Satkhira            states/bd.json
-BD-58-05     Satkhira Sadar      areas/bd.json
+countries.json                  shared by every platform
+subdivisions/
+  woocommerce/bd.json           one folder per code scheme
+areas/
+  bd.json                       one file per country
 ```
 
-A code carries its own country as a prefix, which is what lets a district
-resolve when an order names one without a country — not a hypothetical, since
-this is exactly what the connected shop's orders send.
+The three levels are split this way because they diverge differently.
+
+**Countries are shared.** WooCommerce, Shopify and Webflow all use ISO alpha-2,
+so `BD` is `BD` wherever it came from. Nothing to split.
+
+**Sub-divisions are per platform**, under `subdivisions/<scheme>/`. Which scheme
+a connection uses is decided by `AddressScheme`. Add a folder and a line in its
+map to give a platform its own list; nothing else changes.
+
+**Areas belong to no platform.** Wherever a third level exists — thana, upazila,
+barangay, ward — a shop owner added a plugin that invented its own codes. Keyed
+by country, so a second business with a different plugin gets a different file
+rather than a different scheme.
+
+## WooCommerce is not consistent with itself
+
+Worth knowing before assuming any pattern holds:
+
+| | Countries | Example |
+|---|---|---|
+| `CC-NN` prefixed | 23 | `BD-58` = Satkhira |
+| bare | 46 | `CA` = California, `ON` = Ontario |
+
+A prefixed code carries its own country, so it resolves alone. A bare one does
+not, and `CA` is genuinely ambiguous — Canada as a country, California as a
+state of the US. `Geography` reads a bare code as a sub-division when a country
+is known and as a country otherwise, and refuses rather than guessing.
+
+## Names, not only codes
+
+Every lookup falls back to matching the written name with case and punctuation
+set aside, so `coxs bazar` finds `Cox's Bazar`. This is what lets Webflow work
+with no code list at all, and covers the Shopify codes these files happen not to
+carry. `Geography::codeForName()` goes the other way, for writing a value back to
+a shop that wants a code.
 
 ## What is here
 
 | Path | Holds | Count |
 |---|---|---|
 | `countries.json` | code → name | 250 |
-| `states/<cc>.json` | code → name, one file per country | 69 files, 2,040 total |
-| `areas/<cc>.json` | district code → { area code → name } | 581 for Bangladesh |
+| `subdivisions/woocommerce/<cc>.json` | code → name | 69 files, 2,040 total |
+| `areas/bd.json` | district → { area code → name } | 581 across 64 districts |
 
 181 of the 250 countries have no sub-divisions. That is represented by the file
-simply not existing, and `Geography` reads a missing file as an empty list
-rather than a fault.
+not existing, and a missing file reads as an empty list rather than a fault.
 
 ## Where each came from
 
-**`countries.json` and `states/`** — read from a live WooCommerce shop's
-`GET /wp-json/wc/v3/data/countries`. Taken from WooCommerce rather than an ISO
-list on purpose: these have to match what actually arrives on an order, and
-where WooCommerce differs from ISO, WooCommerce is the one that is right for
+**`countries.json` and `subdivisions/woocommerce/`** — read from a live
+WooCommerce shop's `GET /wp-json/wc/v3/data/countries`. Taken from WooCommerce
+rather than an ISO list on purpose: these have to match what actually arrives on
+an order, and where the two differ, WooCommerce is the one that is right for
 this job.
 
 **`areas/bd.json`** — from `woocommerce-address-field-manager`, the address
-plugin this business wrote. No platform models a third level; where a shop wants
-a thana, an upazila, a barangay or a ward, somebody has added a plugin and that
-plugin invented its own codes. Which is why this file is per-country and why
-another shop's third level would be a different file, or none.
+plugin this business wrote. The plugin itself is deliberately not part of this
+repository.
 
 ## Refreshing
 
-The country and state lists change when a country does — rarely, and worth doing
-deliberately rather than on a timer. Re-read them from a connected WooCommerce
+Country and sub-division lists change when a country does — rarely, and worth
+doing deliberately rather than on a timer. Re-read from a connected WooCommerce
 shop and rewrite the files; the shape is `{"CODE": "Name"}` sorted by code, and
 `Geography` sorts by name for display.
 
-The area list follows its plugin. Copy `data/thana.json` from the plugin, sort
-it, and write it as `areas/bd.json` — the shape is already what is wanted.
+The area list follows its plugin: copy `data/thana.json`, sort it, write it as
+`areas/<cc>.json`. The shape is already what is wanted.
+
+## Adding a platform
+
+1. Create `subdivisions/<platform>/` with one `<cc>.json` per country it covers.
+2. Add `'<platform>' => '<platform>'` to `AddressScheme::SCHEMES`.
+
+Only do this if the platform's codes genuinely differ. If it sends names, or ISO
+codes, the name fallback already handles it and a second copy of the same data
+is a second thing to keep current.

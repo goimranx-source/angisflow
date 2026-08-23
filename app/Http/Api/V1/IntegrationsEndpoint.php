@@ -10,6 +10,7 @@ use App\Domain\Integrations\Models\Integration;
 use App\Domain\Integrations\PlatformRegistry;
 use App\Domain\Integrations\PullSync;
 use App\Domain\Integrations\StorefrontCurrencyDetector;
+use App\Domain\Integrations\Support\AddressScheme;
 use App\Domain\Integrations\Support\CustomFields;
 use App\Domain\Integrations\Support\DemoPayloads;
 use App\Domain\Integrations\Support\EntityFields;
@@ -526,7 +527,7 @@ class IntegrationsEndpoint
                 // What the code stands for, so the column reads Satkhira rather
                 // than BD-58 while the mapping is still being set up.
                 'reads_as' => $place !== null && is_scalar($sample)
-                    ? Geography::name((string) $sample)
+                    ? Geography::name((string) $sample, null, (string) $integration->provider)
                     : null,
                 'label' => $field?->label,
                 'readonly' => $field?->readonly ?? false,
@@ -555,7 +556,9 @@ class IntegrationsEndpoint
             $paths[] = [
                 'path' => $path,
                 'sample' => is_scalar($example) ? Str::limit((string) $example, 60) : null,
-                'reads_as' => is_scalar($example) ? Geography::name((string) $example) : null,
+                'reads_as' => is_scalar($example)
+                    ? Geography::name((string) $example, null, (string) $integration->provider)
+                    : null,
                 'label' => null,
                 'readonly' => false,
                 'suggest' => PlaceFields::typeFor($path),
@@ -734,18 +737,33 @@ class IntegrationsEndpoint
         $country = trim((string) $request->query('country', ''));
         $state = trim((string) $request->query('state', ''));
 
+        /*
+         * Which platform is asking, since sub-division codes are its own.
+         *
+         * Optional: countries are shared and need no scheme, and a caller that
+         * omits it gets the fallback list, which is the right answer for a
+         * platform that has no codes of its own to speak of.
+         */
+        $platform = trim((string) $request->query('platform', ''));
+
         return response()->json([
             'data' => [
                 'countries' => Geography::countryOptions(),
 
                 // Only when one is chosen. Sending every sub-division of every
                 // country on the chance one is wanted is the thing this avoids.
-                'states' => $country === '' ? [] : Geography::stateOptions($country),
+                'states' => $country === '' ? [] : Geography::stateOptions($country, $platform ?: null),
                 'areas' => $state === '' ? [] : Geography::areaOptions($state, $country ?: null),
 
                 // So a form can tell "no list exists for this country" from
                 // "one exists and has not been asked for yet".
                 'has_areas' => $country !== '' && Geography::hasAreas($country),
+
+                // Whether these sub-divisions are this platform's own list or
+                // the shared one it is borrowing. Worth saying out loud rather
+                // than letting somebody conclude the application is confused.
+                'scheme' => AddressScheme::for($platform ?: null),
+                'scheme_is_own' => AddressScheme::isOwn($platform ?: null),
             ],
         ]);
     }
