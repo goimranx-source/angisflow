@@ -6,6 +6,7 @@ namespace App\Domain\Integrations;
 
 use App\Domain\Integrations\Contracts\PlatformDriver;
 use App\Domain\Integrations\Drivers\GenericCourierDriver;
+use App\Domain\Integrations\Drivers\InboundFeedDriver;
 use App\Domain\Integrations\Drivers\PresetStoreDriver;
 use App\Domain\Integrations\Drivers\GenericRestDriver;
 use App\Domain\Integrations\Drivers\ShopifyDriver;
@@ -43,6 +44,7 @@ class PlatformRegistry
         'shopify' => ShopifyDriver::class,
         'webflow' => WebflowDriver::class,
         'generic_rest' => GenericRestDriver::class,
+        'inbound_feed' => InboundFeedDriver::class,
         // Courier drivers
         'pathao' => GenericCourierDriver::class,
         'steadfast' => GenericCourierDriver::class,
@@ -81,6 +83,7 @@ class PlatformRegistry
         'shopify' => ['store'],
         'webflow' => ['store'],
         'generic_rest' => ['store', 'courier', 'other'],
+        'inbound_feed' => ['store'],
         // Courier-specific providers
         'pathao' => ['courier'],
         'steadfast' => ['courier'],

@@ -88,6 +88,23 @@ final class PlatformPresets
                 'support' => 'built',
             ],
 
+            /*
+             * ── No API of their own ──────────────────────────────────────────
+             *
+             * A shop that cannot be called can still be connected, by sending
+             * to us instead. Listed as a platform rather than buried in the
+             * documentation, because the businesses who need it are exactly the
+             * ones least likely to go looking.
+             */
+            'inbound_feed' => [
+                'label' => 'Send orders to us',
+                'group' => 'No API',
+                'kinds' => ['store'],
+                'family' => self::FAMILY_FLAT,
+                'support' => 'built',
+                'help' => 'For a shop with no API: paste a small snippet into your site and it sends each order here.',
+            ],
+
             // ── Hosted storefronts ───────────────────────────────────────────
 
             'bigcommerce' => [
@@ -392,6 +409,7 @@ final class PlatformPresets
     {
         return [
             'Popular',
+            'No API',
             'Hosted storefronts',
             'Self-hosted',
             'Headless',
