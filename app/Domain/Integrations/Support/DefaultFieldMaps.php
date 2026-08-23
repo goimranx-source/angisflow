@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Integrations\Support;
 
+use App\Domain\Integrations\PlatformPresets;
 /**
  * What each platform's standard fields mean, without anybody having to say.
  *
@@ -34,14 +35,124 @@ final class DefaultFieldMaps
      */
     public static function for(string $provider, string $entity): array
     {
-        $rows = match (strtolower($provider)) {
+        $key = strtolower($provider);
+
+        $rows = match ($key) {
             'woocommerce' => self::woocommerce()[$entity] ?? [],
             'shopify' => self::shopify()[$entity] ?? [],
             'webflow' => self::webflow()[$entity] ?? [],
-            default => [],
+
+            /*
+             * A catalogued platform inherits the family its API resembles.
+             *
+             * ── Why a guess beats nothing ────────────────────────────────────
+             *
+             * The alternative for a platform without its own defaults is an
+             * empty mapping screen: thirty-six fields, none of them filled in,
+             * and somebody reading their shop's API documentation to complete
+             * a form this application could have half-completed for them.
+             *
+             * Storefront APIs descend from a small number of conventions, and
+             * most of the names — id, status, currency, total, line_items,
+             * billing.email — are the same across them because they were
+             * copied from each other. Starting from the nearest family puts
+             * those in front of somebody to correct rather than to compose.
+             *
+             * It is a starting point and the mapping screen is where it is
+             * corrected; nothing here is claimed to have been verified against
+             * that platform.
+             */
+            default => match (PlatformPresets::familyFor($key)) {
+                PlatformPresets::FAMILY_WOO => self::woocommerce()[$entity] ?? [],
+                PlatformPresets::FAMILY_SHOPIFY => self::shopify()[$entity] ?? [],
+                default => self::flat()[$entity] ?? [],
+            },
         };
 
         return array_map(fn (array $row): FieldMap => FieldMap::fromArray($row, $entity), $rows);
+    }
+
+    /**
+     * The names a plain JSON commerce API most often uses.
+     *
+     * ── Where these come from ────────────────────────────────────────────────
+     *
+     * Not from one platform. These are the field names that recur across
+     * BigCommerce, Magento, Medusa, Square and most of the rest: a flat object
+     * with an id and a status, money as decimal strings, the buyer under
+     * billing or customer, and the items under line_items or items.
+     *
+     * Every one of them is a starting point to be corrected on the mapping
+     * screen, which is why they are offered rather than applied silently.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private static function flat(): array
+    {
+        return [
+            'order' => [
+                self::row('id', 'external_ref'),
+                self::row('order_number', 'number'),
+                self::row('number', 'number'),
+                self::row('created_at', 'ordered_on'),
+                self::row('status', 'status'),
+                self::row('financial_status', 'payment_status'),
+                self::row('currency', 'currency'),
+                self::row('currency_code', 'currency'),
+
+                // Money in, only: totals are the shop's to compute from its own
+                // lines, and pushing ours back is discarded by most of them.
+                self::row('subtotal', 'subtotal_minor', FieldMap::IN),
+                self::row('discount_total', 'discount_minor', FieldMap::IN),
+                self::row('shipping_total', 'shipping_minor', FieldMap::IN),
+                self::row('tax_total', 'tax_minor', FieldMap::IN),
+                self::row('total', 'total_minor', FieldMap::IN),
+                self::row('total_paid', 'paid_minor', FieldMap::IN),
+
+                self::row('customer.email', 'customer.email'),
+                self::row('customer.first_name', 'customer.first_name'),
+                self::row('customer.last_name', 'customer.last_name'),
+                self::row('customer.phone', 'customer.phone'),
+
+                self::row('billing.first_name', 'customer.first_name'),
+                self::row('billing.email', 'customer.email'),
+                self::row('billing.phone', 'customer.phone'),
+                self::row('billing.address_1', 'customer.billing_address'),
+                self::row('billing.city', 'customer.billing_city'),
+                self::row('billing.postcode', 'customer.billing_postcode'),
+                self::row('billing.country', 'customer.billing_country'),
+
+                self::row('shipping.first_name', 'shipping_name'),
+                self::row('shipping.phone', 'shipping_phone'),
+                self::row('shipping.address_1', 'shipping_address'),
+                self::row('shipping.city', 'shipping_city'),
+                self::row('shipping.postcode', 'shipping_postcode'),
+                self::row('shipping.country', 'shipping_country'),
+
+                self::row('note', 'notes'),
+                self::row('customer_note', 'notes'),
+            ],
+
+            'product' => [
+                self::row('id', 'external_ref'),
+                self::row('name', 'name'),
+                self::row('title', 'name'),
+                self::row('slug', 'slug'),
+                self::row('handle', 'slug'),
+                self::row('description', 'description'),
+                self::row('sku', 'variant.sku'),
+                self::row('price', 'variant.price_minor'),
+                self::row('images.0.src', 'image'),
+            ],
+
+            'customer' => [
+                self::row('id', 'external_ref'),
+                self::row('email', 'email'),
+                self::row('first_name', 'first_name'),
+                self::row('last_name', 'last_name'),
+                self::row('phone', 'phone'),
+            ],
+        ];
     }
 
     /** Is there anything to start from for this platform? */

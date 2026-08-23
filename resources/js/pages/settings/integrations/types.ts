@@ -36,6 +36,16 @@ export type Platform = {
     kinds: string[];
     capabilities: Capabilities;
     fields: ConfigField[];
+    /** Where it sits in the list — "Popular", "Marketplaces", and so on. */
+    group?: string;
+    /**
+     * How far this platform can be trusted.
+     *
+     * built   a driver written and used against the real API
+     * preset  the right credentials and field shapes, over the generic client
+     * manual  listed so it can be found; expect to map fields by hand
+     */
+    support?: 'built' | 'preset' | 'manual';
 };
 
 export type Connection = {

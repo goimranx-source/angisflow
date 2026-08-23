@@ -6,6 +6,7 @@ namespace App\Domain\Integrations;
 
 use App\Domain\Integrations\Contracts\PlatformDriver;
 use App\Domain\Integrations\Drivers\GenericCourierDriver;
+use App\Domain\Integrations\Drivers\PresetStoreDriver;
 use App\Domain\Integrations\Drivers\GenericRestDriver;
 use App\Domain\Integrations\Drivers\ShopifyDriver;
 use App\Domain\Integrations\Drivers\WebflowDriver;
@@ -162,6 +163,23 @@ class PlatformRegistry
     {
         $key = strtolower(trim($provider));
 
+        /*
+         * A platform from the catalogue, spoken to by the generic client.
+         *
+         * Checked before the hand-written drivers are consulted for a missing
+         * key, so a preset that later earns a driver of its own is picked up by
+         * DRIVERS and this branch stops applying — without the entry, or
+         * anything a business configured against it, having to change.
+         */
+        if (! isset(self::DRIVERS[$key]) && ($preset = PlatformPresets::find($key)) !== null) {
+            return $this->resolved[$key] ??= new PresetStoreDriver(
+                $key,
+                $preset['label'],
+                $preset['auth'] ?? 'token',
+                $preset['help'] ?? null,
+            );
+        }
+
         if (! isset(self::DRIVERS[$key])) {
             throw new RuntimeException("No integration driver is registered for '{$provider}'.");
         }
@@ -207,7 +225,14 @@ class PlatformRegistry
     /** @return list<PlatformDriver> */
     public function all(): array
     {
-        return array_map(fn (string $key): PlatformDriver => $this->driver($key), array_keys(self::DRIVERS));
+        /*
+         * Every hand-written driver, then every catalogued platform that does
+         * not have one. Keyed union rather than a concatenation, so a platform
+         * appearing in both places is listed once — by its real driver.
+         */
+        $keys = array_keys(self::DRIVERS + PlatformPresets::all());
+
+        return array_map(fn (string $key): PlatformDriver => $this->driver($key), $keys);
     }
 
     /**
@@ -228,7 +253,17 @@ class PlatformRegistry
             'label' => $driver->label(),
             // Every kind this driver can serve, so the form can filter by the
             // choice made in step one.
-            'kinds' => self::KINDS[$driver->key()] ?? ['other'],
+            'kinds' => self::KINDS[$driver->key()] ?? PlatformPresets::find($driver->key())['kinds'] ?? ['other'],
+
+            /*
+             * Where it sits in the list, and how far it can be trusted.
+             *
+             * Without the second of these a platform nobody has tested looks
+             * identical to one that has been in use for a year, and somebody
+             * chooses the first on the strength of the second.
+             */
+            'group' => PlatformPresets::find($driver->key())['group'] ?? 'Anything else',
+            'support' => PlatformPresets::find($driver->key())['support'] ?? 'built',
             'capabilities' => $driver->capabilities()->toArray(),
             'fields' => array_map(
                 fn ($field): array => $field->toArray(),

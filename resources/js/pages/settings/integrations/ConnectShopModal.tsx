@@ -85,6 +85,43 @@ export function ConnectShopModal({
         [platforms, kind],
     );
 
+    const [platformSearch, setPlatformSearch] = useState('');
+
+    /*
+     * The offered platforms, filtered and gathered under their headings.
+     *
+     * Groups keep the order the catalogue gives them rather than sorting
+     * alphabetically: the ones most businesses actually run should be read
+     * first, and an alphabet puts Amazon above WooCommerce for nobody's
+     * benefit.
+     */
+    const grouped = useMemo(() => {
+        const term = platformSearch.trim().toLowerCase();
+
+        const matching =
+            term === ''
+                ? offered
+                : offered.filter(
+                      (p) => p.label.toLowerCase().includes(term) || p.key.includes(term),
+                  );
+
+        const order: string[] = [];
+        const buckets = new Map<string, typeof matching>();
+
+        for (const platform of matching) {
+            const name = platform.group ?? 'Anything else';
+
+            if (!buckets.has(name)) {
+                buckets.set(name, []);
+                order.push(name);
+            }
+
+            buckets.get(name)!.push(platform);
+        }
+
+        return order.map((name) => [name, buckets.get(name)!] as const);
+    }, [offered, platformSearch]);
+
     // The fields of a connection being edited come from the connection itself,
     // so the form still works if the catalogue has not arrived yet.
     const fields: ConfigField[] = connection?.fields ?? platform?.fields ?? [];
@@ -252,8 +289,37 @@ export function ConnectShopModal({
                         {!editing && (
                             <div>
                                 <label className="mb-2 block text-sm font-medium">Select Platform</label>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    {offered.map((option) => (
+
+                                {/*
+                                  Searchable, because the list is long.
+
+                                  Thirty-six platforms in one grid is a wall
+                                  somebody reads rather than scans, and the one
+                                  they run is as likely to be at the bottom as
+                                  the top. Typing three letters of it beats any
+                                  arrangement.
+                                */}
+                                <input
+                                    className="field mb-3 w-full"
+                                    placeholder="Search platforms…"
+                                    value={platformSearch}
+                                    onChange={(event) => setPlatformSearch(event.target.value)}
+                                />
+
+                                {grouped.length === 0 && (
+                                    <p className="rounded-[var(--shell-radius)] border border-dashed border-[var(--shell-border)] p-4 text-center text-sm text-[var(--color-text-subtle)]">
+                                        Nothing matches. Anything with a REST API can still be connected as
+                                        a custom site.
+                                    </p>
+                                )}
+
+                                {grouped.map(([groupName, items]) => (
+                                    <div key={groupName} className="mb-4 last:mb-0">
+                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                            {groupName}
+                                        </p>
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            {items.map((option) => (
                                         <button
                                             key={option.key}
                                             type="button"
@@ -276,9 +342,33 @@ export function ConnectShopModal({
                                                 {option.capabilities.entities.join(', ')}
                                                 {option.capabilities.can_sync_both_ways ? ' · two-way' : ' · one-way'}
                                             </span>
-                                        </button>
-                                    ))}
-                                </div>
+
+                                            {/*
+                                              Said plainly on the card.
+
+                                              Without it a platform nobody has
+                                              tested looks identical to one in
+                                              daily use, and somebody picks the
+                                              first on the strength of the
+                                              second.
+                                            */}
+                                            {option.support && option.support !== 'built' && (
+                                                <span
+                                                    className="mt-2 inline-block rounded-full bg-[var(--shell-muted)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
+                                                    title={
+                                                        option.support === 'preset'
+                                                            ? 'Set up for you, but not tested against this platform by us — check the field mapping after connecting.'
+                                                            : 'Listed so you can find it. Expect to fill in the paths and map fields by hand.'
+                                                    }
+                                                >
+                                                    {option.support === 'preset' ? 'Prefilled' : 'Manual setup'}
+                                                </span>
+                                            )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </>
