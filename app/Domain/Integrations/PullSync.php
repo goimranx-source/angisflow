@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Integrations;
 
+use App\Domain\Integrations\Support\SyncMute;
 use App\Domain\Integrations\Contracts\PullsRecords;
 use App\Domain\Integrations\Models\Integration;
 use App\Domain\Integrations\Models\IntegrationLink;
@@ -313,7 +314,22 @@ class PullSync
         }
 
         try {
-            DB::transaction(function () use ($integration, $entity, $payload, $mapped, $statuses, $externalId, $report): void {
+            /*
+             * Nothing written by this import is pushed straight back out.
+             *
+             * ── The circle this prevents ─────────────────────────────────────
+             *
+             * Importing writes to our tables, and writing to our tables is what
+             * tells the catalogue observers to send changes to the shops. Left
+             * alone, importing a product from a shop would immediately push
+             * that same product back to the shop it came from, which the shop
+             * would then report as a change, which we would import again.
+             *
+             * The fingerprint on the link catches that one lap later. This
+             * stops the lap being run at all — cheaper, and far easier to
+             * follow when something does go wrong.
+             */
+            SyncMute::while(fn () => DB::transaction(function () use ($integration, $entity, $payload, $mapped, $statuses, $externalId, $report): void {
                 $link = $this->linker->find($integration, $entity, $externalId);
                 $localId = $link?->linkable_id;
 
@@ -402,7 +418,7 @@ class PullSync
                 $link->forceFill(['last_pulled_at' => now()])->save();
 
                 $existed ? $report->updated($entity) : $report->created($entity);
-            });
+            }));
         } catch (\Throwable $e) {
             // Counted and carried, not thrown. One unusable record out of four
             // hundred must not cost the other three hundred and ninety-nine.

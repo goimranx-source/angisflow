@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Domain\Billing\PlanEntitlement;
+use App\Domain\Catalogue\Models\Product;
+use App\Domain\Catalogue\Models\ProductVariant;
+use App\Domain\Integrations\Observers\ProductObserver;
+use App\Domain\Integrations\Observers\ProductVariantObserver;
 use App\Domain\Catalogue\Contracts\ModuleEntitlement;
 use App\Domain\Identity\Models\User;
 use App\Domain\Integrations\PlatformRegistry;
@@ -50,6 +54,32 @@ class AppServiceProvider extends ServiceProvider
         $this->configureMailLinks();
         $this->configureMorphMap();
         $this->watchTheQueue();
+        $this->syncTheCatalogue();
+    }
+
+    /**
+     * Send catalogue changes to the shops that sell them.
+     *
+     * ── Why this is registered here and not called at each edit ──────────────
+     *
+     * A product is edited from more places than anyone remembers: the catalogue
+     * screen, a bulk price change, an importer, a console command, whatever is
+     * written next. A push wired into each of them is a push missing from the
+     * one after.
+     *
+     * Orders were done the other way — by hand, at each call site — and the
+     * order editor duly forgot it, so an edited quantity saved here and never
+     * reached the shop. This cannot be forgotten.
+     *
+     * Variants are watched as well as products because price, SKU and barcode
+     * live on the variant: changing a price leaves the product row untouched,
+     * and watching products alone would miss the commonest catalogue edit there
+     * is.
+     */
+    private function syncTheCatalogue(): void
+    {
+        Product::observe(ProductObserver::class);
+        ProductVariant::observe(ProductVariantObserver::class);
     }
 
     /**

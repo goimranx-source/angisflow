@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Integrations;
 
+use App\Domain\Catalogue\Models\Product;
 use App\Domain\Integrations\Jobs\PushIntegrationRecord;
 use App\Domain\Integrations\Models\Integration;
 use App\Domain\Integrations\Models\IntegrationLink;
@@ -72,6 +73,56 @@ final class PushDispatcher
     public function order(Order $order): void
     {
         foreach ($this->jobsFor($order) as $job) {
+            $this->send($job);
+        }
+    }
+
+    /**
+     * The pushes a product needs, without sending them.
+     *
+     * ── Why a product is not routed like an order ────────────────────────────
+     *
+     * An order belongs to exactly one shop — the one it was placed in — so a
+     * push has one destination and sending it anywhere else would be inventing
+     * an order in a shop that never took it.
+     *
+     * A product is the opposite: the same thing can be listed in every shop a
+     * business runs, and each listing is its own row in integration_links.
+     * Changing the price here means changing it everywhere it is sold, so this
+     * goes to every connected shop rather than to one.
+     *
+     * @return list<PushIntegrationRecord>
+     */
+    public function jobsForProduct(Product $product): array
+    {
+        $jobs = [];
+
+        $integrations = Integration::query()
+            ->where('business_id', $product->business_id)
+            ->where('bidirectional', true)
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($integrations as $integration) {
+            // The debt, before the attempt — see jobsFor(). A product with no
+            // link yet has nothing to mark; the push will create the listing
+            // and the link with it.
+            IntegrationLink::query()
+                ->where('integration_id', $integration->id)
+                ->where('entity', IntegrationLink::PRODUCT)
+                ->where('linkable_id', $product->id)
+                ->first()
+                ?->markPushPending();
+
+            $jobs[] = new PushIntegrationRecord($integration->id, IntegrationLink::PRODUCT, (int) $product->id);
+        }
+
+        return $jobs;
+    }
+
+    public function product(Product $product): void
+    {
+        foreach ($this->jobsForProduct($product) as $job) {
             $this->send($job);
         }
     }
