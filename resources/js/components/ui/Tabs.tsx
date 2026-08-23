@@ -1,19 +1,54 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
+import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
+
+/**
+ * ── Two levels, and why there are only two ───────────────────────────────────
+ *
+ * Tabs nest in this application: a page has them, the drawer opened from that
+ * page has them, and a panel inside that drawer has them again. Three sets of
+ * tabs on screen at once, and until now three different designs — an underline
+ * here, a row of bordered buttons there, a filled segmented control below that —
+ * none of which said anything about which contained which.
+ *
+ * So there are two looks, and they mean something.
+ *
+ *   underline    Where am I? The top of a page, the top of a drawer. Reads as
+ *                part of the surface it sits on, because it is naming the
+ *                surface.
+ *
+ *   segmented    Which view of this? A control inside a panel, sitting in its
+ *                own tinted track so it reads as an object placed on the page
+ *                rather than as a division of it.
+ *
+ * Two is the limit on purpose. A third level of tabs is a sign the screen wants
+ * splitting, not that this component wants another variant.
+ *
+ * ── Why the variant travels in context ───────────────────────────────────────
+ *
+ * It used to be guessed, by each trigger looking at its own className for the
+ * word "rounded". That worked by coincidence and broke silently the moment
+ * anybody passed a rounded corner for an unrelated reason. The list knows what
+ * it is; the triggers should be told rather than left to infer.
+ */
+type Variant = 'underline' | 'segmented';
 
 type TabsContextType = {
     activeTab: string;
     setActiveTab: (value: string) => void;
+    variant: Variant;
 };
 
 const TabsContext = createContext<TabsContextType | null>(null);
 
 function useTabsContext() {
     const context = useContext(TabsContext);
+
     if (!context) {
         throw new Error('Tabs components must be used within <Tabs>');
     }
+
     return context;
 }
 
@@ -24,36 +59,27 @@ type TabsProps = {
     value?: string;
     /** Callback when tab changes */
     onValueChange?: (value: string) => void;
-    /** Tab content */
+    /**
+     * 'underline' names the surface — a page or a drawer.
+     * 'segmented' chooses a view within one, and is what nested tabs use.
+     */
+    variant?: Variant;
     children: ReactNode;
-    /** Additional class */
     className?: string;
 };
 
 /**
- * Tabs container component.
+ * Tabs container.
  *
- * Provides context for tab list and tab panels.
- * Supports both controlled and uncontrolled modes.
+ * Controlled when `value` is given, uncontrolled otherwise.
  *
  * @example
  * ```tsx
- * <Tabs defaultValue="general">
+ * <Tabs defaultValue="all" value={tab} onValueChange={setTab}>
  *   <TabsList>
- *     <TabsTrigger value="general">General</TabsTrigger>
- *     <TabsTrigger value="security">Security</TabsTrigger>
- *     <TabsTrigger value="billing">Billing</TabsTrigger>
+ *     <TabsTrigger value="all">All orders</TabsTrigger>
+ *     <TabsTrigger value="archived" icon="archive" badge={12}>Archived</TabsTrigger>
  *   </TabsList>
- *   
- *   <TabsContent value="general">
- *     <p>General settings content</p>
- *   </TabsContent>
- *   <TabsContent value="security">
- *     <p>Security settings content</p>
- *   </TabsContent>
- *   <TabsContent value="billing">
- *     <p>Billing settings content</p>
- *   </TabsContent>
  * </Tabs>
  * ```
  */
@@ -61,6 +87,7 @@ export function Tabs({
     defaultValue,
     value: controlledValue,
     onValueChange,
+    variant = 'underline',
     children,
     className,
 }: TabsProps) {
@@ -72,36 +99,36 @@ export function Tabs({
         if (controlledValue === undefined) {
             setInternalValue(newValue);
         }
+
         onValueChange?.(newValue);
     };
 
     return (
-        <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+        <TabsContext.Provider value={{ activeTab, setActiveTab, variant }}>
             <div className={className}>{children}</div>
         </TabsContext.Provider>
     );
 }
 
-type TabsListProps = {
-    /** Tab triggers */
-    children: ReactNode;
-    /** Additional class */
-    className?: string;
-    /** Variant */
-    variant?: 'default' | 'pills';
-};
+/** Container for the triggers. */
+export function TabsList({ children, className }: { children: ReactNode; className?: string }) {
+    const { variant } = useTabsContext();
 
-/**
- * Tab list component (container for triggers).
- */
-export function TabsList({ children, className, variant = 'default' }: TabsListProps) {
     return (
         <div
             role="tablist"
             className={cn(
                 'flex items-center',
-                variant === 'default' && 'gap-6 border-b border-[var(--color-border-light)]',
-                variant === 'pills' && 'gap-2 rounded-lg bg-[var(--color-brand-subtle)] p-1',
+
+                // A rule the full width of the surface, with the active tab's
+                // marker sitting on it. The rule is what makes it read as a
+                // division of the page rather than as a row of buttons.
+                variant === 'underline' && 'gap-1 border-b border-[var(--color-border-light)]',
+
+                // A track, so the group reads as one control. Tight, because it
+                // sits inside something that already has its own padding.
+                variant === 'segmented' &&
+                    'gap-0.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] p-0.5',
                 className,
             )}
         >
@@ -111,65 +138,77 @@ export function TabsList({ children, className, variant = 'default' }: TabsListP
 }
 
 type TabsTriggerProps = {
-    /** Value that identifies this tab */
     value: string;
-    /** Tab label */
     children: ReactNode;
-    /** Whether tab is disabled */
     disabled?: boolean;
-    /** Additional class */
     className?: string;
-    /** Badge (e.g., count) */
+    /** A count, or anything else short worth saying beside the label. */
     badge?: string | number;
+    /** An Icon name, shown before the label. */
+    icon?: string;
 };
 
-/**
- * Tab trigger (button to switch tabs).
- */
-export function TabsTrigger({ value, children, disabled = false, className, badge }: TabsTriggerProps) {
-    const { activeTab, setActiveTab } = useTabsContext();
+/** One tab button. */
+export function TabsTrigger({ value, children, disabled = false, className, badge, icon }: TabsTriggerProps) {
+    const { activeTab, setActiveTab, variant } = useTabsContext();
     const isActive = activeTab === value;
-
-    // Determine variant from parent
-    const variant = className?.includes('rounded') ? 'pills' : 'default';
 
     return (
         <button
             type="button"
             role="tab"
+            id={`tab-${value}`}
             aria-selected={isActive}
             aria-controls={`tabpanel-${value}`}
             onClick={() => setActiveTab(value)}
             disabled={disabled}
             className={cn(
-                'relative flex items-center gap-2 px-1 py-2 text-sm font-medium transition-colors duration-150',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-subtle)] focus-visible:ring-offset-2',
-                // Default variant
-                variant === 'default' && [
+                'relative flex items-center gap-1.5 text-sm font-medium transition-colors duration-150',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-subtle)]',
+
+                variant === 'underline' && [
+                    'px-3 py-2',
+
+                    /*
+                     * The marker sits *on* the rule, not above it.
+                     *
+                     * -bottom-px puts it over the list's own border, so the
+                     * active tab looks joined to the panel below rather than
+                     * underlined twice.
+                     */
                     isActive
-                        ? 'text-[var(--color-brand)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--color-brand)]'
+                        ? 'text-[var(--color-brand)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-[var(--color-brand)]'
                         : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
                 ],
-                // Pills variant
-                variant === 'pills' && [
-                    'rounded-md px-3',
+
+                variant === 'segmented' && [
+                    'rounded-[var(--shell-radius-sm)] px-3 py-1',
                     isActive
-                        ? 'bg-[var(--color-card-bg)] text-[var(--color-text-main)] shadow-sm'
-                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
+                        ? 'bg-[var(--color-brand)] text-[var(--color-text-on-accent)]'
+                        : 'text-[var(--color-text-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]',
                 ],
-                // Disabled
+
                 disabled && 'cursor-not-allowed opacity-50',
                 className,
             )}
         >
+            {icon && <Icon name={icon} size={14} className="shrink-0" />}
+
             <span>{children}</span>
-            {badge !== undefined && (
+
+            {badge !== undefined && badge !== '' && (
                 <span
                     className={cn(
-                        'rounded-full px-1.5 py-0.5 text-xs font-semibold',
-                        isActive
-                            ? 'bg-[var(--color-brand-subtle)] text-[var(--color-brand)]'
-                            : 'bg-[var(--color-border-light)] text-[var(--color-text-muted)]',
+                        'rounded-full px-1.5 text-[11px] font-semibold leading-5',
+
+                        // On a filled segment the badge cannot use the brand
+                        // colour it normally would — it would disappear into the
+                        // background it is sitting on.
+                        variant === 'segmented' && isActive
+                            ? 'bg-[color-mix(in_srgb,var(--color-text-on-accent)_25%,transparent)] text-[var(--color-text-on-accent)]'
+                            : isActive
+                              ? 'bg-[var(--color-brand-subtle)] text-[var(--color-brand)]'
+                              : 'bg-[var(--color-border-light)] text-[var(--color-text-muted)]',
                     )}
                 >
                     {badge}
@@ -179,23 +218,19 @@ export function TabsTrigger({ value, children, disabled = false, className, badg
     );
 }
 
-type TabsContentProps = {
-    /** Value that identifies this tab panel */
+/** One tab panel. Renders nothing unless its tab is the active one. */
+export function TabsContent({
+    value,
+    children,
+    className,
+}: {
     value: string;
-    /** Panel content */
     children: ReactNode;
-    /** Additional class */
     className?: string;
-};
-
-/**
- * Tab content panel.
- */
-export function TabsContent({ value, children, className }: TabsContentProps) {
+}) {
     const { activeTab } = useTabsContext();
-    const isActive = activeTab === value;
 
-    if (!isActive) {
+    if (activeTab !== value) {
         return null;
     }
 
@@ -210,4 +245,3 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
         </div>
     );
 }
-

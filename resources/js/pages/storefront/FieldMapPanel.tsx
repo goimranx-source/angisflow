@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useEffect, useState } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -608,31 +609,28 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                 }}
             >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    {/* A segmented control rather than two bordered buttons:
-                        these are two views of one screen, not two actions. */}
-                    <div
-                        className="inline-flex rounded-[var(--shell-radius)] border p-0.5"
-                        style={{ borderColor: 'var(--shell-border)' }}
+                    {/*
+                      The second level: which record this mapping is for.
+
+                      Segmented rather than underlined, because this sits inside
+                      a tab rather than beside one. Two underlined rows stacked
+                      would each claim to be naming the panel below, and neither
+                      would say which of them contained the other.
+                    */}
+                    <Tabs
+                        defaultValue="order"
+                        value={entity}
+                        onValueChange={setEntity}
+                        variant="segmented"
                     >
-                        {ENTITIES.map((option) => (
-                            <button
-                                key={option.key}
-                                type="button"
-                                onClick={() => setEntity(option.key)}
-                                className="rounded-[var(--shell-radius-sm)] px-3 py-1 text-sm font-medium transition"
-                                style={
-                                    entity === option.key
-                                        ? {
-                                              background: 'var(--color-brand)',
-                                              color: 'var(--color-text-on-accent)',
-                                          }
-                                        : { color: 'var(--color-text-muted)' }
-                                }
-                            >
-                                {option.label}
-                            </button>
-                        ))}
-                    </div>
+                        <TabsList>
+                            {ENTITIES.map((option) => (
+                                <TabsTrigger key={option.key} value={option.key}>
+                                    {option.label}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
 
                     <div className="flex items-center gap-2">
                         {/* Only offered when there is something to offer — a

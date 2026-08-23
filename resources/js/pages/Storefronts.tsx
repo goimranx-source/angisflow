@@ -11,6 +11,7 @@ import {
 } from '@/components/modules';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
 import { StatusMapPanel } from '@/pages/storefront/StatusMapPanel';
 import { useMoney } from '@/hooks/useMoney';
@@ -921,27 +922,28 @@ export default function Storefronts() {
                                     observer.observe(node);
                                 }}
                             >
-                                <div className="flex flex-wrap gap-1.5">
-                                {(['details', 'fields', 'statuses'] as const).map((key) => (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        onClick={() => setStoreTab(key)}
-                                        className="rounded-[var(--shell-radius)] border px-3 py-1.5 text-sm transition"
-                                        style={{
-                                            borderColor:
-                                                storeTab === key ? 'var(--color-brand)' : 'var(--shell-border)',
-                                            color: storeTab === key ? 'var(--color-brand)' : undefined,
-                                        }}
-                                    >
-                                        {key === 'details'
-                                            ? 'Details'
-                                            : key === 'fields'
-                                              ? 'Field mapping'
-                                              : 'Statuses'}
-                                    </button>
-                                ))}
-                                </div>
+                                {/*
+                                  The drawer's own tabs, in the shared component.
+
+                                  A row of bordered buttons before this, which
+                                  read as three things to press rather than as
+                                  one choice with three answers — and matched
+                                  neither the page behind them nor the panel
+                                  inside them.
+                                */}
+                                <Tabs
+                                    defaultValue="details"
+                                    value={storeTab}
+                                    onValueChange={(next) =>
+                                        setStoreTab(next as 'details' | 'fields' | 'statuses')
+                                    }
+                                >
+                                    <TabsList className="!border-b-0">
+                                        <TabsTrigger value="details">Details</TabsTrigger>
+                                        <TabsTrigger value="fields">Field mapping</TabsTrigger>
+                                        <TabsTrigger value="statuses">Statuses</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
 
                                 {/*
                                   Sync sits with the tabs, not in the details

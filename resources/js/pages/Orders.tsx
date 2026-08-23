@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useMoney } from '@/hooks/useMoney';
 import { RowAction, RowActionMenu, RowActions } from '@/components/modules/RowActions';
 import { BulkActionsMenu, type BulkActionGroup } from '@/components/modules/BulkActionsMenu';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { OrderHistory } from '@/pages/orders/OrderHistory';
 import { OrderEditor } from './orders/OrderEditor';
 import {
@@ -953,57 +954,38 @@ export default function Orders() {
             )}
 
             {/* Tabs */}
-            <div className="mt-4 border-b border-[var(--shell-border)]">
-                <div className="flex gap-1">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setTab('all');
-                            setPage(1);
-                            setSelectedOrders([]); // Clear selection when switching tabs
-                        }}
-                        className={`px-4 py-2 text-sm font-medium transition border-b-2 ${
-                            tab === 'all'
-                                ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-                                : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:border-[var(--shell-border)]'
-                        }`}
-                    >
-                        All Orders
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setTab('archived');
-                            setPage(1);
-                            setSelectedOrders([]); // Clear selection when switching tabs
-                        }}
-                        className={`px-4 py-2 text-sm font-medium transition border-b-2 ${
-                            tab === 'archived'
-                                ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-                                : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:border-[var(--shell-border)]'
-                        }`}
-                    >
-                        <Icon name="archive" size={14} className="inline mr-1" />
+            {/*
+              The page's own tabs, in the shared component.
+
+              These were fifty lines of hand-rolled buttons carrying their own
+              copy of the underline styling, which is how the application ended
+              up with three different tab designs on screen at once — this one,
+              the drawer's, and the storefront's, none of them agreeing.
+            */}
+            <Tabs
+                defaultValue="all"
+                value={tab}
+                onValueChange={(next) => {
+                    setTab(next as 'all' | 'trashed' | 'archived');
+                    setPage(1);
+
+                    // A selection made in one tab means nothing in another —
+                    // the rows it referred to are not on screen any more, and a
+                    // bulk action would act on records nobody can see.
+                    setSelectedOrders([]);
+                }}
+                className="mt-4"
+            >
+                <TabsList>
+                    <TabsTrigger value="all">All orders</TabsTrigger>
+                    <TabsTrigger value="archived" icon="archive">
                         Archived
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setTab('trashed');
-                            setPage(1);
-                            setSelectedOrders([]); // Clear selection when switching tabs
-                        }}
-                        className={`px-4 py-2 text-sm font-medium transition border-b-2 ${
-                            tab === 'trashed'
-                                ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-                                : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:border-[var(--shell-border)]'
-                        }`}
-                    >
-                        <Icon name="trash" size={14} className="inline mr-1" />
+                    </TabsTrigger>
+                    <TabsTrigger value="trashed" icon="trash">
                         Trash
-                    </button>
-                </div>
-            </div>
+                    </TabsTrigger>
+                </TabsList>
+            </Tabs>
 
             {/* Filter Bar */}
             <div className="mt-2">
