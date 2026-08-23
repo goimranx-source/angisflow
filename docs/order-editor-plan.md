@@ -334,3 +334,65 @@ Two cautions:
   the pattern across all of them.
 - Meta owned by a plugin (`_commission_data`) stays read-only. Writing another
   system's bookkeeping by hand is how its records stop adding up.
+
+---
+
+## 11. What the mapping screen now holds — built
+
+Section 10 proposed three layers. Two of them now exist on the storefront's
+**Field mapping** tab, which is where the answer for a given shop is recorded.
+
+### The type
+
+Named as every form builder names them — Text, Textarea, WYSIWYG, Select,
+Radio, Checkbox, Switch, Number, Money, Email, Phone, URL, Date, Image,
+Gallery, File, Video, Colour, JSON.
+
+The stored keys did not change. `trim` still reads Text and `rich_text` still
+reads WYSIWYG, so every mapping saved before this keeps working.
+
+### The choices
+
+Select, Radio and Checkbox open a **Choices** row beneath the mapping, entered
+as `Facebook|facebook` — label on the left for people, stored value on the
+right for the shop. A bare word means both. A pasted comma or newline list adds
+several at once.
+
+This is Layer 2's job done deliberately instead of statistically. Counting
+distinct values across orders was going to need twenty orders before it could
+offer anything, and would still never see an option no order happened to use.
+Typing four choices takes a moment and is right immediately. Observation can
+still be added later as a *suggestion* — "seen in orders: whatsapp, add it?" —
+which is worth more than a guess that silently drops an unseen value.
+
+### What appears when editing
+
+A checkbox per mapping, **ticked by default**. Untick the bookkeeping meta and
+plugin internals; the eight fields somebody actually fills in stay. Display
+only — an unticked field still syncs both ways.
+
+### The first guess
+
+New rows found by *Add N custom fields* get a type read from the value the shop
+sent, so nothing starts as a bare text box when it can be recognised. Against
+the live shop: `order_expected_delivery` → Date, `is_vat_exempt` → Switch,
+`order_link` → URL. Text otherwise, including for the fields that are really
+dropdowns — one value cannot reveal a list, which is exactly why choices are
+typed rather than inferred.
+
+### What the editor reads from this
+
+Everything it needs to place and render a field:
+
+| From the mapping | The editor does |
+|---|---|
+| `visible: false` | omits it entirely |
+| `transform` | picks the control |
+| `options` | fills the dropdown or radio group |
+| `direction: in` | renders it read-only |
+| `source` prefix | `billing_*` → Billing card, `shipping_*` → Delivery, `order_*` → Order details, rest → Shop fields |
+| media type | moves it to the right-hand column with the images |
+
+So the editor needs no per-shop knowledge of its own. It reads the mapping and
+lays out whatever it finds — which is what makes one screen serve a
+WooCommerce shop, a Shopify store and a custom site without a branch for each.
