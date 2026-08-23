@@ -338,7 +338,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
         const mappedSources = new Set(rows.map((row) => row.source));
         const mappedTargets = new Set(rows.map((row) => row.target));
 
-        return (sample?.paths ?? []).filter((option) => {
+        const offered = (sample?.paths ?? []).filter((option) => {
             const container = option.path.split('.')[0] ?? '';
 
             if (!CUSTOM_CONTAINERS.includes(container)) return false;
@@ -347,6 +347,43 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
             // Already arriving under another name. Nothing to add.
             return !mappedTargets.has(targetFor(option.path));
         });
+
+        /*
+         * One per destination, not one per spelling.
+         *
+         * Every WordPress shop writes its custom fields twice — order_source and
+         * _order_source — and both reduce to the same field here. Filtering
+         * against what is *already* mapped catches the case where one of the
+         * pair is in use, and misses the case where neither is: removing a
+         * mapping frees the target and both spellings become offerable at once,
+         * so a button reading "Add 3" would add two rows aimed at one field and
+         * lose one of them on save.
+         *
+         * The public spelling wins where both are present. WordPress hides its
+         * private meta behind the underscore, and between two names for one
+         * value the one not marked private is the one a plugin means to be read.
+         */
+        const byTarget = new Map<string, PathOption>();
+
+        for (const option of offered) {
+            const target = targetFor(option.path);
+            const existing = byTarget.get(target);
+            const isPrivate = (option.path.split('.').pop() ?? '').startsWith('_');
+
+            if (!existing) {
+                byTarget.set(target, option);
+
+                continue;
+            }
+
+            const existingIsPrivate = (existing.path.split('.').pop() ?? '').startsWith('_');
+
+            if (existingIsPrivate && !isPrivate) {
+                byTarget.set(target, option);
+            }
+        }
+
+        return [...byTarget.values()];
     })();
 
     const suggest = () =>
@@ -758,7 +795,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[70rem] table-fixed"
+                        className="table table-framed w-full min-w-[65.5rem] table-fixed"
                     >
                         {/*
                           ── Widths the content needs, not shares of what is
@@ -780,7 +817,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                           reach a column rather than squint at it.
                         */}
                         <colgroup>
-                            <col style={{ width: '17rem' }} />
+                            <col style={{ width: '18rem' }} />
                             <col style={{ width: '9rem' }} />
                             <col style={{ width: '12rem' }} />
                             <col style={{ width: '12rem' }} />
@@ -793,17 +830,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                             */}
                             <col style={{ width: '8rem' }} />
                             <col style={{ width: '6.5rem' }} />
-                            {/*
-                              Wide enough for the button *and* the cell's own
-                              padding.
-
-                              At 4rem the two did not both fit, so the padding
-                              lost: the last control ended up 9px from the
-                              table's right edge against the first one's 17px on
-                              the left. The table looked lopsided because it was,
-                              by eight pixels, and in the last column only.
-                            */}
-                            <col style={{ width: '5.5rem' }} />
                         </colgroup>
 
                         {/*
@@ -867,14 +893,13 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 >
                                     Show on form
                                 </th>
-                                <th />
                             </tr>
                         </thead>
 
                         <tbody>
                             {rows.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="text-center text-[var(--color-text-muted)]">
+                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
                                         Nothing mapped yet.
                                     </td>
                                 </tr>
@@ -887,7 +912,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                             */}
                             {rows.length > 0 && visible.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="text-center text-[var(--color-text-muted)]">
+                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
                                         No field matches &ldquo;{query}&rdquo;.
                                     </td>
                                 </tr>
@@ -897,6 +922,37 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                     <Fragment key={index}>
                                     <tr>
                                         <td>
+                                            <div className="flex items-center gap-2">
+                                                {/*
+                                                  Removing a row, at the start of
+                                                  it.
+
+                                                  It used to sit at the far end,
+                                                  past six other controls, which
+                                                  put the one destructive thing on
+                                                  the row furthest from the field
+                                                  it destroys — a long sideways
+                                                  journey to remove the mapping
+                                                  you are looking at, and an easy
+                                                  mis-click onto the wrong row
+                                                  once the eye has travelled that
+                                                  far.
+                                                */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => remove(index)}
+                                                    className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] opacity-60 transition hover:bg-[var(--shell-hover)] hover:opacity-100"
+                                                    style={{ color: 'var(--color-text-muted)' }}
+                                                    title={`Remove this mapping — ${
+                                                        row.source || 'this row'
+                                                    } will stop syncing, and can be added again`}
+                                                    aria-label={`Remove the mapping for ${
+                                                        row.source || 'this row'
+                                                    }`}
+                                                >
+                                                    <Icon name="x" size={13} />
+                                                </button>
+
                                             <select
                                                 className="field w-full"
                                                 value={row.source}
@@ -933,7 +989,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                     </option>
                                                 ))}
                                             </select>
-
+                                            </div>
                                         </td>
 
                                         {/*
@@ -1182,16 +1238,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                             />
                                         </td>
 
-                                        <td className="text-right">
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                onClick={() => remove(index)}
-                                                aria-label="Remove row"
-                                            >
-                                                <Icon name="trash" size={13} />
-                                            </button>
-                                        </td>
                                     </tr>
 
                                     {/*
