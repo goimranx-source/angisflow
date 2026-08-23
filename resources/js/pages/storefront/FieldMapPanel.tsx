@@ -19,6 +19,8 @@ type PathOption = {
     choices?: FieldOption[];
     /** What the shop's documentation says this field is. */
     note?: string | null;
+    /** For a place code, the name it stands for — 'BD-58' arrives with 'Satkhira'. */
+    reads_as?: string | null;
     /** Described by the shop, but absent from every record read so far. */
     unused?: boolean;
 };
@@ -52,6 +54,8 @@ type Sample = {
     media_types: string[];
     /** Whether this shop was able to describe its own fields. */
     described: boolean;
+    /** Types that are a dropdown this application already holds the choices for. */
+    resolved_options?: string[];
     maps: MapRow[];
 };
 
@@ -349,6 +353,17 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
     const needsOptions = (transform: string): boolean =>
         (sample?.needs_options ?? ['select', 'radio', 'checkbox']).includes(transform);
 
+    /*
+     * Country, district and area are dropdowns whose choices are already known.
+     *
+     * The same control as a select, with the opposite problem: there, nobody but
+     * this shop's owner can supply the list; here, asking them to would be
+     * asking them to type out 250 countries and 581 thanas that this application
+     * is already holding.
+     */
+    const resolvesOptions = (transform: string): boolean =>
+        (sample?.resolved_options ?? ['country', 'state', 'area']).includes(transform);
+
     /**
      * Rows aimed at a field another row already claims.
      *
@@ -372,6 +387,40 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
         sample?.paths.find((p) => p.path === row.source);
+
+    /*
+     * Address rows still stored as plain text.
+     *
+     * ── Why this is offered rather than done ─────────────────────────────────
+     *
+     * These mappings were saved before anything recognised an address, so they
+     * hold BD-58 as text — not because anybody chose that, but because text was
+     * all there was. Changing them is almost certainly right.
+     *
+     * Almost is the problem. A saved mapping is somebody's decision until proved
+     * otherwise, and a screen that silently rewrites decisions on load is one
+     * nobody can trust with the ones they made deliberately. So the offer is
+     * made, the count is stated, and it takes a click and a save — which is two
+     * more actions than doing it quietly and the difference between a tool that
+     * helps and one that meddles.
+     */
+    const upgradable = rows
+        .map((row, index) => ({ row, index, place: described(row)?.suggest }))
+        .filter(({ row, place }) =>
+            place !== undefined &&
+            place !== null &&
+            ['country', 'state', 'area'].includes(place) &&
+            row.transform !== place);
+
+    const upgradePlaces = () =>
+        setRows((current) =>
+            current.map((row, i) => {
+                const found = upgradable.find((u) => u.index === i);
+
+                return found ? { ...row, transform: found.place as string } : row;
+            }),
+        );
+
 
     /*
      * Everything the shop's description implies for a row that points at it.
@@ -474,6 +523,28 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
               every one it has, including the ones no record has used, while a
               shop that cannot offers only what has actually been through it.
             */}
+            {/*
+              The offer, with the count, so it is clear what would change.
+            */}
+            {upgradable.length > 0 && (
+                <div
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--shell-radius)] border p-2.5"
+                    style={{ borderColor: 'var(--shell-border)' }}
+                >
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                        {upgradable.length} address field
+                        {upgradable.length === 1 ? ' is' : 's are'} stored as plain text, so
+                        they show as codes like <code>BD-58</code> instead of names like{' '}
+                        <code>Satkhira</code>.
+                    </p>
+
+                    <button type="button" className="btn btn-secondary" onClick={upgradePlaces}>
+                        <Icon name="sparkle" size={13} />
+                        Show names — then Save
+                    </button>
+                </div>
+            )}
+
             {sample?.described && (
                 <p className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
                     <Icon name="check" size={12} />
@@ -562,7 +633,31 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
                                         <td className="max-w-[12rem] text-xs text-[var(--color-text-muted)]">
                                             <div className="truncate" title={described(row)?.note ?? undefined}>
-                                                {preview(row)}
+                                                {/*
+                                                  The place, read as a place.
+
+                                                  BD-58 is not something anybody
+                                                  can check at a glance, and the
+                                                  whole reason for recognising
+                                                  these fields is so that nobody
+                                                  has to. The code stays beside
+                                                  it, small, because it is what
+                                                  the shop actually stores and
+                                                  somebody comparing the two
+                                                  needs to see both.
+                                                */}
+                                                {described(row)?.reads_as ? (
+                                                    <>
+                                                        <span className="text-[var(--color-text-main)]">
+                                                            {described(row)?.reads_as}
+                                                        </span>
+                                                        <code className="ml-1.5 text-[10px] opacity-60">
+                                                            {preview(row)}
+                                                        </code>
+                                                    </>
+                                                ) : (
+                                                    preview(row)
+                                                )}
                                             </div>
 
                                             {/*
@@ -751,6 +846,27 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                     value={row.options ?? []}
                                                     onChange={(options) => update(index, { options })}
                                                 />
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {/*
+                                      Said rather than left blank, because a
+                                      dropdown with no Choices box beside it
+                                      looks like one somebody forgot to fill in.
+                                    */}
+                                    {resolvesOptions(row.transform) && (
+                                        <tr>
+                                            <td />
+                                            <td colSpan={6} className="pt-0">
+                                                <p className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+                                                    <Icon name="check" size={12} />
+                                                    {row.transform === 'country'
+                                                        ? 'Chosen from 250 countries — nothing to enter.'
+                                                        : row.transform === 'state'
+                                                          ? 'Chosen from the districts of whichever country the address names.'
+                                                          : 'Chosen from the areas within whichever district the address names.'}
+                                                </p>
                                             </td>
                                         </tr>
                                     )}

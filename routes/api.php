@@ -541,6 +541,18 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
 
         Route::get('{id}/sample-paths', [IntegrationsEndpoint::class, 'samplePaths'])
             ->middleware('can:settings.view')->name('sample-paths');
+
+        /*
+         * Not under a connection, because places are not one shop's property.
+         *
+         * The same 250 countries and the same 64 Bangladeshi districts serve
+         * every connection this business has, and routing the lists through one
+         * of them would mean a second shop refetching what the first already
+         * asked for, and an order whose connection was deleted losing the
+         * ability to say where it was going.
+         */
+        Route::get('/geography', [IntegrationsEndpoint::class, 'geography'])
+            ->middleware('can:settings.view')->name('geography');
         Route::post('{id}/fields', [IntegrationsEndpoint::class, 'addField'])
             ->middleware('can:settings.edit')->name('fields.store');
         Route::put('{id}/field-maps', [IntegrationsEndpoint::class, 'saveFieldMaps'])

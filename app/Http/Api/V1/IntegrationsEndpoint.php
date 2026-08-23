@@ -16,6 +16,8 @@ use App\Domain\Integrations\Support\EntityFields;
 use App\Domain\Integrations\Support\FieldMap;
 use App\Domain\Integrations\Support\FieldMapSet;
 use App\Domain\Integrations\Support\FieldPath;
+use App\Domain\Integrations\Support\Geography;
+use App\Domain\Integrations\Support\PlaceFields;
 use App\Domain\Integrations\Support\PlatformSchema;
 use App\Domain\Integrations\Support\StatusMap;
 use App\Domain\Integrations\Support\Transform;
@@ -503,14 +505,32 @@ class IntegrationsEndpoint
             $field = $described[$path] ?? null;
             $seen[$path] = true;
 
+            /*
+             * An address field is recognised from its path, ahead of anything
+             * the schema says.
+             *
+             * WooCommerce describes billing.state as a string, which is true and
+             * useless — it is a string the way a postcode is a string, and
+             * treating it as one leaves BD-58 on the screen for ever. The path
+             * is the better evidence here, and it is evidence the schema does
+             * not contain.
+             */
+            $place = PlaceFields::typeFor($path);
+
             $paths[] = [
                 'path' => $path,
                 // Trimmed: a description field can run to a page, and this is a
                 // dropdown label rather than the record itself.
                 'sample' => is_scalar($sample) ? Str::limit((string) $sample, 60) : null,
+
+                // What the code stands for, so the column reads Satkhira rather
+                // than BD-58 while the mapping is still being set up.
+                'reads_as' => $place !== null && is_scalar($sample)
+                    ? Geography::name((string) $sample)
+                    : null,
                 'label' => $field?->label,
                 'readonly' => $field?->readonly ?? false,
-                'suggest' => $field?->transform(),
+                'suggest' => $place ?? $field?->transform(),
                 'choices' => $field?->choices() ?? [],
                 'note' => $field?->description,
             ];
@@ -535,9 +555,10 @@ class IntegrationsEndpoint
             $paths[] = [
                 'path' => $path,
                 'sample' => is_scalar($example) ? Str::limit((string) $example, 60) : null,
+                'reads_as' => is_scalar($example) ? Geography::name((string) $example) : null,
                 'label' => null,
                 'readonly' => false,
-                'suggest' => null,
+                'suggest' => PlaceFields::typeFor($path),
                 'choices' => [],
                 'note' => 'Sent by this shop before, though not on the record read here.',
             ];
@@ -558,9 +579,10 @@ class IntegrationsEndpoint
             $paths[] = [
                 'path' => $path,
                 'sample' => null,
+                'reads_as' => null,
                 'label' => $field->label,
                 'readonly' => $field->readonly,
-                'suggest' => $field->transform(),
+                'suggest' => PlaceFields::typeFor($path) ?? $field->transform(),
                 'choices' => $field->choices(),
                 'note' => $field->description,
                 'unused' => true,
@@ -608,6 +630,10 @@ class IntegrationsEndpoint
                  * TypeScript is a list that drifts the first time one is added.
                  */
                 'needs_options' => Transform::NEEDS_OPTIONS,
+
+                // And the ones that need none, because this application holds
+                // the list already — see Geography.
+                'resolved_options' => Transform::RESOLVED_OPTIONS,
                 'media_types' => Transform::MEDIA,
 
                 'maps' => FieldMapSet::for($integration, $entity)->toArray(),
@@ -684,6 +710,44 @@ class IntegrationsEndpoint
         $integration->saveQuietly();
 
         return PlatformSchema::mappable(PlatformSchema::flatten(PlatformSchema::fromJsonSchema($described)));
+    }
+
+    /**
+     * The lists behind a country, district or area field.
+     *
+     * ── Why one endpoint and not three ───────────────────────────────────────
+     *
+     * Because the three are one question asked at different depths. A screen
+     * showing an address needs the countries, then the districts inside the
+     * chosen country, then the areas inside the chosen district — and asking for
+     * them separately means three requests to render one address block.
+     *
+     * ── Why the whole world is not sent ──────────────────────────────────────
+     *
+     * 250 countries, 2,040 sub-divisions and 581 areas is 185 KB, which is not
+     * an unreasonable file and is an unreasonable thing to send in order to
+     * render one order from Satkhira. The country narrows it, and the district
+     * narrows it again, so the usual answer is a few dozen entries.
+     */
+    public function geography(Request $request): JsonResponse
+    {
+        $country = trim((string) $request->query('country', ''));
+        $state = trim((string) $request->query('state', ''));
+
+        return response()->json([
+            'data' => [
+                'countries' => Geography::countryOptions(),
+
+                // Only when one is chosen. Sending every sub-division of every
+                // country on the chance one is wanted is the thing this avoids.
+                'states' => $country === '' ? [] : Geography::stateOptions($country),
+                'areas' => $state === '' ? [] : Geography::areaOptions($state, $country ?: null),
+
+                // So a form can tell "no list exists for this country" from
+                // "one exists and has not been asked for yet".
+                'has_areas' => $country !== '' && Geography::hasAreas($country),
+            ],
+        ]);
     }
 
     /**

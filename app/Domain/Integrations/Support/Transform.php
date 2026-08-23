@@ -80,6 +80,22 @@ final class Transform
             'checkbox' => 'Checkbox (multiple)',
             'boolean' => 'Switch (yes/no)',
 
+            /*
+             * ── Places, which bring their own choices ────────────────────────
+             *
+             * A select needs its options typed because nobody but the shop's
+             * owner knows them. These three are the opposite: the lists are
+             * known, they are long, and they are related — 250 countries, the
+             * 64 districts inside Bangladesh, the 7 thanas inside Satkhira.
+             *
+             * Typing them would be absurd and choosing from all 2,040
+             * sub-divisions at once would be worse, so they resolve themselves
+             * from Geography and narrow as the level above is chosen.
+             */
+            'country' => 'Country',
+            'state' => 'State / District',
+            'area' => 'Area / Thana',
+
             // Numbers and money
             'integer' => 'Number (whole)',
             'decimal' => 'Number (decimal)',
@@ -126,6 +142,22 @@ final class Transform
     public static function needsOptions(?string $transform): bool
     {
         return in_array((string) $transform, self::NEEDS_OPTIONS, true);
+    }
+
+    /**
+     * Types that are a dropdown whose choices this application already holds.
+     *
+     * Distinct from NEEDS_OPTIONS, which is the same shape of control with the
+     * opposite problem: there, nobody but the shop's owner can supply the list;
+     * here, asking them to would be asking them to type out the world.
+     *
+     * @var list<string>
+     */
+    public const RESOLVED_OPTIONS = ['country', 'state', 'area'];
+
+    public static function resolvesOptions(?string $transform): bool
+    {
+        return in_array((string) $transform, self::RESOLVED_OPTIONS, true);
     }
 
     /**
@@ -327,6 +359,18 @@ final class Transform
              * come back byte-identical or it stops matching its option.
              */
             'select', 'radio' => self::blankToNull(trim($text)),
+
+            /*
+             * A place code, kept exactly as the shop stores it.
+             *
+             * Uppercased because checkout forms are inconsistent about it and
+             * `bd-58` must match `BD-58` to resolve, but otherwise untouched:
+             * the code is the value, and the name it stands for is worked out
+             * at the moment of display rather than stored in its place. Storing
+             * the name instead would mean a district renamed next year silently
+             * disagreeing with every order taken before it.
+             */
+            'country', 'state', 'area' => self::blankToNull(mb_strtoupper(trim($text))),
 
             // Newlines are the point of a textarea, so only the ends are cut.
             'textarea' => self::blankToNull(trim($text)),
