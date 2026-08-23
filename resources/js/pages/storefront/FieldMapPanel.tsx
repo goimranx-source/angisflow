@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type CSSProperties } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
 import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions';
@@ -64,6 +64,70 @@ const NEW_FIELD = '__new_field__';
 
 /** The containers a shop keeps its own invented fields in. */
 const CUSTOM_CONTAINERS = ['meta_data', 'note_attributes', 'metafields', 'custom_fields'];
+
+/**
+ * The sections a mapping row belongs to, in the order they are shown.
+ *
+ * ── Why group at all ─────────────────────────────────────────────────────────
+ *
+ * Forty rows in one list is forty rows to read before finding the one about a
+ * delivery address. Grouped, it is six short lists with headings, and the
+ * question somebody actually arrived with — "where does the customer's phone
+ * number come from?" — is answered by looking in one place.
+ *
+ * The order is the order somebody thinks about an order in: what it is, what it
+ * cost, who placed it, where it goes, what is in it, and then whatever this
+ * particular shop adds on top.
+ */
+const GROUPS: Array<{ key: string; label: string; hint: string }> = [
+    { key: 'record', label: 'The order itself', hint: 'Number, status, dates' },
+    { key: 'money', label: 'Money', hint: 'Totals, tax, currency' },
+    { key: 'customer', label: 'Customer', hint: 'Who placed it' },
+    { key: 'billing', label: 'Billing address', hint: 'Where the invoice goes' },
+    { key: 'delivery', label: 'Delivery address', hint: 'Where the goods go' },
+    { key: 'items', label: 'Line items', hint: 'What was bought' },
+    { key: 'custom', label: 'Shop fields', hint: "This shop's own fields" },
+];
+
+/**
+ * Which section a row belongs in, from where its value lands.
+ *
+ * Decided on the target rather than the source, because the target is this
+ * application's own vocabulary and is therefore the half that is consistent. A
+ * shop is free to call its delivery postcode anything at all; where it lands is
+ * always `shipping_postcode`.
+ *
+ * Custom fields are the exception and are grouped by the shop's own key prefix,
+ * since that is the only structure they have — `billing_thana` belongs with the
+ * billing address, not in a bucket of leftovers at the bottom.
+ */
+function groupFor(row: { target: string; source: string }): string {
+    const target = row.target;
+
+    if (target.startsWith('custom.')) {
+        const key = (row.source.split('.').pop() ?? '').replace(/^_+/, '');
+
+        if (key.startsWith('billing_')) return 'billing';
+        if (key.startsWith('shipping_')) return 'delivery';
+
+        return 'custom';
+    }
+
+    if (target.startsWith('customer.billing_')) return 'billing';
+    if (target.startsWith('customer.')) return 'customer';
+    if (target.startsWith('shipping_')) return 'delivery';
+    if (target.startsWith('variant.')) return 'money';
+    if (target.startsWith('line') || target.startsWith('items')) return 'items';
+
+    if (
+        target.endsWith('_minor') ||
+        ['currency', 'is_cod', 'payment_status', 'tax_rate'].includes(target)
+    ) {
+        return 'money';
+    }
+
+    return 'record';
+}
 
 /**
  * Where a discovered field would be stored here.
@@ -179,6 +243,14 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
     const [entity, setEntity] = useState('order');
     const [rows, setRows] = useState<MapRow[]>([]);
+
+    /*
+     * A filter, because the fastest route to one row among forty is to type
+     * part of its name. Matched against both halves of the mapping and against
+     * the value, so "satkhira" finds the district field by what is in it rather
+     * than by what anybody decided to call it.
+     */
+    const [query, setQuery] = useState('');
     const [naming, setNaming] = useState<Record<number, string>>({});
 
     const { data, isLoading } = useQuery({
@@ -384,6 +456,62 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
         return count;
     })();
 
+    /*
+     * The rows, filtered and then arranged into sections.
+     *
+     * Index is carried alongside each row rather than recomputed, because every
+     * edit addresses a row by its position in the unfiltered list — reordering
+     * for display must not change what a change applies to.
+     */
+    const visible = rows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => {
+            const needle = query.trim().toLowerCase();
+
+            if (needle === '') return true;
+
+            const found = sample?.paths.find((p) => p.path === row.source);
+            const label = sample?.targets.find((t) => t.value === row.target)?.label ?? '';
+
+            return [row.source, row.target, label, found?.sample, found?.reads_as]
+                .some((piece) => (piece ?? '').toLowerCase().includes(needle));
+        });
+
+    const grouped = GROUPS.map((group) => ({
+        ...group,
+        entries: visible.filter(({ row }) => groupFor(row) === group.key),
+    })).filter((group) => group.entries.length > 0);
+
+    /*
+     * What the screen is showing, counted.
+     *
+     * Three numbers worth knowing before scrolling: how much is mapped at all,
+     * how much of it will appear when somebody edits a record, and how many
+     * rows are asking for something before they will work.
+     */
+    const summary = {
+        mapped: rows.length,
+        hidden: rows.filter((row) => row.visible === false).length,
+        needing: rows.filter(
+            (row) => needsOptions(row.transform) && (row.options?.length ?? 0) === 0,
+        ).length,
+    };
+
+    /**
+     * Where the column headings sit once the page scrolls.
+     *
+     * Directly beneath the toolbar, whose height it measured for itself — that
+     * height changes when the shop-fields button appears or the counts wrap, so
+     * a guessed offset would leave a gap on one screen and hide the first row on
+     * another.
+     */
+    const headCell: CSSProperties = {
+        position: 'sticky',
+        top: 'var(--toolbar-height, 6rem)',
+        zIndex: 10,
+        background: 'var(--color-card-bg)',
+    };
+
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
         sample?.paths.find((p) => p.path === row.source);
@@ -464,49 +592,135 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-1.5">
-                    {ENTITIES.map((option) => (
-                        <button
-                            key={option.key}
-                            type="button"
-                            onClick={() => setEntity(option.key)}
-                            className="rounded-[var(--shell-radius)] border px-3 py-1.5 text-sm transition"
-                            style={{
-                                borderColor:
-                                    entity === option.key ? 'var(--color-brand)' : 'var(--shell-border)',
-                                color: entity === option.key ? 'var(--color-brand)' : undefined,
-                            }}
-                        >
-                            {option.label}
+            {/*
+              The toolbar sticks, because the alternative is scrolling back to
+              the top of forty rows to save the change just made at the bottom.
+            */}
+            <div
+                className="sticky top-0 z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
+                style={{ background: 'var(--color-card-bg)' }}
+                ref={(node) => {
+                    /*
+                     * The toolbar measures itself, and the column headings stick
+                     * directly beneath it.
+                     *
+                     * Its height is not a constant worth guessing at: it changes
+                     * when the shop-fields button appears, when the counts wrap
+                     * on a narrow panel, when a longer label pushes to two
+                     * lines. A guessed offset would leave a gap on one screen
+                     * and hide the first row on another, so it is read from the
+                     * element that actually has it.
+                     */
+                    if (node) {
+                        node.style.setProperty(
+                            '--toolbar-height',
+                            `${Math.round(node.getBoundingClientRect().height)}px`,
+                        );
+                        node.parentElement?.style.setProperty(
+                            '--toolbar-height',
+                            `${Math.round(node.getBoundingClientRect().height)}px`,
+                        );
+                    }
+                }}
+            >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    {/* A segmented control rather than two bordered buttons:
+                        these are two views of one screen, not two actions. */}
+                    <div
+                        className="inline-flex rounded-[var(--shell-radius)] border p-0.5"
+                        style={{ borderColor: 'var(--shell-border)' }}
+                    >
+                        {ENTITIES.map((option) => (
+                            <button
+                                key={option.key}
+                                type="button"
+                                onClick={() => setEntity(option.key)}
+                                className="rounded-[var(--shell-radius-sm)] px-3 py-1 text-sm font-medium transition"
+                                style={
+                                    entity === option.key
+                                        ? {
+                                              background: 'var(--color-brand)',
+                                              color: 'var(--color-text-on-accent)',
+                                          }
+                                        : { color: 'var(--color-text-muted)' }
+                                }
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {/* Only offered when there is something to offer — a
+                            button that does nothing when pressed teaches people
+                            to stop pressing buttons. */}
+                        {suggestions.length > 0 && (
+                            <button type="button" className="btn btn-secondary" onClick={suggest}>
+                                <Icon name="sparkle" size={13} />
+                                Add {suggestions.length} shop field
+                                {suggestions.length === 1 ? '' : 's'}
+                            </button>
+                        )}
+
+                        <button type="button" className="btn btn-secondary" onClick={add}>
+                            <Icon name="plus" size={13} />
+                            Add row
                         </button>
-                    ))}
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => save.mutate()}
+                            disabled={save.isPending}
+                        >
+                            {save.isPending ? 'Saving…' : 'Save'}
+                        </button>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {/* Only offered when there is something to offer — a button
-                        that does nothing when pressed teaches people to stop
-                        pressing buttons. */}
-                    {suggestions.length > 0 && (
-                        <button type="button" className="btn btn-secondary" onClick={suggest}>
-                            <Icon name="sparkle" size={13} />
-                            Add {suggestions.length} custom field
-                            {suggestions.length === 1 ? '' : 's'}
-                        </button>
-                    )}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative min-w-[14rem] flex-1">
+                        <Icon
+                            name="magnifying-glass"
+                            size={13}
+                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                        />
+                        <input
+                            className="field w-full pl-8 text-sm"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Find a field — by its name here, its name there, or its value"
+                            aria-label="Filter the mapping"
+                        />
+                    </div>
 
-                    <button type="button" className="btn btn-secondary" onClick={add}>
-                        <Icon name="plus" size={13} />
-                        Add row
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => save.mutate()}
-                        disabled={save.isPending}
-                    >
-                        Save
-                    </button>
+                    {/*
+                      Three counts, stated before anybody scrolls.
+
+                      The third is the one that matters: a dropdown with no
+                      choices behind it looks configured and behaves as a text
+                      box, and this is the only place that difference is visible
+                      without opening every row.
+                    */}
+                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                        <span>{summary.mapped} mapped</span>
+
+                        {summary.hidden > 0 && (
+                            <span className="flex items-center gap-1">
+                                <Icon name="eye" size={11} />
+                                {summary.hidden} hidden when editing
+                            </span>
+                        )}
+
+                        {summary.needing > 0 && (
+                            <span
+                                className="flex items-center gap-1"
+                                style={{ color: 'var(--color-warning-text)' }}
+                            >
+                                <Icon name="warning" size={11} />
+                                {summary.needing} need choices
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -563,38 +777,170 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
             {isLoading && <div className="h-40 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />}
 
+            {/*
+              Horizontal scrolling only where it is needed.
+
+              `overflow-x: auto` computes `overflow-y: auto` alongside it, and
+              that makes a scroll container — which silently stops the column
+              headings sticking, because sticky positions against the nearest
+              scrolling ancestor and that ancestor never scrolls vertically.
+
+              The table is `w-full` with a 40rem floor, so it only genuinely
+              overflows on a panel narrower than that. Above the breakpoint the
+              wrapper gets out of the way and the headings pin properly; below
+              it, scrolling sideways matters more than pinned headings do.
+            */}
             {sample && (
-                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
-                    <table className="table table-framed min-w-[52rem]">
+                <div className="overflow-x-auto rounded-[var(--shell-radius)] md:overflow-visible">
+                    {/*
+                      Fixed layout, with the widths stated.
+
+                      Left to size itself, a table gives each column whatever its
+                      widest content asks for — and one path in this shop is
+                      `meta_data._wc_order_attribution_session_start_time`, which
+                      claimed 360px of a 870px panel and pushed two columns off
+                      the edge. `truncate` cannot prevent that: it hides overflow
+                      inside a box whose width the content had already decided.
+
+                      Stated widths make truncation mean something, and mean the
+                      table is the same shape whichever shop is being mapped.
+                    */}
+                    <table
+                        className="table table-framed w-full min-w-[40rem] table-fixed"
+                        /*
+                         * ── The one line that makes the headings pin ─────────
+                         *
+                         * `.table-framed` sets `overflow: hidden` on the table,
+                         * to clip its rows inside its rounded corners. A box
+                         * with overflow other than visible is a scroll
+                         * container, and a sticky element positions against the
+                         * nearest one — so every heading cell was sticking to
+                         * the table itself, which never scrolls.
+                         *
+                         * The failure gave no sign of itself: position computed
+                         * as sticky, top computed to the right offset, and the
+                         * row scrolled away regardless. A plain sticky div in
+                         * the same place pinned perfectly, which is what
+                         * narrowed it to the table.
+                         *
+                         * The corners are rounded by the wrapper instead, which
+                         * costs nothing — the rows have no background of their
+                         * own to spill past them.
+                         */
+                        style={{ overflow: 'visible' }}
+                    >
+                        <colgroup>
+                            <col style={{ width: '29%' }} />
+                            <col style={{ width: '22%' }} />
+                            <col style={{ width: '19%' }} />
+                            <col style={{ width: '11%' }} />
+                            <col style={{ width: '11%' }} />
+                            <col style={{ width: '7%' }} />
+                        </colgroup>
+
+                        {/*
+                          Pinned under the toolbar.
+
+                          Six columns of dropdowns look much alike once the
+                          headings scroll away, and "Becomes" and "Treated as"
+                          are not guessable from their contents — both are a
+                          select of words. Forty rows is far enough to lose them.
+                        */}
+                        {/*
+                          Pinned under the toolbar — on the cells, not the row.
+
+                          A sticky <thead> is honoured by some engines and
+                          quietly ignored by others, and the failure is silent:
+                          position computes as sticky, top computes to the right
+                          offset, and the row scrolls away regardless. Sticky
+                          <th> is the form that has always worked, because a cell
+                          is an ordinary box where a section of a table is not.
+
+                          Worth having at all because six columns of dropdowns
+                          look much alike once the headings are gone, and
+                          "Becomes" and "Treated as" are not guessable from their
+                          contents — both are a select full of words.
+                        */}
                         <thead>
                             <tr>
-                                <th>This shop&rsquo;s field</th>
-                                <th>Value there</th>
-                                <th>Becomes</th>
-                                <th>Treated as</th>
-                                <th>Direction</th>
+                                {/*
+                                  The field and what it currently holds share a
+                                  column.
+
+                                  They were separate, and together they cost
+                                  nearly a third of the width — on a 900px panel
+                                  that pushed Direction off the right edge, so
+                                  the column saying which way a value travels was
+                                  invisible while choosing where it travels to.
+                                  Stacked, they read as one thing, which is what
+                                  they are: this shop's field, and its value.
+                                */}
+                                <th style={headCell}>This shop&rsquo;s field</th>
+                                <th style={headCell}>Becomes</th>
+                                <th style={headCell}>Treated as</th>
+                                <th style={headCell}>Way</th>
                                 {/* Not "Enabled". Every row here syncs; this
                                     governs only whether somebody editing an
                                     order is shown a box for it. */}
-                                <th className="text-center">On edit page</th>
-                                <th />
+                                <th className="text-center" style={headCell}>
+                                    On edit page
+                                </th>
+                                <th style={headCell} />
                             </tr>
                         </thead>
 
                         <tbody>
-                            {rows.length === 0 ? (
+                            {rows.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="text-center text-[var(--color-text-muted)]">
+                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
                                         Nothing mapped yet.
                                     </td>
                                 </tr>
-                            ) : (
-                                rows.map((row, index) => (
+                            )}
+
+                            {/*
+                              Nothing matched the filter — said plainly, because
+                              an empty table with a full search box otherwise
+                              reads as the mapping having been lost.
+                            */}
+                            {rows.length > 0 && grouped.length === 0 && (
+                                <tr>
+                                    <td colSpan={6} className="text-center text-[var(--color-text-muted)]">
+                                        No field matches &ldquo;{query}&rdquo;.
+                                    </td>
+                                </tr>
+                            )}
+
+                            {grouped.map((group) => (
+                                <Fragment key={group.key}>
+                                    {/*
+                                      A heading row rather than a separate table
+                                      per section, so every column stays aligned
+                                      down the whole screen — six tables side by
+                                      side would each size their own columns and
+                                      nothing would line up.
+                                    */}
+                                    <tr>
+                                        <th
+                                            colSpan={6}
+                                            className="!py-2 text-left"
+                                            style={{ background: 'var(--shell-tint)' }}
+                                        >
+                                            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-main)]">
+                                                {group.label}
+                                            </span>
+                                            <span className="ml-2 text-[11px] font-normal text-[var(--color-text-muted)]">
+                                                {group.hint} · {group.entries.length}
+                                            </span>
+                                        </th>
+                                    </tr>
+
+                                    {group.entries.map(({ row, index }) => (
                                     <Fragment key={index}>
                                     <tr>
                                         <td>
                                             <select
-                                                className="field w-full min-w-[13rem]"
+                                                className="field w-full"
                                                 value={row.source}
                                                 onChange={(e) => {
                                                     const source = e.target.value;
@@ -629,57 +975,55 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                     </option>
                                                 ))}
                                             </select>
-                                        </td>
 
-                                        <td className="max-w-[12rem] text-xs text-[var(--color-text-muted)]">
-                                            <div className="truncate" title={described(row)?.note ?? undefined}>
-                                                {/*
-                                                  The place, read as a place.
-
-                                                  BD-58 is not something anybody
-                                                  can check at a glance, and the
-                                                  whole reason for recognising
-                                                  these fields is so that nobody
-                                                  has to. The code stays beside
-                                                  it, small, because it is what
-                                                  the shop actually stores and
-                                                  somebody comparing the two
-                                                  needs to see both.
-                                                */}
+                                            {/*
+                                              What the field holds right now,
+                                              under the field it belongs to.
+                                            */}
+                                            <div
+                                                className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]"
+                                                title={described(row)?.note ?? undefined}
+                                            >
                                                 {described(row)?.reads_as ? (
                                                     <>
-                                                        <span className="text-[var(--color-text-main)]">
+                                                        {/*
+                                                          The place, read as a
+                                                          place. BD-58 is not
+                                                          something anybody can
+                                                          check at a glance, and
+                                                          recognising these
+                                                          fields exists so that
+                                                          nobody has to. The code
+                                                          stays beside it because
+                                                          it is what the shop
+                                                          actually stores.
+                                                        */}
+                                                        <span className="text-[var(--color-text-body)]">
                                                             {described(row)?.reads_as}
                                                         </span>
                                                         <code className="ml-1.5 text-[10px] opacity-60">
                                                             {preview(row)}
                                                         </code>
                                                     </>
+                                                ) : described(row)?.unused ? (
+                                                    // Not a fault — the shop
+                                                    // describes a field no record
+                                                    // has used, which is why it
+                                                    // can be mapped before the
+                                                    // first coupon exists.
+                                                    <span className="italic opacity-70">
+                                                        described, not used yet
+                                                    </span>
                                                 ) : (
                                                     preview(row)
                                                 )}
                                             </div>
-
-                                            {/*
-                                              Why there is nothing to show.
-
-                                              A blank cell reads as a fault. This
-                                              one is the shop describing a field
-                                              no record has used — which is the
-                                              whole reason it can be mapped at
-                                              all before the first coupon or the
-                                              first variable product exists.
-                                            */}
-                                            {described(row)?.unused && (
-                                                <div className="mt-0.5 italic opacity-70">
-                                                    described, not used yet
-                                                </div>
-                                            )}
                                         </td>
+
 
                                         <td>
                                             <select
-                                                className="field w-full min-w-[11rem]"
+                                                className="field w-full"
                                                 value={row.target}
                                                 onChange={(e) => {
                                                     const target = e.target.value;
@@ -762,7 +1106,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
                                         <td>
                                             <select
-                                                className="field w-full min-w-[10rem]"
+                                                className="field w-full"
                                                 value={row.transform}
                                                 onChange={(e) => update(index, { transform: e.target.value })}
                                             >
@@ -775,14 +1119,33 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                         </td>
 
                                         <td>
+                                            {/*
+                                              Shortened, and titled.
+
+                                              "Bring in only" spelled out cost
+                                              more width than the column it sat
+                                              in had to give. The arrows say the
+                                              same thing in a quarter of the
+                                              space, and the full wording is one
+                                              hover away for anybody who has not
+                                              met them before.
+                                            */}
                                             <select
-                                                className="field w-full min-w-[8rem]"
+                                                className="field w-full"
                                                 value={row.direction}
                                                 onChange={(e) => update(index, { direction: e.target.value })}
+                                                title={
+                                                    row.direction === 'in'
+                                                        ? 'Bring in only — changes here are never sent back'
+                                                        : row.direction === 'out'
+                                                          ? 'Send out only — changes there are never brought in'
+                                                          : 'Both ways'
+                                                }
+                                                aria-label="Which way this field travels"
                                             >
-                                                <option value="both">Both ways</option>
-                                                <option value="in">Bring in only</option>
-                                                <option value="out">Send out only</option>
+                                                <option value="both">⇄ Both</option>
+                                                <option value="in">← In</option>
+                                                <option value="out">→ Out</option>
                                             </select>
                                         </td>
 
@@ -841,7 +1204,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                     {needsOptions(row.transform) && (
                                         <tr>
                                             <td />
-                                            <td colSpan={6} className="pt-0">
+                                            <td colSpan={5} className="pt-0">
                                                 <FieldOptions
                                                     value={row.options ?? []}
                                                     onChange={(options) => update(index, { options })}
@@ -858,7 +1221,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                     {resolvesOptions(row.transform) && (
                                         <tr>
                                             <td />
-                                            <td colSpan={6} className="pt-0">
+                                            <td colSpan={5} className="pt-0">
                                                 <p className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
                                                     <Icon name="check" size={12} />
                                                     {row.transform === 'country'
@@ -871,8 +1234,9 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                         </tr>
                                     )}
                                     </Fragment>
-                                ))
-                            )}
+                                    ))}
+                                </Fragment>
+                            ))}
                         </tbody>
                     </table>
                 </div>

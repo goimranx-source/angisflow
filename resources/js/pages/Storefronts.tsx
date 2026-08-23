@@ -831,7 +831,16 @@ export default function Storefronts() {
                 onClose={() => setSelectedId(null)}
                 title={selectedStorefront?.name ?? ''}
                 subtitle={selectedStorefront?.domain ?? ''}
-                size="md"
+                /*
+                 * Wider for the two tabs that are grids rather than summaries.
+                 *
+                 * Details is a dozen labelled values and reads well narrow.
+                 * Field mapping is forty rows of five decisions each, and at
+                 * the narrower width it scrolled sideways — which on a mapping
+                 * screen means the column saying where a value lands is off
+                 * screen while you choose where it comes from.
+                 */
+                size={storeTab === 'details' ? 'md' : 'xl'}
             >
                 {selectedStorefront && (
                     <div className="space-y-5">
