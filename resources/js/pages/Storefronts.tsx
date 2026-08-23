@@ -881,28 +881,37 @@ export default function Storefronts() {
                              * there are shop fields to add.
                              */
                             <div
-                                className="sticky top-0 z-30 -mx-6 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--shell-border)] px-6 pb-3"
+                                className="sticky z-30 -mx-6 -mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--shell-border)] px-6 pb-3 pt-4"
                                 style={{
                                     background: 'var(--color-card-bg)',
+
                                     /*
-                                     * The strip above, painted rather than
-                                     * occupied.
+                                     * ── The strip above, occupied rather than
+                                     * painted ────────────────────────────────
                                      *
-                                     * The drawer body has 16px of top padding,
-                                     * and rows scroll up through it — so a bar
-                                     * pinned at the scrollport top still had
-                                     * content sliding past above it. The obvious
-                                     * fix, a negative top margin, does nothing:
-                                     * sticky constrains the *margin* box, so
-                                     * pulling the box up by 16px moves where it
-                                     * pins down by exactly the same 16px.
+                                     * The drawer body has 16px of top padding
+                                     * and rows scroll up through it, so a bar
+                                     * pinned at the scrollport top had content
+                                     * sliding past above it.
                                      *
-                                     * A shadow paints over that strip without
-                                     * being part of layout at all, which is the
-                                     * only thing here that cannot be undone by
-                                     * the positioning it is trying to cover.
+                                     * A shadow was painted over that strip,
+                                     * which hid the rows and did nothing else:
+                                     * a shadow is not in the layout and cannot
+                                     * take a click, so the select that had just
+                                     * scrolled out of sight was still there to
+                                     * be opened by anybody clicking the blank
+                                     * band under the drawer's title. Invisible
+                                     * and clickable is worse than visible.
+                                     *
+                                     * The bar now reaches into the strip for
+                                     * real — a negative top margin to extend the
+                                     * box, matching padding so its contents do
+                                     * not move, and a negative sticky offset
+                                     * because sticky constrains the *margin*
+                                     * box: -16px there puts the border box
+                                     * exactly on the scrollport's top edge.
                                      */
-                                    boxShadow: '0 -1rem 0 0 var(--color-card-bg)',
+                                    top: '-1rem',
                                 }}
                                 ref={(node) => {
                                     if (!node) return;

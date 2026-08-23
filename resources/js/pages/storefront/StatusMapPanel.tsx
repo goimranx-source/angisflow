@@ -24,6 +24,16 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
     const [adding, setAdding] = useState(false);
     const [newStatus, setNewStatus] = useState('');
 
+    /*
+     * The same filter the field mapping has, for the same reason.
+     *
+     * A shop with a plugin per courier can carry thirty statuses, and the one
+     * being looked for is usually known by name. Matched against both halves,
+     * so typing what the shop calls something finds it just as well as typing
+     * what this tool calls it.
+     */
+    const [query, setQuery] = useState('');
+
     const { data, isLoading, refetch } = useQuery({
         queryKey: ['integration', connectionId, 'status-map'],
         queryFn: () => api.get<{ data: StatusCatalogue }>(`/settings/integrations/${connectionId}/status-map`),
@@ -72,29 +82,177 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
             return { ...current, [ourStatus]: theirWord };
         });
 
+    const visible = (catalogue?.ours ?? []).filter((ours) => {
+        const needle = query.trim().toLowerCase();
+
+        if (needle === '') return true;
+
+        const theirWord = rules[ours.value] ?? '';
+        const theirLabel = catalogue?.theirs.find((t) => t.value === theirWord)?.label ?? '';
+
+        return [ours.label, ours.value, theirWord, theirLabel].some((piece) =>
+            piece.toLowerCase().includes(needle),
+        );
+    });
+
+    const mapped = Object.keys(rules).length;
+    const unmapped = (catalogue?.ours.length ?? 0) - mapped;
+
     return (
         <div className="space-y-4">
+            {/*
+              The same toolbar as the field mapping, in the same place.
+
+              Save used to sit at the bottom, past every row, which on a shop
+              with thirty statuses meant scrolling to the end to keep a change
+              made at the top. Two panels behind one tab strip should not
+              disagree about where their controls live.
+            */}
+            <div
+                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
+                style={{
+                    top: 'var(--store-tabs-height, 0px)',
+                    background: 'var(--color-card-bg)',
+                }}
+                ref={(node) => {
+                    if (!node) return;
+
+                    node.parentElement?.style.setProperty(
+                        '--toolbar-height',
+                        `${Math.round(node.getBoundingClientRect().height)}px`,
+                    );
+                }}
+            >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    {/* Statuses are added to this tool, never to the shop —
+                        theirs are whatever their software sends. */}
+                    {adding ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <input
+                                className="field min-w-[12rem]"
+                                value={newStatus}
+                                onChange={(event) => setNewStatus(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' && newStatus.trim() !== '') {
+                                        event.preventDefault();
+                                        addStatus.mutate();
+                                    }
+
+                                    if (event.key === 'Escape') setAdding(false);
+                                }}
+                                placeholder="Awaiting parts"
+                                aria-label="Name the new status"
+                                autoFocus
+                            />
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => addStatus.mutate()}
+                                disabled={newStatus.trim() === '' || addStatus.isPending}
+                            >
+                                Add
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setAdding(false)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <button type="button" className="btn btn-secondary" onClick={() => setAdding(true)}>
+                            <Icon name="plus" size={13} />
+                            Add a status
+                        </button>
+                    )}
+
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => save.mutate()}
+                        disabled={save.isPending}
+                    >
+                        {save.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative min-w-[14rem] flex-1">
+                        <Icon
+                            name="magnifying-glass"
+                            size={13}
+                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                        />
+                        <input
+                            className="field w-full pl-8 text-sm"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Find a status — by its name here or on the shop"
+                            aria-label="Filter the statuses"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                        <span>{mapped} matched</span>
+
+                        {/*
+                          The count that matters. An unmatched status is one this
+                          shop will never be told about, and it is invisible
+                          otherwise — a dash in a dropdown among thirty rows.
+                        */}
+                        {unmapped > 0 && (
+                            <span
+                                className="flex items-center gap-1"
+                                style={{ color: 'var(--color-warning-text)' }}
+                            >
+                                <Icon name="warning" size={11} />
+                                {unmapped} not matched
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {catalogue && catalogue.unclaimed.length > 0 && (
-                <p className="text-xs text-[var(--color-warning)]">
-                    <Icon name="warning" size={12} className="mr-1 inline" />
-                    This shop also sends {catalogue.unclaimed.join(', ')} — nothing happens when it does.
+                <p className="flex items-start gap-1.5 text-xs text-[var(--color-text-muted)]">
+                    <Icon name="warning" size={12} className="mt-0.5 shrink-0" />
+                    <span>
+                        This shop also sends {catalogue.unclaimed.join(', ')} — nothing happens here
+                        when it does.
+                    </span>
                 </p>
             )}
 
-            {isLoading && <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />}
+            {isLoading && (
+                <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />
+            )}
 
             {catalogue && (
                 <div className="overflow-x-auto rounded-[var(--shell-radius)]">
-                    <table className="table table-framed">
+                    <table className="table table-framed w-full min-w-[28rem] table-fixed">
+                        <colgroup>
+                            <col style={{ width: '45%' }} />
+                            <col />
+                        </colgroup>
+
                         <thead>
                             <tr>
-                                <th>This tool</th>
-                                <th>Is called this on the shop</th>
+                                <th>This tool&rsquo;s status</th>
+                                <th>Is called this on your shop</th>
                             </tr>
                         </thead>
 
                         <tbody>
-                            {catalogue.ours.map((ours) => (
+                            {visible.length === 0 && (
+                                <tr>
+                                    <td colSpan={2} className="text-center text-[var(--color-text-muted)]">
+                                        No status matches &ldquo;{query}&rdquo;.
+                                    </td>
+                                </tr>
+                            )}
+
+                            {visible.map((ours) => (
                                 <tr key={ours.value}>
                                     <td className="whitespace-nowrap">
                                         <Dot tone={ours.tone} />
@@ -103,12 +261,12 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
 
                                     <td>
                                         <select
-                                            className="field w-full min-w-[13rem]"
+                                            className="field w-full"
                                             value={rules[ours.value] ?? ''}
                                             onChange={(event) => choose(ours.value, event.target.value)}
                                             aria-label={`What this shop calls ${ours.label}`}
                                         >
-                                            <option value="">—</option>
+                                            <option value="">— not matched</option>
                                             {catalogue.theirs.map((theirs) => (
                                                 <option key={theirs.value} value={theirs.value}>
                                                     {/*
@@ -131,50 +289,6 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
                     </table>
                 </div>
             )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                {/* Statuses are added to this tool, never to the shop — theirs
-                    are whatever their software sends. */}
-                {adding ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        <input
-                            className="field min-w-[12rem]"
-                            value={newStatus}
-                            onChange={(event) => setNewStatus(event.target.value)}
-                            placeholder="Awaiting parts"
-                            autoFocus
-                        />
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => addStatus.mutate()}
-                            disabled={newStatus.trim() === '' || addStatus.isPending}
-                        >
-                            Add
-                        </button>
-                        <button type="button" className="btn btn-secondary" onClick={() => setAdding(false)}>
-                            Cancel
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                        type="button"
-                        className="text-sm text-[var(--color-brand)]"
-                        onClick={() => setAdding(true)}
-                    >
-                        ＋ Add a status to this tool
-                    </button>
-                )}
-
-                <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => save.mutate()}
-                    disabled={save.isPending}
-                >
-                    Save
-                </button>
-            </div>
         </div>
     );
 }
