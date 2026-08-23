@@ -22,6 +22,7 @@ use App\Http\Api\V1\CourierEndpoint;
 use App\Http\Api\V1\CouriersEndpoint;
 use App\Http\Api\V1\IntegrationsEndpoint;
 use App\Http\Api\V1\OrdersEndpoint;
+use App\Http\Api\V1\ProductsEndpoint;
 use App\Http\Api\V1\StorefrontsEndpoint;
 use App\Http\Api\V1\CurrencyEndpoint;
 use App\Http\Api\V1\DashboardEndpoint;
@@ -474,6 +475,16 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
      */
     Route::get('orders/catalogue/search', [OrdersEndpoint::class, 'catalogueSearch'])
         ->middleware('can:sales.view')->name('orders.catalogue-search');
+
+    /*
+     * The catalogue.
+     *
+     * The products screen has called this since it was written and the route
+     * was never here, so every visit answered 404 and the page said "Failed to
+     * load products".
+     */
+    Route::get('products', [ProductsEndpoint::class, 'index'])
+        ->middleware('can:catalogue.view')->name('products.index');
     Route::patch('orders/{order}', [OrdersEndpoint::class, 'updateOrder'])
         ->middleware('can:sales.edit')->name('orders.update');
     Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])
