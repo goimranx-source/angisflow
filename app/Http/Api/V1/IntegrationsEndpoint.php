@@ -704,7 +704,23 @@ class IntegrationsEndpoint
         }
 
         $clean = [];
+        $refused = [];
+        $collided = [];
 
+        /*
+         * Keyed by target while building, because that is how it will be read
+         * back and there is no point storing a row that loading will discard.
+         *
+         * A target holds one rule. Two rows aimed at the same one is a genuine
+         * conflict with no sensible resolution, and it happens easily: every
+         * WordPress shop writes its custom fields twice, plainly and with a
+         * leading underscore, and both spellings reduce to the same target.
+         *
+         * The old code wrote both and let the reader silently keep whichever
+         * came last. What somebody saw was a row they had just added quietly
+         * replacing one that was already working — no error, no warning, and
+         * the evicted field then offered back to them as though it were new.
+         */
         foreach ((array) $request->input('maps', []) as $row) {
             if (! is_array($row)) {
                 continue;
@@ -716,17 +732,42 @@ class IntegrationsEndpoint
             // against the known list — the same gate the sync applies, so a row
             // that would be ignored at sync time is refused at save time
             // instead of sitting in the settings looking configured.
-            if ($map->isUsable()) {
-                $clean[] = $map->toArray();
+            if (! $map->isUsable()) {
+                $refused[] = $map->source !== '' ? $map->source : '(blank row)';
+
+                continue;
             }
+
+            if (isset($clean[$map->target])) {
+                $collided[] = $map->source.' and '.$clean[$map->target]['source'];
+
+                continue;
+            }
+
+            $clean[$map->target] = $map->toArray();
         }
 
         $mappings = $integration->field_mappings ?? [];
-        $mappings[$entity] = $clean;
+        $mappings[$entity] = array_values($clean);
         $integration->field_mappings = $mappings;
         $integration->save();
 
-        return response()->json(['data' => FieldMapSet::for($integration->fresh(), $entity)->toArray()]);
+        return response()->json([
+            'data' => FieldMapSet::for($integration->fresh(), $entity)->toArray(),
+
+            /*
+             * What was not kept, and why.
+             *
+             * A save that quietly stores less than it was given is the whole
+             * defect this replaces. Reported rather than logged, because the
+             * only person who can resolve a conflict between two of their own
+             * mappings is the one looking at the screen.
+             */
+            'skipped' => [
+                'refused' => array_values(array_unique($refused)),
+                'collided' => array_values(array_unique($collided)),
+            ],
+        ]);
     }
 
     /**

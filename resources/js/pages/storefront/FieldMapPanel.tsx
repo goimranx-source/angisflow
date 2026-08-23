@@ -58,6 +58,29 @@ type Sample = {
 /** Chosen in the target list to define a field rather than pick one. */
 const NEW_FIELD = '__new_field__';
 
+/** The containers a shop keeps its own invented fields in. */
+const CUSTOM_CONTAINERS = ['meta_data', 'note_attributes', 'metafields', 'custom_fields'];
+
+/**
+ * Where a discovered field would be stored here.
+ *
+ * ── Why the leading underscore goes ──────────────────────────────────────────
+ *
+ * WordPress marks meta private by prefixing it, and the underscore carries no
+ * meaning outside WordPress — a field called `_delivery_slot` there is a
+ * delivery slot here.
+ *
+ * ── And why that has a consequence ───────────────────────────────────────────
+ *
+ * Dropping it makes `_order_source` and `order_source` land on the same target,
+ * which is correct — WooCommerce plugins routinely write both, and they hold the
+ * same value. It also means the two can never both be mapped, because a target
+ * holds one rule. Whoever offers these has to check the target, not the path.
+ */
+function targetFor(path: string): string {
+    return `custom.${(path.split('.').pop() ?? 'field').replace(/^_+/, '')}`;
+}
+
 /**
  * A first guess at what a field is, from the one value the shop sent.
  *
@@ -196,9 +219,37 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
 
     const save = useMutation({
         mutationFn: () =>
-            api.put(`/settings/integrations/${connectionId}/field-maps`, { entity, maps: rows }),
-        onSuccess: () => {
-            toast.success('Mapping saved.');
+            api.put<{ data: MapRow[]; skipped?: { refused: string[]; collided: string[] } }>(
+                `/settings/integrations/${connectionId}/field-maps`,
+                { entity, maps: rows },
+            ),
+        onSuccess: (result) => {
+            /*
+             * Say when less was kept than was sent.
+             *
+             * A save that stores fewer rows than it was given, and reports
+             * success anyway, is indistinguishable from one that worked — until
+             * the screen reloads and a row is missing, which reads as the
+             * application losing work rather than refusing it.
+             */
+            const collided = result.skipped?.collided ?? [];
+            const refused = result.skipped?.refused ?? [];
+
+            if (collided.length > 0) {
+                toast.error(
+                    `Saved, but ${collided.length} row${collided.length === 1 ? '' : 's'} could not be kept — ` +
+                        `these point at the same field here: ${collided.join('; ')}. ` +
+                        'Give one of each pair a different field, or remove it.',
+                );
+            } else if (refused.length > 0) {
+                toast.error(
+                    `Saved, but ${refused.length} row${refused.length === 1 ? '' : 's'} had no field to write to: ` +
+                        refused.join(', '),
+                );
+            } else {
+                toast.success('Mapping saved.');
+            }
+
             void queryClient.invalidateQueries({ queryKey: ['integration', connectionId] });
         },
         onError: (error: Error) => toast.error(error.message || 'That could not be saved.'),
@@ -237,12 +288,31 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
      * Suggested, not applied: each becomes a row pointing at a custom field of
      * the same name, and nothing is saved until Save is pressed.
      */
-    const suggestions = (sample?.paths ?? []).filter((option) => {
-        const container = option.path.split('.')[0] ?? '';
-        const isCustom = ['meta_data', 'note_attributes', 'metafields', 'custom_fields'].includes(container);
+    const suggestions = (() => {
+        /*
+         * Both what is mapped and where it lands.
+         *
+         * Checking only the source produced a button that could never be
+         * finished. Every one of these shops writes its custom fields twice,
+         * once plainly and once with a leading underscore, and both spellings
+         * reduce to the same target. Offering the twin of something already
+         * mapped meant saving it, having it evict the row that was there, and
+         * finding the evicted one offered in its place — the same count, for
+         * ever, with a field quietly lost on each round.
+         */
+        const mappedSources = new Set(rows.map((row) => row.source));
+        const mappedTargets = new Set(rows.map((row) => row.target));
 
-        return isCustom && !rows.some((row) => row.source === option.path);
-    });
+        return (sample?.paths ?? []).filter((option) => {
+            const container = option.path.split('.')[0] ?? '';
+
+            if (!CUSTOM_CONTAINERS.includes(container)) return false;
+            if (mappedSources.has(option.path)) return false;
+
+            // Already arriving under another name. Nothing to add.
+            return !mappedTargets.has(targetFor(option.path));
+        });
+    })();
 
     const suggest = () =>
         setRows((current) => [
@@ -261,7 +331,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                 // Named after the field itself, minus any leading underscore —
                 // WordPress hides its private meta that way and the underscore
                 // means nothing here.
-                target: `custom.${(option.path.split('.').pop() ?? 'field').replace(/^_+/, '')}`,
+                target: targetFor(option.path),
                 label: null,
                 enabled: true,
                 also: [],
@@ -278,6 +348,26 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
      */
     const needsOptions = (transform: string): boolean =>
         (sample?.needs_options ?? ['select', 'radio', 'checkbox']).includes(transform);
+
+    /**
+     * Rows aimed at a field another row already claims.
+     *
+     * Marked while editing rather than only on save, because the two rows are
+     * usually far apart in a list of forty and the conflict is invisible until
+     * something is lost. WordPress makes this ordinary: a shop writes
+     * `order_source` and `_order_source`, both reduce to the same field here,
+     * and only one of them can win.
+     */
+    const contested = (() => {
+        const count = new Map<string, number>();
+
+        for (const row of rows) {
+            if (row.target === '' || row.target === NEW_FIELD) continue;
+            count.set(row.target, (count.get(row.target) ?? 0) + 1);
+        }
+
+        return count;
+    })();
 
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
@@ -518,6 +608,19 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                 ))}
                                                 <option value={NEW_FIELD}>＋ New field…</option>
                                             </select>
+
+                                            {(contested.get(row.target) ?? 0) > 1 && (
+                                                <div
+                                                    className="mt-1 flex items-start gap-1 text-[11px] leading-tight"
+                                                    style={{ color: 'var(--color-danger, #b91c1c)' }}
+                                                >
+                                                    <Icon name="warning" size={11} className="mt-0.5 shrink-0" />
+                                                    <span>
+                                                        Another row already writes to this field. Only one
+                                                        will be kept.
+                                                    </span>
+                                                </div>
+                                            )}
 
                                             {/*
                                               A custom field needs a name of its
