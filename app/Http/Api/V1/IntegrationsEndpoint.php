@@ -518,6 +518,10 @@ class IntegrationsEndpoint
              */
             $place = PlaceFields::typeFor($path);
 
+            $readsAs = $place !== null && is_scalar($sample)
+                ? Geography::name((string) $sample, null, (string) $integration->provider)
+                : null;
+
             $paths[] = [
                 'path' => $path,
                 // Trimmed: a description field can run to a page, and this is a
@@ -526,14 +530,15 @@ class IntegrationsEndpoint
 
                 // What the code stands for, so the column reads Satkhira rather
                 // than BD-58 while the mapping is still being set up.
-                'reads_as' => $place !== null && is_scalar($sample)
-                    ? Geography::name((string) $sample, null, (string) $integration->provider)
-                    : null,
+                'reads_as' => $readsAs,
                 'label' => $field?->label,
                 'readonly' => $field?->readonly ?? false,
                 'suggest' => $place ?? $field?->transform(),
                 'choices' => $field?->choices() ?? [],
                 'note' => $field?->description,
+                'place' => $place,
+                'place_hint' => self::placeHint($place),
+                'place_locked' => self::placeIsCertain($place, $readsAs),
             ];
         }
 
@@ -564,6 +569,14 @@ class IntegrationsEndpoint
                 'suggest' => PlaceFields::typeFor($path),
                 'choices' => [],
                 'note' => 'Sent by this shop before, though not on the record read here.',
+                'place' => PlaceFields::typeFor($path),
+                'place_hint' => self::placeHint(PlaceFields::typeFor($path)),
+                'place_locked' => self::placeIsCertain(
+                    PlaceFields::typeFor($path),
+                    is_scalar($example)
+                        ? Geography::name((string) $example, null, (string) $integration->provider)
+                        : null,
+                ),
             ];
         }
 
@@ -589,6 +602,12 @@ class IntegrationsEndpoint
                 'choices' => $field->choices(),
                 'note' => $field->description,
                 'unused' => true,
+                'place' => PlaceFields::typeFor($path),
+                'place_hint' => self::placeHint(PlaceFields::typeFor($path)),
+
+                // Never locked: no record has used this field, so there is no
+                // value to have resolved and nothing to be certain about.
+                'place_locked' => false,
             ];
         }
 
@@ -713,6 +732,55 @@ class IntegrationsEndpoint
         $integration->saveQuietly();
 
         return PlatformSchema::mappable(PlatformSchema::flatten(PlatformSchema::fromJsonSchema($described)));
+    }
+
+    /**
+     * What to say about a field whose choices this application supplies.
+     *
+     * Shown on the hover of the small mark beside a locked type, in place of the
+     * row of explanation that used to sit under every one of them — forty rows
+     * with a sentence beneath each is a wall of text saying the same three
+     * things over and over.
+     */
+    private static function placeHint(?string $place): ?string
+    {
+        return match ($place) {
+            'country' => 'Chosen from 250 countries — nothing to enter.',
+            'state' => 'Chosen from the districts of whichever country the address names.',
+            'area' => 'Chosen from the areas within whichever district the address names.',
+            default => null,
+        };
+    }
+
+    /**
+     * Is this application sure enough about a place field to settle it?
+     *
+     * ── Why certainty is required rather than assumed ────────────────────────
+     *
+     * Recognising `billing.state` as a district is a guess from its name, and a
+     * good one. Having a list of districts to offer for it is a different claim
+     * entirely, and one this application cannot make everywhere: 181 of the 250
+     * countries have no sub-divisions here at all, no platform anywhere models a
+     * third level, and a shop on a platform with no codes of its own is being
+     * read against a borrowed list.
+     *
+     * So the test is not "does this look like a district" but "did the value on
+     * this shop's own record actually resolve to a place". If it did, there is a
+     * list behind it and the type is settled. If it did not — an unfamiliar
+     * platform, a country with no districts here, a third level nobody has
+     * mapped — the type is offered and left open, because a locked field with
+     * nothing behind it is worse than no lock at all.
+     *
+     * A country is the exception and is always certain: the list is the same 250
+     * for everyone, and every platform here uses ISO alpha-2.
+     */
+    private static function placeIsCertain(?string $place, ?string $readsAs): bool
+    {
+        if ($place === null) {
+            return false;
+        }
+
+        return $place === 'country' || $readsAs !== null;
     }
 
     /**
