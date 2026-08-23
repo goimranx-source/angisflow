@@ -758,7 +758,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[67.5rem] table-fixed"
+                        className="table table-framed w-full min-w-[70rem] table-fixed"
                     >
                         {/*
                           ── Widths the content needs, not shares of what is
@@ -784,10 +784,15 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                             <col style={{ width: '9rem' }} />
                             <col style={{ width: '12rem' }} />
                             <col style={{ width: '12rem' }} />
-                            {/* A select draws its own chevron inside the box, so
-                                "⇄ Both" needs more room than the words suggest. */}
-                            <col style={{ width: '7rem' }} />
-                            <col style={{ width: '5rem' }} />
+                            {/*
+                              A select draws its own chevron inside its box and
+                              lets the text run under it, so the words need more
+                              room than measuring them suggests — and more than
+                              the browser admits, since scrollWidth reports no
+                              overflow while "⇄ Both" plainly reads "⇄ Botl".
+                            */}
+                            <col style={{ width: '8rem' }} />
+                            <col style={{ width: '6.5rem' }} />
                             {/*
                               Wide enough for the button *and* the cell's own
                               padding.
@@ -838,28 +843,29 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                   Stacked, they read as one thing, which is what
                                   they are: this shop's field, and its value.
                                 */}
-                                <th>This shop&rsquo;s field</th>
+                                <th>Your shop&rsquo;s field</th>
                                 <th>Value there</th>
                                 <th>Becomes</th>
-                                <th>Treated as</th>
+                                <th>Field type</th>
                                 <th>Way</th>
-                                {/* Not "Enabled". Every row here syncs; this
-                                    governs only whether somebody editing an
-                                    order is shown a box for it. */}
                                 {/*
-                                  "Show", not "On edit page".
+                                  Named for what ticking it does, not for what
+                                  the column holds.
 
-                                  The longer wording is clearer and did not fit —
-                                  it rendered as "On edit pag", which is neither.
-                                  The full sentence lives on the hover, where
-                                  there is room for it.
+                                  "Show" on its own left somebody to guess show
+                                  where — and the guess that matters, that this
+                                  governs the edit screen and not whether the
+                                  field syncs, is not one anybody arrives at
+                                  unaided. The column is wide enough for the
+                                  words this time; the previous attempt at fuller
+                                  wording was cut to "On edit pag", which taught
+                                  nobody anything.
                                 */}
                                 <th
                                     className="text-center"
-                                   
-                                    title="Show this field when editing an order or product"
+                                    title="Tick to show this field on the add and edit page for an order or product. Unticking hides it there — the field still syncs either way."
                                 >
-                                    Show
+                                    Show on form
                                 </th>
                                 <th />
                             </tr>
@@ -1168,9 +1174,10 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                                 onChange={(e) =>
                                                     update(index, { visible: e.target.checked })
                                                 }
+                                                title="Tick to show this field on the add and edit page. Unticking hides it there — it still syncs either way."
                                                 aria-label={`Show ${
                                                     row.display_label ?? (row.source || 'this field')
-                                                } when editing`}
+                                                } on the add and edit page`}
                                                 className="size-4 cursor-pointer align-middle accent-[var(--color-brand)]"
                                             />
                                         </td>
