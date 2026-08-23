@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useMoney } from '@/hooks/useMoney';
 import { RowAction, RowActionMenu, RowActions } from '@/components/modules/RowActions';
 import { BulkActionsMenu, type BulkActionGroup } from '@/components/modules/BulkActionsMenu';
+import { OrderHistory } from '@/pages/orders/OrderHistory';
 import { OrderEditor } from './orders/OrderEditor';
 import {
     downloadCsv,
@@ -2424,56 +2425,16 @@ export default function Orders() {
                         key: 'history',
                         label: 'History',
                         /*
-                          What is genuinely known about this order's life, and
-                          nothing invented.
+                          What actually happened to this order, from the event
+                          log — no longer four timestamps standing in for one.
 
-                          There is no event log yet, so this does not pretend
-                          otherwise — but the four timestamps the record does
-                          carry are worth showing, and "coming soon" over an
-                          empty panel taught somebody to stop opening the tab.
-                          When there is a real trail it replaces this.
+                          Loaded by the tab rather than with the order: a
+                          timeline is the least-opened panel of the three, and
+                          fetching everybody's history on every row click would
+                          be a query per glance for a screen most glances never
+                          reach.
                         */
-                        content: selectedOrder && (
-                            <dl className="text-sm">
-                                {[
-                                    { label: 'Placed', value: formatDate(selectedOrder.date) },
-                                    { label: 'Added here', value: formatDate(selectedOrder.created_at) },
-                                    {
-                                        label: 'Channel',
-                                        value: channelLabels[selectedOrder.channel] ?? selectedOrder.channel,
-                                    },
-                                    {
-                                        label: 'Shop',
-                                        value: selectedOrder.store?.name ?? 'Walk-in / counter',
-                                    },
-                                    ...(selectedOrder.dispatch
-                                        ? [
-                                              {
-                                                  label: 'Courier',
-                                                  value:
-                                                      selectedOrder.dispatch.courier.label ?? 'Awaiting a courier',
-                                              },
-                                              {
-                                                  label: 'Consignment',
-                                                  value:
-                                                      selectedOrder.dispatch.tracking_number ??
-                                                      selectedOrder.dispatch.shipment_number,
-                                              },
-                                          ]
-                                        : []),
-                                ].map((row) => (
-                                    <div
-                                        key={row.label}
-                                        className="flex items-baseline justify-between border-b border-[var(--shell-border)] py-2.5 last:border-0"
-                                    >
-                                        <dt className="text-[var(--color-text-muted)]">{row.label}</dt>
-                                        <dd className="text-right font-medium text-[var(--color-text-main)]">
-                                            {row.value}
-                                        </dd>
-                                    </div>
-                                ))}
-                            </dl>
-                        ),
+                        content: selectedOrder && <OrderHistory orderId={selectedOrder.id} />,
                     },
                 ]}
                 activeTab={drawerTab}

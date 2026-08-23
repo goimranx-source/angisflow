@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Api\V1;
 
+use App\Domain\Activity\Activity;
 use App\Domain\Catalogue\Models\ProductVariant;
 use App\Domain\Delivery\Adapters\TestCourierAdapter;
 use App\Domain\Delivery\CourierAdapterResolver;
 use App\Domain\Delivery\Models\CourierConnection;
 use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Delivery\ShipmentTracker;
+use App\Domain\Identity\Models\User;
+use App\Domain\Integrations\Models\IntegrationLink;
 use App\Domain\Integrations\PushDispatcher;
 use App\Domain\Integrations\Support\FieldMapSet;
 use App\Domain\Integrations\Support\OrderStatuses;
@@ -20,13 +23,14 @@ use App\Domain\Sales\Models\Order;
 use App\Domain\Storefront\StoreCode;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
-use App\Domain\Integrations\Models\IntegrationLink;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * The order book — what this business has sold.
@@ -921,6 +925,190 @@ class OrdersEndpoint
      * a shop fills the field — but it lets the screen lead with what this
      * business really uses instead of showing every field at equal weight.
      */
+    /**
+     * Everything that ever happened to one order.
+     *
+     * ── Why the sentences are built here and not in the browser ──────────────
+     *
+     * Because reading a line back means knowing things the browser does not: who
+     * a user id belongs to, what a status code is called in this business, how
+     * much money a minor-unit integer is in this order's currency. Sending raw
+     * verbs and context would mean shipping all of that alongside, and rebuilding
+     * it in TypeScript, and having two descriptions of the same event that drift.
+     *
+     * ── Why the order's own timestamps are folded in ─────────────────────────
+     *
+     * The event table starts from the day it was switched on, and every order
+     * placed before that has no rows at all. Those orders still have the four
+     * timestamps they were always stored with — placed, confirmed, fulfilled,
+     * cancelled — and a timeline that shows nothing for them would read as an
+     * order nothing ever happened to, rather than as an order older than the
+     * record-keeping.
+     *
+     * They are marked as derived so the screen can be honest about which is
+     * which.
+     */
+    public function history(string $order): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $model = Order::withTrashed()
+            ->with(['storefront:id,name'])
+            ->where('business_id', $business->id)
+            ->where('public_id', $order)
+            ->firstOrFail();
+
+        $events = Activity::for(Activity::ORDER, (int) $model->id);
+
+        /*
+         * Names for the people in it, fetched once.
+         *
+         * A timeline of forty lines by three people is three names, and looking
+         * each up as its line is built is forty queries for them.
+         */
+        $actors = User::query()
+            ->whereIn('id', $events->pluck('actor_user_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        $scale = 10 ** Currencies::scale((string) $model->currency);
+        $symbol = Currencies::symbol((string) $model->currency);
+
+        $money = fn (mixed $minor): string => $symbol.number_format(((int) $minor) / $scale, 2);
+
+        $entries = $events->map(fn ($event): array => [
+            'id' => 'e'.$event->id,
+            'at' => $event->occurred_at?->toIso8601String(),
+            'verb' => $event->verb,
+            'by' => $event->actor_user_id === null
+                ? null
+                : ($actors[$event->actor_user_id] ?? 'Someone since removed'),
+
+            // Null actor means the platform did it — a webhook, a sync, a queued
+            // push. Said out loud, because "who did this" is the first question.
+            'automated' => $event->actor_user_id === null,
+            'title' => $this->historyTitle($event->verb, (array) $event->context, $money),
+            'detail' => $this->historyDetail($event->verb, (array) $event->context),
+            'tone' => $this->historyTone($event->verb),
+        ])->values()->all();
+
+        return response()->json([
+            'data' => [
+                'entries' => $entries,
+
+                /*
+                 * The timestamps the order carries in its own columns.
+                 *
+                 * Sent separately rather than mixed in, because they are a
+                 * different kind of claim: an event says "this happened at this
+                 * moment and here is who did it", while a column says only "this
+                 * had happened by the time anybody looked".
+                 */
+                'milestones' => array_values(array_filter([
+                    $this->milestone('Placed', $model->ordered_on),
+                    $this->milestone('Added here', $model->created_at),
+                    $this->milestone('Confirmed', $model->confirmed_at),
+                    $this->milestone('Fulfilled', $model->fulfilled_at),
+                    $this->milestone('Cancelled', $model->cancelled_at),
+                    $this->milestone('Archived', $model->archived_at),
+                    $this->milestone('Moved to trash', $model->deleted_at),
+                ])),
+                'shop' => $model->storefront?->name,
+            ],
+        ]);
+    }
+
+    /** @return array{label: string, at: string}|null */
+    private function milestone(string $label, mixed $at): ?array
+    {
+        if (blank($at)) {
+            return null;
+        }
+
+        return [
+            'label' => $label,
+            'at' => $at instanceof \DateTimeInterface
+                ? Carbon::instance($at)->toIso8601String()
+                : Carbon::parse((string) $at)->toIso8601String(),
+        ];
+    }
+
+    /**
+     * One line, in words.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function historyTitle(string $verb, array $context, callable $money): string
+    {
+        $from = $context['from'] ?? null;
+        $to = $context['to'] ?? null;
+
+        $said = fn (mixed $v): string => blank($v) ? 'nothing' : Str::headline((string) $v);
+
+        return match ($verb) {
+            'created' => 'Order created',
+            'status.changed' => 'Status: '.$said($from).' → '.$said($to),
+            'payment.changed' => 'Payment: '.$said($from).' → '.$said($to),
+            'fulfilment.changed' => 'Fulfilment: '.$said($from).' → '.$said($to),
+            'total.changed' => 'Total: '.$money($from).' → '.$money($to),
+            'paid.changed' => 'Paid: '.$money($from).' → '.$money($to),
+            'cancelled.reason' => 'Cancellation reason recorded',
+            'edited' => 'Details edited',
+            'archived' => 'Archived',
+            'unarchived' => 'Taken out of the archive',
+            'trashed' => 'Moved to the trash',
+            'restored' => 'Restored from the trash',
+            'push.sent' => 'Sent to '.($context['shop'] ?? 'the shop'),
+            'push.failed' => ($context['shop'] ?? 'The shop').' refused the change',
+            'pulled' => 'Brought in from '.($context['shop'] ?? 'the shop'),
+
+            // A verb recorded by a version of this application that has since
+            // moved on. Shown as itself rather than hidden: a line nobody can
+            // read still proves something happened, and hiding it would make the
+            // history quietly incomplete.
+            default => Str::headline($verb),
+        };
+    }
+
+    /**
+     * The second line, where there is more worth saying.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function historyDetail(string $verb, array $context): ?string
+    {
+        return match ($verb) {
+            'edited' => is_array($context['fields'] ?? null) && $context['fields'] !== []
+                ? collect($context['fields'])->map(fn ($f) => Str::headline((string) $f))->join(', ', ' and ')
+                : null,
+            'push.failed' => is_string($context['message'] ?? null) ? $context['message'] : null,
+            'push.sent' => ($context['action'] ?? null) === 'created'
+                ? 'Created there for the first time'
+                : 'Updated the one already there',
+            'cancelled.reason' => is_string($context['to'] ?? null) ? $context['to'] : null,
+            'created' => isset($context['number']) ? 'Number '.$context['number'] : null,
+            default => null,
+        };
+    }
+
+    /**
+     * How a line should feel.
+     *
+     * Only three, and used sparingly. A timeline where every line is coloured is
+     * a timeline where the colour says nothing — the point is that the one thing
+     * that went wrong is visible without reading.
+     */
+    private function historyTone(string $verb): string
+    {
+        return match ($verb) {
+            'push.failed' => 'bad',
+            'trashed', 'archived', 'cancelled.reason' => 'quiet',
+            'created', 'push.sent', 'restored' => 'good',
+            default => 'plain',
+        };
+    }
+
     public function editor(string $order): JsonResponse
     {
         $business = $this->tenant->business();

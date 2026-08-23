@@ -8,6 +8,7 @@ use App\Domain\Catalogue\Models\Product;
 use App\Domain\Integrations\Contracts\PushesRecords;
 use App\Domain\Integrations\Contracts\ReadsRecord;
 use App\Domain\Integrations\EntityLinker;
+use App\Domain\Activity\Activity;
 use App\Domain\Integrations\Models\Integration;
 use App\Domain\Integrations\Models\IntegrationLink;
 use App\Domain\Integrations\PlatformRegistry;
@@ -173,6 +174,20 @@ final class PushIntegrationRecord implements ShouldQueue
                 'message' => $message,
             ]);
 
+            /*
+             * On the record's own history as well as in the log.
+             *
+             * A log line answers the question somebody thought to ask of the
+             * server. This answers the one they actually have, in the place they
+             * actually look: why does the shop not show what I changed.
+             */
+            Activity::record($this->entity, $this->localId, 'push.failed', [
+                'shop' => $integration->name,
+                'message' => mb_substr($message, 0, 300),
+            ]);
+
+            Activity::flush();
+
             throw new \RuntimeException($message);
         }
 
@@ -204,6 +219,25 @@ final class PushIntegrationRecord implements ShouldQueue
             ->where('linkable_id', $this->localId)
             ->whereNotNull('push_pending_at')
             ->update(['push_pending_at' => null, 'push_error' => null]);
+
+        /*
+         * Sent, and said so.
+         *
+         * Whether this was a create or an update is the useful half: an order
+         * appearing in the shop for the first time and an order being amended
+         * there look identical from here otherwise, and the difference is what
+         * somebody chasing a duplicate needs to see.
+         *
+         * Flushed rather than buffered, because a queued job has no request to
+         * terminate — nothing would ever empty the buffer.
+         */
+        Activity::record($this->entity, $this->localId, 'push.sent', [
+            'shop' => $integration->name,
+            'action' => $link === null ? 'created' : 'updated',
+            'external_id' => $externalId,
+        ]);
+
+        Activity::flush();
     }
 
     /**

@@ -464,6 +464,17 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
      * permissions — somebody who may look at the order book can open the form
      * and see it filled in, and only somebody who may change it can submit.
      */
+    /*
+     * An order's own history.
+     *
+     * Under the order rather than under a general audit route, because this is
+     * the question people actually ask — what happened to *this* — and because
+     * the table's index for it is (account, subject_type, subject_id), which is
+     * this shape exactly.
+     */
+    Route::get('orders/{order}/history', [OrdersEndpoint::class, 'history'])
+        ->middleware('can:orders.view')->name('orders.history');
+
     Route::get('orders/{order}/editor', [OrdersEndpoint::class, 'editor'])
         ->middleware('can:sales.view')->name('orders.editor');
     /*

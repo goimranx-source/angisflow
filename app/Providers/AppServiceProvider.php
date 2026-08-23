@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Domain\Activity\Activity;
+use App\Domain\Activity\Observers\OrderActivityObserver;
 use App\Domain\Billing\PlanEntitlement;
+use App\Domain\Catalogue\Contracts\ModuleEntitlement;
 use App\Domain\Catalogue\Models\Product;
 use App\Domain\Catalogue\Models\ProductVariant;
+use App\Domain\Identity\Models\User;
 use App\Domain\Integrations\Observers\ProductObserver;
 use App\Domain\Integrations\Observers\ProductVariantObserver;
-use App\Domain\Catalogue\Contracts\ModuleEntitlement;
-use App\Domain\Identity\Models\User;
 use App\Domain\Integrations\PlatformRegistry;
 use App\Domain\Integrations\QueueHeartbeat;
+use App\Domain\Sales\Models\Order;
 use App\Models\Employee;
 use App\Models\FleetVehicle;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -55,6 +58,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureMorphMap();
         $this->watchTheQueue();
         $this->syncTheCatalogue();
+        $this->recordWhatHappens();
     }
 
     /**
@@ -80,6 +84,24 @@ class AppServiceProvider extends ServiceProvider
     {
         Product::observe(ProductObserver::class);
         ProductVariant::observe(ProductVariantObserver::class);
+    }
+
+    /**
+     * Keep a note of what happens to an order.
+     *
+     * ── Why the flush is registered here rather than left to a caller ────────
+     *
+     * Because the events are buffered, and a buffer nobody empties is a feature
+     * that works in testing and loses everything in production. Terminating
+     * callbacks run after the response has been sent, so the note costs the
+     * person waiting nothing — and registering it once, here, means no caller
+     * anywhere has to remember that recording history has a second half.
+     */
+    private function recordWhatHappens(): void
+    {
+        Order::observe(OrderActivityObserver::class);
+
+        $this->app->terminating(static fn () => Activity::flush());
     }
 
     /**
