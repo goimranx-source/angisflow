@@ -835,12 +835,22 @@ export default function Storefronts() {
                  * Wider for the two tabs that are grids rather than summaries.
                  *
                  * Details is a dozen labelled values and reads well narrow.
-                 * Field mapping is forty rows of five decisions each, and at
-                 * the narrower width it scrolled sideways — which on a mapping
-                 * screen means the column saying where a value lands is off
-                 * screen while you choose where it comes from.
+                 * Field mapping is seven columns of controls across forty rows,
+                 * and each column has a width below which its contents stop
+                 * being readable — "⇄ Both" becomes "⇄", "Text (UPPERCASE)"
+                 * becomes "Text (UPPERCA".
+                 *
+                 * Those widths add up to more than the narrower drawer has, and
+                 * the table scrolls rather than squeezing, which is right. But a
+                 * horizontal scrollbar sits at the bottom of the table, forty
+                 * rows below where somebody is looking, so scrolling that works
+                 * perfectly is scrolling nobody finds.
+                 *
+                 * The honest fix is the room, not the scrollbar: at this width
+                 * every column is legible without scrolling at all, and the
+                 * scrolling stays for the screens genuinely too small for it.
                  */
-                size={storeTab === 'details' ? 'md' : 'xl'}
+                size={storeTab === 'details' ? 'md' : '2xl'}
             >
                 {selectedStorefront && (
                     <div className="space-y-5">

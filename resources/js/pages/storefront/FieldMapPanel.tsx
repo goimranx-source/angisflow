@@ -758,41 +758,37 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[52rem] table-fixed"
+                        className="table table-framed w-full min-w-[66rem] table-fixed"
                     >
                         {/*
-                          Shares, with a floor.
+                          ── Widths the content needs, not shares of what is
+                          available ────────────────────────────────────────────
 
-                          Shares so the table fills its container exactly — fixed
-                          pixel widths leave whatever does not divide evenly as a
-                          gap on the right, against a left edge that has none,
-                          and that lopsidedness is the thing this is avoiding.
+                          Shares always fit, which sounds like the goal and is
+                          the bug: seven columns dividing whatever space there is
+                          means every one of them shrinks together until the
+                          table technically fits and nothing inside it can be
+                          read. "⇄ Both" became "⇄", "Text (UPPERCASE)" became
+                          "Text (UPPERCA", and no amount of scrolling helped
+                          because there was nothing to scroll — the table fitted
+                          perfectly and its contents did not.
 
-                          The floor is what stops the shares from squeezing every
-                          column equally on a narrow drawer until all seven are
-                          too small to use. Below it the wrapper scrolls sideways
-                          and the columns keep their shape.
+                          These are what each control actually needs. Where the
+                          panel is wider they grow together and fill it; where it
+                          is narrower the table keeps them and the wrapper
+                          scrolls, which is the behaviour that lets somebody
+                          reach a column rather than squint at it.
                         */}
                         <colgroup>
-                            <col style={{ width: '25%' }} />
-                            <col style={{ width: '13%' }} />
-                            <col style={{ width: '18%' }} />
-                            <col style={{ width: '18%' }} />
+                            <col style={{ width: '17rem' }} />
+                            <col style={{ width: '9rem' }} />
+                            <col style={{ width: '12rem' }} />
+                            <col style={{ width: '12rem' }} />
                             {/* A select draws its own chevron inside the box, so
-                                "⇄ Both" in much less than this showed as "⇄ B". */}
-                            <col style={{ width: '11%' }} />
-                            <col style={{ width: '8%' }} />
-                            {/*
-                              No width, on purpose.
-
-                              Seven percentages that add to a hundred do not add
-                              to the pixels available: each is rounded up on its
-                              own, and the four pixels they gain between them are
-                              enough for a scrollbar to appear on a table that
-                              fits. The last column takes whatever is left
-                              instead, which is exact by definition.
-                            */}
-                            <col />
+                                "⇄ Both" needs more room than the words suggest. */}
+                            <col style={{ width: '7rem' }} />
+                            <col style={{ width: '5rem' }} />
+                            <col style={{ width: '4rem' }} />
                         </colgroup>
 
                         {/*
