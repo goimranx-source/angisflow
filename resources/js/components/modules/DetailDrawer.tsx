@@ -143,10 +143,7 @@ export function DetailDrawer({
                 aria-labelledby="drawer-title"
             >
                 {/* Header */}
-                <div
-                    className="flex items-start justify-between gap-4 border-b border-[var(--color-border-light)] py-4"
-                    style={{ paddingLeft: 'calc(1.5rem + var(--drawer-gutter, 0px))', paddingRight: 'calc(1.5rem + var(--drawer-gutter, 0px))' }}
-                >
+                <div className="flex items-start justify-between gap-4 border-b border-[var(--color-border-light)] px-6 py-4">
                     <div className="min-w-0 flex-1">
                         <h2
                             id="drawer-title"
@@ -181,10 +178,7 @@ export function DetailDrawer({
 
                 {/* Tabs */}
                 {tabs && tabs.length > 0 && activeTab && onTabChange && (
-                    <div
-                        className="border-b border-[var(--color-border-light)]"
-                        style={{ paddingLeft: 'calc(1.5rem + var(--drawer-gutter, 0px))', paddingRight: 'calc(1.5rem + var(--drawer-gutter, 0px))' }}
-                    >
+                    <div className="border-b border-[var(--color-border-light)] px-6">
                         <Tabs defaultValue={activeTab} value={activeTab} onValueChange={onTabChange}>
                             <TabsList>
                                 {tabs.map((t) => (
@@ -198,57 +192,7 @@ export function DetailDrawer({
                 )}
 
                 {/* Content */}
-                {/*
-                  ── Even margins, with a scrollbar in the way ────────────────
-
-                  A vertical scrollbar lives inside this box and takes its width
-                  off the content, so equal left and right padding does not
-                  produce equal left and right margins: the left is 24px and the
-                  right is 24px plus however wide the scrollbar happens to be.
-                  On a page of prose nobody notices. On a wide table it is
-                  plainly lopsided, and it is the sort of wrongness that is
-                  easier to see than to name.
-
-                  `stable both-edges` reserves the gutter on both sides whether
-                  or not a scrollbar is showing, which costs a few pixels of
-                  width and buys margins that match — and stops the content
-                  shifting sideways when a drawer grows long enough to scroll.
-                */}
-                <div
-                    className="flex-1 overflow-y-auto px-6 py-4"
-                    style={{ scrollbarGutter: 'stable both-edges' }}
-                    ref={(node) => {
-                        if (!node) return;
-
-                        /*
-                         * How far in the reserved gutter pushes this section's
-                         * content, published for the sections that have no
-                         * gutter of their own.
-                         *
-                         * Reserving on both edges makes this section internally
-                         * even, and by exactly that amount out of step with the
-                         * header, the tab strip and the footer above and below
-                         * it — a ten-pixel step down the side of the drawer,
-                         * which reads as sloppiness rather than as a scrollbar.
-                         *
-                         * Measured rather than assumed: scrollbar width is the
-                         * operating system's business, not this application's,
-                         * and it is 15px on one machine and 0 on another with
-                         * overlay scrollbars.
-                         */
-                        const publish = () => {
-                            const gutter = Math.max(0, (node.offsetWidth - node.clientWidth) / 2);
-
-                            node.parentElement?.style.setProperty(
-                                '--drawer-gutter',
-                                `${gutter}px`,
-                            );
-                        };
-
-                        publish();
-                        new ResizeObserver(publish).observe(node);
-                    }}
-                >
+                <div className="flex-1 overflow-y-auto px-6 py-4">
                     {tabs && tabs.length > 0 && activeTab ? (
                         tabs.find((t) => t.key === activeTab)?.content ?? children
                     ) : (
@@ -258,10 +202,7 @@ export function DetailDrawer({
 
                 {/* Footer */}
                 {footer && (
-                    <div
-                        className="flex items-center justify-end gap-3 border-t border-[var(--color-border-light)] py-4"
-                        style={{ paddingLeft: 'calc(1.5rem + var(--drawer-gutter, 0px))', paddingRight: 'calc(1.5rem + var(--drawer-gutter, 0px))' }}
-                    >
+                    <div className="flex items-center justify-end gap-3 border-t border-[var(--color-border-light)] px-6 py-4">
                         {footer}
                     </div>
                 )}
