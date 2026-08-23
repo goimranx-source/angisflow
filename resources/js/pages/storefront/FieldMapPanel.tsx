@@ -758,7 +758,7 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[66rem] table-fixed"
+                        className="table table-framed w-full min-w-[67.5rem] table-fixed"
                     >
                         {/*
                           ── Widths the content needs, not shares of what is
@@ -788,7 +788,17 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                                 "⇄ Both" needs more room than the words suggest. */}
                             <col style={{ width: '7rem' }} />
                             <col style={{ width: '5rem' }} />
-                            <col style={{ width: '4rem' }} />
+                            {/*
+                              Wide enough for the button *and* the cell's own
+                              padding.
+
+                              At 4rem the two did not both fit, so the padding
+                              lost: the last control ended up 9px from the
+                              table's right edge against the first one's 17px on
+                              the left. The table looked lopsided because it was,
+                              by eight pixels, and in the last column only.
+                            */}
+                            <col style={{ width: '5.5rem' }} />
                         </colgroup>
 
                         {/*
