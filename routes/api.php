@@ -485,6 +485,10 @@ Route::middleware(['auth', 'two-factor', 'tenant', 'account.usable', 'throttle:a
      */
     Route::get('products', [ProductsEndpoint::class, 'index'])
         ->middleware('can:catalogue.view')->name('products.index');
+    // Editing a product is what sends it to every shop that sells it — see
+    // ProductObserver, which fires wherever the change came from.
+    Route::patch('products/{product}', [ProductsEndpoint::class, 'update'])
+        ->middleware('can:catalogue.edit')->name('products.update');
     Route::patch('orders/{order}', [OrdersEndpoint::class, 'updateOrder'])
         ->middleware('can:sales.edit')->name('orders.update');
     Route::get('orders/bulk-progress/{batch}', [OrdersEndpoint::class, 'bulkProgress'])

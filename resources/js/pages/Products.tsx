@@ -24,6 +24,8 @@ import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 
+import { ProductEditor } from './catalogue/ProductEditor';
+
 type Product = {
     id: string;
     sku: string;
@@ -720,6 +722,26 @@ export default function Products() {
                 subtitle={selectedProduct ? `SKU: ${selectedProduct.sku}` : ''}
                 tabs={[
                     {
+                        /*
+                          Editing first, because that is what this screen could
+                          not do.
+
+                          Every action on the catalogue was a console.log and a
+                          TODO, which left the two-way product sync untestable
+                          from the application it belongs to — the only way to
+                          prove a price change reached the shop was to write one
+                          in a console.
+                        */
+                        key: 'edit',
+                        label: 'Edit',
+                        content: selectedProduct && (
+                            <ProductEditor
+                                product={selectedProduct}
+                                onSaved={() => setSelectedProduct(null)}
+                            />
+                        ),
+                    },
+                    {
                         key: 'overview',
                         label: 'Overview',
                         content: selectedProduct && (
@@ -860,14 +882,14 @@ export default function Products() {
                 ]}
                 activeTab={drawerTab}
                 onTabChange={setDrawerTab}
-                actions={
-                    <>
-                        <button className="btn btn-secondary">
-                            <Icon name="pencil-simple" size={16} />
-                            <span>Edit</span>
-                        </button>
-                    </>
-                }
+                /*
+                  No header button.
+
+                  There was an Edit button here with no onClick — it looked like
+                  the feature and did nothing, which is worse than not offering
+                  it. Editing is the first tab now, so a button beside the tab
+                  of the same name would be two doors into one room.
+                */
             >
                 <div />
             </DetailDrawer>

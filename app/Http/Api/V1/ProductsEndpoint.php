@@ -99,6 +99,89 @@ class ProductsEndpoint
     }
 
     /**
+     * Change a product, and let the shops hear about it.
+     *
+     * ── Why the push is not triggered here ───────────────────────────────────
+     *
+     * Because it would then be triggered only here. A product is edited from
+     * the catalogue screen, a bulk change, an importer, a console command — and
+     * a push wired into each of those is a push missing from the next one
+     * somebody writes. The observer on the model catches every route in, so
+     * this method does nothing about syncing at all and is correct because of
+     * it. See ProductObserver.
+     *
+     * ── Product and variant, saved together ──────────────────────────────────
+     *
+     * The form shows one thing, but name and description live on the product
+     * while price, SKU and barcode live on its default variant. Both are
+     * written in one transaction: a price saved without its product, or the
+     * reverse, is a half-edit that the next push would send as though it were
+     * whole.
+     */
+    public function update(Request $request, string $product): JsonResponse
+    {
+        $business = $this->tenant->business();
+
+        abort_if($business === null, 409, 'No business is open.');
+
+        $model = Product::query()
+            ->with('variants')
+            ->where('business_id', $business->id)
+            ->where('public_id', $product)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:200'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:20000'],
+            'summary' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'brand' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'is_active' => ['sometimes', 'boolean'],
+            'is_stocked' => ['sometimes', 'boolean'],
+
+            'sku' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'barcode' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'unit' => ['sometimes', 'nullable', 'string', 'max:20'],
+            // Typed as money, in the shop's own currency, and scaled below.
+            'price' => ['sometimes', 'numeric', 'min:0'],
+            'cost' => ['sometimes', 'numeric', 'min:0'],
+        ]);
+
+        $variant = $model->variants->firstWhere('is_default', true) ?? $model->variants->first();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($model, $variant, $validated): void {
+            $onProduct = array_intersect_key($validated, array_flip([
+                'name', 'description', 'summary', 'brand', 'is_active', 'is_stocked',
+            ]));
+
+            if ($onProduct !== []) {
+                $model->update($onProduct);
+            }
+
+            if ($variant === null) {
+                return;
+            }
+
+            $onVariant = array_intersect_key($validated, array_flip(['sku', 'barcode', 'unit']));
+
+            $scale = 10 ** Currencies::scale((string) ($variant->currency ?? $this->currency->base()));
+
+            foreach (['price' => 'price_minor', 'cost' => 'cost_minor'] as $sent => $column) {
+                if (array_key_exists($sent, $validated)) {
+                    $onVariant[$column] = (int) round(((float) $validated[$sent]) * $scale);
+                }
+            }
+
+            if ($onVariant !== []) {
+                $variant->update($onVariant);
+            }
+        });
+
+        return response()->json([
+            'message' => "{$model->name} saved.",
+        ]);
+    }
+
+    /**
      * Stock on hand for a page of products, in one query.
      *
      * Summed across locations, and net of what is reserved: a unit promised to

@@ -55,7 +55,10 @@ final class DefaultRoles
                 'capabilities' => [
                     'dashboard.view',
                     'orders.view', 'orders.create', 'orders.edit', 'orders.status', 'orders.payment',
-                    'catalogue.view', 'stock.view',
+                    // A manager prices and lists what the business sells; the
+                    // capability existed and was granted to nobody, so the
+                    // catalogue was readable by all and editable by none.
+                    'catalogue.view', 'catalogue.edit', 'stock.view',
                     'transactions.view', 'reports.view',
                     'people.view',
                 ],
