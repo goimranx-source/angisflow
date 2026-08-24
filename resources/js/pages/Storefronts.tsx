@@ -989,7 +989,7 @@ export default function Storefronts() {
                 size={storeTab === 'details' ? 'md' : '2xl'}
             >
                 {selectedStorefront && (
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                         {/*
                           Mapping lives here, in the shop's own drawer, because
                           it is about this shop: its field names, its statuses,
@@ -1016,7 +1016,7 @@ export default function Storefronts() {
                              * there are shop fields to add.
                              */
                             <div
-                                className="sticky z-30 -mx-6 -mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--shell-border)] px-6 pb-3 pt-4"
+                                className="sticky z-30 -mx-6 -mt-4 flex flex-wrap items-center justify-between gap-2 px-6 pb-2 pt-4"
                                 style={{
                                     background: 'var(--color-card-bg)',
 

@@ -143,7 +143,7 @@ export function DetailDrawer({
                 aria-labelledby="drawer-title"
             >
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4 border-b border-[var(--color-border-light)] px-6 py-4">
+                <div className="flex items-start justify-between gap-4 px-6 py-4">
                     <div className="min-w-0 flex-1">
                         <h2
                             id="drawer-title"
