@@ -46,6 +46,10 @@ import { confirm } from '@/lib/confirm';
 type Order = {
     id: string;
     order_number: string;
+    /** This business's own, unique across every shop and the counter. */
+    reference: string | null;
+    /** When it reached the customer, or null while it is still out. */
+    delivered_on: string | null;
     /** Short tag for the shop it came through — 'VB', or 'WALK' for the counter. */
     store_code: string | null;
     /**
@@ -1276,105 +1280,89 @@ export default function Orders() {
                                         key: 'order_number',
                                         label: 'Order',
                                         sortable: true,
-                                        width: 'w-48',
+                                        width: 'w-40',
+                                        /*
+                                          This business's own number, on one line.
+
+                                          It used to show the shop's, with the date
+                                          under it. The shop's number belongs beside
+                                          the shop -- it means nothing without knowing
+                                          whose sequence it came from, and two shops
+                                          will both have a 1043 eventually. The date
+                                          has a column.
+                                        */
                                         render: (order) => (
-                                            <div className="flex items-center gap-2.5">
-                                                {/*
-                                                  Which shop, in the space a bare
-                                                  '#' used to occupy.
-
-                                                  The hash said nothing — every row
-                                                  had one. Order numbers come from
-                                                  each platform's own sequence, so
-                                                  two shops can both have a 1043 and
-                                                  the number alone does not say
-                                                  whose. The tag does, without
-                                                  costing a column.
-                                                */}
-                                                <span
-                                                    className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-[var(--shell-radius-sm)] bg-[var(--color-brand-subtle)] px-1.5 text-[11px] font-bold tracking-wide text-[var(--color-brand)]"
-                                                    title={order.store?.name ?? 'Walk-in / counter'}
-                                                >
-                                                    {order.store_code ?? '#'}
-                                                </span>
-                                                <div className="min-w-0 whitespace-nowrap">
-                                                    <p className="flex items-center gap-1.5 font-semibold text-[var(--color-text-main)]">
-                                                        {order.order_number}
-
-                                                        {/*
-                                                          Shown only when the shop
-                                                          has not taken this order's
-                                                          changes.
-
-                                                          Next to the number rather
-                                                          than in a column of its
-                                                          own: it is a fact about
-                                                          this order, not a
-                                                          dimension of the list, and
-                                                          on almost every row there
-                                                          is nothing to say.
-                                                        */}
-                                                        {order.unsent &&
-                                                            /*
-                                                              A button when the shop refused, a mark
-                                                              when it simply has not answered yet.
-
-                                                              Something still in flight needs no
-                                                              action — offering one would invite a
-                                                              second push of the same change. A
-                                                              refusal does: it is usually something
-                                                              a person can put right, and then they
-                                                              need a way to say "try again" without
-                                                              inventing an edit to provoke one.
-                                                            */
-                                                            (order.unsent.error ? (
-                                                                <button
-                                                                    type="button"
-                                                                    title={`Not sent to the shop — ${order.unsent.error}. Click to try again.`}
-                                                                    aria-label="Not sent to the shop. Try again."
-                                                                    className="text-[var(--color-danger)] transition-opacity hover:opacity-70 disabled:opacity-40"
-                                                                    disabled={retryPush.isPending}
-                                                                    onClick={(event) => {
-                                                                        event.stopPropagation();
-                                                                        retryPush.mutate(order.id);
-                                                                    }}
-                                                                >
-                                                                    <Icon name="warning-circle" size={14} />
-                                                                </button>
-                                                            ) : (
-                                                                <span
-                                                                    title="Waiting to reach the shop"
-                                                                    aria-label="Waiting to reach the shop"
-                                                                    className="text-[var(--color-text-muted)]"
-                                                                >
-                                                                    <Icon name="cloud-arrow-up" size={14} />
-                                                                </span>
-                                                            ))}
-                                                    </p>
-                                                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                                                        {formatDate(order.date)}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                            <span className="font-semibold whitespace-nowrap text-[var(--color-text-main)]">
+                                                {order.reference ?? order.order_number}
+                                            </span>
                                         ),
                                     },
                                     {
+                                        key: 'ordered_on',
+                                        label: 'Order Date',
+                                        sortable: true,
+                                        width: 'w-32',
+                                        render: (order) => (
+                                            <span className="whitespace-nowrap text-[var(--color-text-body)]">
+                                                {formatDate(order.date)}
+                                            </span>
+                                        ),
+                                    },
+                                    {
+                                        key: 'delivered_on',
+                                        label: 'Delivery Date',
+                                        sortable: false,
+                                        width: 'w-32',
+                                        /*
+                                          A hyphen, not a blank.
+
+                                          An empty cell reads as a column that failed
+                                          to load. A hyphen says the order has not
+                                          arrived yet, which is a fact about the
+                                          order rather than about the screen.
+                                        */
+                                        render: (order) => (
+                                            <span
+                                                className={
+                                                    order.delivered_on
+                                                        ? 'whitespace-nowrap text-[var(--color-text-body)]'
+                                                        : 'text-[var(--color-text-subtle)]'
+                                                }
+                                            >
+                                                {order.delivered_on
+                                                    ? formatDate(order.delivered_on)
+                                                    : '—'}
+                                            </span>
+                                        ),
+                                    },
+                                    {
+
                                         key: 'customer',
                                         label: 'Customer',
                                         sortable: false,
                                         width: 'w-64',
+                                        /*
+                                          One line, with the address on the hover.
+
+                                          The email under the name doubled every row's
+                                          height for something read on perhaps one row
+                                          in fifty -- and a table where every row is
+                                          two lines fits half as many orders on a
+                                          screen, which is the thing this page is for.
+                                        */
                                         render: (order) => (
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--shell-muted)] text-[11px] font-bold text-[var(--color-text-muted)]">
-                                                        {(order.customer?.name ?? 'W').slice(0, 1).toUpperCase()}
-                                                    </span>
-                                                    <p className="truncate font-medium text-[var(--color-text-main)]">
-                                                        {order.customer?.name ?? 'Walk-in'}
-                                                    </p>
-                                                </div>
-                                                <p className="mt-1 truncate pl-9 text-xs text-[var(--color-text-muted)]">
-                                                    {order.customer?.email ?? 'Counter sale'}
+                                            <div
+                                                className="flex min-w-0 items-center gap-2"
+                                                title={
+                                                    order.customer?.email ??
+                                                    'Counter sale, no customer recorded'
+                                                }
+                                            >
+                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--shell-muted)] text-[11px] font-bold text-[var(--color-text-muted)]">
+                                                    {(order.customer?.name ?? 'W').slice(0, 1).toUpperCase()}
+                                                </span>
+                                                <p className="truncate font-medium text-[var(--color-text-main)]">
+                                                    {order.customer?.name ?? 'Walk-in'}
                                                 </p>
                                             </div>
                                         ),
@@ -1387,13 +1375,31 @@ export default function Orders() {
                                         label: 'Store',
                                         sortable: false,
                                         width: 'w-44',
+                                        /*
+                                          The shop's tag, and the shop's own number
+                                          for this order beside it.
+
+                                          The number is only meaningful next to whose
+                                          sequence it belongs to, so this is where it
+                                          goes -- and it is the number to quote when
+                                          ringing them about the order, which is the
+                                          whole reason for keeping it.
+                                        */
                                         render: (order) =>
                                             order.store ? (
-                                                <span className="text-sm text-[var(--color-text-body)]">
-                                                    {order.store.name}
+                                                <span
+                                                    className="inline-flex items-baseline gap-1.5 whitespace-nowrap text-sm"
+                                                    title={order.store.name}
+                                                >
+                                                    <span className="font-semibold text-[var(--color-text-main)]">
+                                                        {order.store_code ?? order.store.name}
+                                                    </span>
+                                                    <span className="text-[var(--color-text-muted)]">
+                                                        ({order.order_number})
+                                                    </span>
                                                 </span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-muted)]">
+                                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-[var(--color-text-muted)]">
                                                     <Icon name="storefront" size={13} />
                                                     Walk-in
                                                 </span>

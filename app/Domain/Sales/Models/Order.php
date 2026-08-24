@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Sales\Models;
 
+use App\Domain\Sales\OrderReference;
 use App\Domain\Shared\Concerns\HasPublicId;
 use App\Domain\Shared\ValueObjects\Money;
 use App\Domain\Stock\Models\StockLocation;
@@ -64,7 +65,7 @@ class Order extends Model
 
     protected $fillable = [
         'public_id', 'account_id', 'business_id', 'customer_id',
-        'number', 'ordered_on', 'status', 'fulfilment_status', 'payment_status',
+        'number', 'reference', 'ordered_on', 'status', 'fulfilment_status', 'payment_status',
         'channel', 'external_ref', 'is_cod', 'currency', 'storefront_id',
         'subtotal_minor', 'discount_minor', 'shipping_minor', 'tax_minor',
         'total_minor', 'paid_minor', 'cost_minor',
@@ -74,6 +75,21 @@ class Order extends Model
         'notes', 'cancelled_reason', 'archived_at',
         'confirmed_at', 'fulfilled_at', 'cancelled_at', 'created_by',
     ];
+
+    /**
+     * Every order gets this business's own reference, wherever it was made.
+     *
+     * On the model rather than at each place an order is created. There are
+     * four of those -- the counter, the importer, the shop reconciler, and
+     * whatever is written next -- and a reference that depends on somebody
+     * remembering to ask for it is one that will be missing from the fourth.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $order): void {
+            OrderReference::assign($order);
+        });
+    }
 
     protected function casts(): array
     {

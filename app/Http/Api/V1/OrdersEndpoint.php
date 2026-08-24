@@ -439,7 +439,31 @@ class OrdersEndpoint
 
         return [
             'id' => $order->public_id,
+
+            /*
+             * Two numbers, because an order has two.
+             *
+             * `order_number` is the shop's, untouched, and the one to quote
+             * when ringing them about it. `reference` is this business's own,
+             * unique across every shop and the counter -- which the shop's
+             * cannot be, since two shops will eventually both send an order
+             * 1001.
+             */
             'order_number' => $order->number,
+            'reference' => $order->reference,
+
+            /*
+             * When it reached the customer, or null.
+             *
+             * Read from the shipment rather than from the order, because
+             * `fulfilled_at` is when this business finished with it -- picked,
+             * packed, handed over -- and a courier has it for days after that.
+             * The question the column asks is when it arrived.
+             */
+            'delivered_on' => $order->shipments
+                ->pluck('delivered_at')
+                ->filter()
+                ->max()?->toDateString(),
 
             // Null rather than a placeholder name: a walk-in sale genuinely has
             // no customer, and inventing "Guest" here would make it impossible
