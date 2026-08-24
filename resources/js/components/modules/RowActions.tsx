@@ -1,8 +1,9 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
+import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { cn } from '@/lib/utils';
 
 /**
@@ -116,52 +117,23 @@ export function RowActionMenu({
     items: RowMenuItem[];
 }) {
     const [open, setOpen] = useState(false);
-    const [at, setAt] = useState<{ top: number; right: number } | null>(null);
     const trigger = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
 
     /*
-     * Placed from the trigger, then kept inside the window.
+     * Placed by the shared hook, like every other flyout.
      *
-     * ── Why clamping is not defensive padding ────────────────────────────────
+     * ── What this replaces ───────────────────────────────────────────────────
      *
-     * A table scrolls sideways, and the actions column is the part that goes
-     * off the edge. Offsetting the menu from the trigger's right edge without
-     * checking gives a negative distance the moment the trigger is past the
-     * viewport — which pushes the menu further out rather than pulling it in,
-     * and it opens somewhere nobody can see or click.
+     * Two layout effects: one to drop the menu below the trigger, and a second
+     * to notice it had gone off the bottom and move it above. That is the same
+     * job useFlyoutPosition does for the filter panel, the date picker and the
+     * storefront's own row menu — and doing it twice meant this menu flipped on
+     * slightly different rules from the others, and never learned the rest:
+     * it did not cap its own height when neither side fitted, and it did not
+     * re-place itself when the table scrolled under it.
      */
-    useLayoutEffect(() => {
-        if (!open || !trigger.current) {
-            return;
-        }
-
-        const rect = trigger.current.getBoundingClientRect();
-
-        setAt({ top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
-    }, [open]);
-
-    /*
-     * And flipped above the trigger when there is no room beneath it, which is
-     * every last row of every table.
-     */
-    useLayoutEffect(() => {
-        if (!open || !at || !menu.current || !trigger.current) {
-            return;
-        }
-
-        const box = menu.current.getBoundingClientRect();
-
-        if (box.bottom <= window.innerHeight - 8) {
-            return;
-        }
-
-        const above = Math.max(8, trigger.current.getBoundingClientRect().top - box.height - 4);
-
-        if (above !== at.top) {
-            setAt({ ...at, top: above });
-        }
-    }, [open, at]);
+    const at = useFlyoutPosition({ open, trigger, panel: menu });
 
     useEffect(() => {
         if (!open) {
@@ -196,53 +168,123 @@ export function RowActionMenu({
                 aria-label={label}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                className={cn(base, 'w-auto gap-0.5 px-1', tones.default)}
+                /*
+                  Boxed, because a bare glyph is not obviously a button.
+
+                  Three dots on their own read as a decoration or a truncation
+                  mark until somebody happens to hover them. An outline says
+                  "press this" without a label, which is the whole job of an
+                  icon-only control.
+
+                  No caret beside it. It was there to say a choice was coming,
+                  which three dots already say — and it made this menu the one
+                  control in the application that ended a row differently from
+                  the storefront list's.
+                */
+                className="rounded-[var(--shell-radius-sm)] border p-1.5 text-[var(--color-text-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
+                style={{ borderColor: 'var(--shell-border)' }}
                 onClick={(event) => {
                     event.stopPropagation();
                     setOpen((was) => !was);
                 }}
             >
-                <Icon name={icon} size={15} />
-                {/* The caret is what says a choice is coming. Without it this
-                    looks like a button that does one thing and does another. */}
-                <Icon name="caret-down" size={10} />
+                <Icon name={icon} size={16} />
             </button>
 
             {open && (
                 <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
+            {/*
+              Rendered as soon as it is open, not once it has been placed.
+
+              Waiting for `at` cannot work: the hook measures the panel to
+              decide where to put it, so the panel has to exist first. Gated on
+              `at` it never rendered, so it was never measured, so `at` stayed
+              null — the menu simply did not open. It renders hidden for the one
+              frame that takes instead; the measuring happens in a layout
+              effect, before the browser paints, so that frame is never seen.
+            */}
             {open &&
-                at &&
                 createPortal(
                     <div
                         ref={menu}
                         role="menu"
                         data-flyout-panel
-                        style={{ top: at.top, right: at.right }}
-                        className="fixed z-[var(--z-toast)] min-w-[10rem] overflow-hidden rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
+                        style={{
+                            /*
+                              Rising into place, briefly.
+
+                              A menu that simply exists on the next frame leaves
+                              the reader to work out where it came from; one that
+                              rises from its button says so. 120ms — long enough
+                              to be seen, short enough that nobody waits.
+                            */
+                            animation: 'context-flyout-slide-up 120ms ease-out',
+                            transformOrigin:
+                                at?.side === 'above' ? 'bottom right' : 'top right',
+
+                            // Hidden for the frame it spends being measured: it
+                            // has to be in the document to have a height, and
+                            // cannot be placed without one.
+                            visibility: at ? 'visible' : 'hidden',
+                            top: at?.top ?? 0,
+                            left: at?.left ?? 0,
+                            maxHeight: at?.maxHeight,
+                        }}
+                        className="fixed z-[var(--z-toast)] w-44 overflow-y-auto rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        {items.map((item) => (
+                        {items.map((item, index) => (
+                            <Fragment key={item.key}>
+                                {/*
+                                  A rule above the first destructive item.
+
+                                  It is the one thing here that cannot be undone
+                                  from this screen, and a line that looks exactly
+                                  like the two above it is a line somebody
+                                  reaches by muscle memory.
+                                */}
+                                {item.variant === 'danger' &&
+                                    items[index - 1]?.variant !== 'danger' &&
+                                    index > 0 && (
+                                        <div
+                                            className="my-1 h-px"
+                                            style={{ background: 'var(--shell-border)' }}
+                                        />
+                                    )}
+
                             <button
-                                key={item.key}
                                 type="button"
                                 role="menuitem"
                                 className={cn(
-                                    'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
+                                    'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition',
                                     item.variant === 'danger'
-                                        ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger-subtle)]'
+                                        ? 'hover:bg-[var(--color-danger-subtle)]'
                                         : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
                                 )}
+                                style={
+                                    item.variant === 'danger'
+                                        ? { color: 'var(--color-danger-text)' }
+                                        : undefined
+                                }
                                 onClick={() => {
                                     setOpen(false);
                                     item.onSelect();
                                 }}
                             >
-                                {item.icon && <Icon name={item.icon} size={15} />}
+                                {item.icon && (
+                                    <Icon
+                                        name={item.icon}
+                                        size={15}
+                                        weight="duotone"
+                                        className="shrink-0 opacity-70"
+                                    />
+                                )}
                                 <span>{item.label}</span>
                             </button>
+                            </Fragment>
                         ))}
                     </div>,
                     document.body,
