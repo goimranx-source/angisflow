@@ -1540,7 +1540,24 @@ export default function Orders() {
                                     {
                                         key: 'select',
                                         label: '',
-                                        width: 'w-12',
+                                        /*
+                                          Narrow, and with nothing to its right.
+                                          
+                                          A 48px column plus 16px of padding on
+                                          each side put four times the checkbox's
+                                          own width between it and the reference
+                                          it selects — so the box read as
+                                          belonging to the table's edge rather
+                                          than to the row beside it.
+                                          
+                                          `!pr-0` because the padding is what
+                                          most of that gap was, and the width
+                                          alone would have closed up half of it.
+                                          The Order column keeps its own left
+                                          padding, which is the whole of the gap
+                                          now.
+                                        */
+                                        width: 'w-8 !pr-0',
                                         headerRender: () => (
                                             <div onClick={(e) => e.stopPropagation()}>
                                                 <SelectCheckbox
