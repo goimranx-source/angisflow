@@ -89,7 +89,16 @@ function RowActions({
                     event.stopPropagation();
                     onToggle();
                 }}
-                className="rounded p-1.5 text-[var(--color-text-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
+                /*
+                  Boxed, because a bare glyph is not obviously a button.
+                
+                  Three dots on their own read as a decoration or a truncation
+                  mark until somebody happens to hover them. An outline says
+                  "press this" without a label, which is the whole job of an
+                  icon-only control.
+                */
+                className="rounded-[var(--shell-radius-sm)] border p-1.5 text-[var(--color-text-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
+                style={{ borderColor: 'var(--shell-border)' }}
                 aria-label={`Actions for ${store.name}`}
                 aria-haspopup="menu"
                 aria-expanded={open}
@@ -114,6 +123,22 @@ function RowActions({
                             className="fixed z-[calc(var(--z-modal)+1)] w-56 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
                             style={{
                                 borderColor: 'var(--shell-border)',
+
+                                /*
+                                  Rising into place, briefly.
+                                
+                                  A menu that simply exists on the next frame
+                                  leaves the reader to work out where it came
+                                  from; one that rises from its button says so.
+                                  120ms — long enough to be seen and short
+                                  enough that nobody waits for it.
+                                
+                                  The same keyframe the command palette uses, so
+                                  two things that open the same way look the
+                                  same doing it.
+                                */
+                                animation: 'context-flyout-slide-up 120ms ease-out',
+                                transformOrigin: 'top right',
                                 top: rect.bottom + 6,
 
                                 // Right-aligned to the button, and never off the
