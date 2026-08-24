@@ -4273,19 +4273,41 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         place-items: center;
         width: 2.25rem;
         height: 2.25rem;
-        border-radius: var(--shell-radius-sm);
-        background: var(--color-brand-subtle);
-        color: var(--color-brand-text);
+
+        /*
+         * A disc rather than a rounded square.
+         *
+         * Four of these sit in a row above four rounded rectangles, and at that
+         * size a rounded square reads as a smaller copy of the card it is
+         * sitting in. A circle is unmistakably a mark on the card rather than a
+         * piece of it.
+         */
+        border-radius: 9999px;
+        background: var(--color-brand);
+        color: var(--color-text-on-accent);
+    }
+
+    /*
+     * The sparkline reaches the card's edges.
+     *
+     * The card's own horizontal padding is cancelled here rather than removed
+     * from the card, because everything above the line still wants it — a
+     * figure touching the edge would look like a mistake where a chart touching
+     * it looks finished.
+     */
+    .stat-spark {
+        margin-left: -1rem;
+        margin-right: -1rem;
     }
 
     .stat-tile.is-success {
-        background: var(--color-success-subtle);
-        color: var(--color-success);
+        background: var(--color-success);
+        color: var(--color-text-on-accent);
     }
 
     .stat-tile.is-warning {
-        background: var(--color-warning-subtle);
-        color: var(--color-warning);
+        background: var(--color-warning);
+        color: var(--color-text-on-accent);
     }
 
     .stat-tile.is-danger {
@@ -4294,8 +4316,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 
     .stat-tile.is-info {
-        background: var(--color-info-subtle);
-        color: var(--color-info);
+        background: var(--color-info);
+        color: var(--color-text-on-accent);
     }
 
     /* The change against the previous period. Reads as a small chip so it does

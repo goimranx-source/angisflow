@@ -13,7 +13,18 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, description, eyebrow, icon, actions }: PageHeaderProps) {
     return (
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div
+            /*
+             * Centred against the actions rather than aligned to their tops.
+             *
+             * With a description under it the title block is taller than the
+             * buttons beside it, and top-aligning left them floating level with
+             * the first line of a heading and clear of everything else. Without
+             * one the two are near enough the same height, and centring keeps
+             * them level either way.
+             */
+            className="mb-4 flex flex-wrap items-center justify-between gap-3"
+        >
             <div className="flex min-w-0 gap-3">
                 {icon && (
                     <span className="page-header-icon">

@@ -155,6 +155,17 @@ type StorefrontsResponse = {
         total_products: number;
         total_revenue: number;
     };
+    /**
+     * A fortnight of daily figures behind the headline numbers.
+     *
+     * Counted from the orders on every request rather than stored, so they
+     * cannot disagree with the totals above them — see the endpoint.
+     */
+    trends?: {
+        revenue: number[];
+        orders: number[];
+        products: number[];
+    };
     meta: {
         total: number;
         per_page: number;
@@ -394,6 +405,7 @@ export default function Storefronts() {
      */
     const selectedStorefront = storefronts.find((shop) => shop.id === selectedId) ?? null;
     const summary = data?.summary;
+    const trends = data?.trends;
 
     const handleSort = (key: string) => {
         if (sortBy === key) {
@@ -450,7 +462,15 @@ export default function Storefronts() {
             <div className="pt-6">
                 <PageHeader
                     title="Storefronts"
-                    description="Manage multiple storefronts for different brands, regions, or categories"
+                    /*
+                     * No description.
+                     *
+                     * "Manage multiple storefronts for different brands,
+                     * regions, or categories" told somebody looking at a list
+                     * of their own shops what a shop is. A line that is only
+                     * read once, by somebody who did not need it, is a line
+                     * that costs every later visit a little height.
+                     */
                     actions={
                         <button
                             type="button"
@@ -466,11 +486,21 @@ export default function Storefronts() {
 
             {summary && (
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {/*
+                      Two of these carry a line and two do not, on purpose.
+
+                      Storefronts and Active are counts of a handful of things
+                      that change a few times a year. A fortnight of daily
+                      points would be a flat line under both, which reads as "no
+                      activity" rather than as "nothing was expected here" — and
+                      a card with a line beside one without is a clearer
+                      statement than four flat lines in a row.
+                    */}
                     <KPICard
                         icon="storefront"
                         label="Total Storefronts"
                         value={summary.total_storefronts.toLocaleString()}
-                            variant="brand"
+                        variant="brand"
                     />
                     <KPICard
                         label="Active"
@@ -483,22 +513,43 @@ export default function Storefronts() {
                         value={summary.total_products.toLocaleString()}
                         icon="package"
                         variant="info"
+                        spark={trends?.products}
                     />
                     <KPICard
                         label="Total Revenue"
                         value={formatMoney(summary.total_revenue)}
                         icon="currency-dollar"
                         variant="success"
+                        spark={trends?.revenue}
                     />
                 </div>
             )}
 
-            <div className="mt-6">
+            {/*
+              ── One card, filters and rows together ────────────────────────
+
+              They were two cards with a gap between, which drew a border and a
+              strip of page between a search box and the rows it searches. They
+              are one thing — a way into a list and the list — and they read as
+              one thing now, divided rather than separated.
+            */}
+            <div className="card mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
                 <FilterBar
+                    className="!rounded-none !border-0 !border-b"
+
                     searchValue={search}
                     onSearchChange={setSearch}
                     searchPlaceholder="Search storefronts..."
-                    filters={
+                    /*
+                     * The controls to the right, the search to the left.
+                     *
+                     * They sat together on the left, which left the rest of the
+                     * row empty and put four things of different kinds in one
+                     * run: a box you type into and three you choose from. Split,
+                     * the row says what it is at a glance — find something on
+                     * one side, narrow the list on the other.
+                     */
+                    actions={
                         <>
                             <FilterSelect
                                 label="Type"
@@ -514,6 +565,7 @@ export default function Storefronts() {
                                 options={statuses}
                                 placeholder="All statuses"
                             />
+
                             {hasFilters && (
                                 <button
                                     type="button"
@@ -524,21 +576,42 @@ export default function Storefronts() {
                                     <span>Clear</span>
                                 </button>
                             )}
+
+                            {/*
+                              Fetching the list again, which is not the same as
+                              syncing a shop — this asks the application what it
+                              already knows, where Sync asks the shop. Kept at
+                              the end of the row, away from anything that changes
+                              a shop, because a refresh should be the safest
+                              button on a screen.
+                            */}
+                            <button
+                                type="button"
+                                onClick={() => void refetch()}
+                                className="btn btn-secondary px-2"
+                                title="Refresh this list"
+                                aria-label="Refresh this list"
+                                disabled={isLoading}
+                            >
+                                <Icon
+                                    name="arrow-clockwise"
+                                    size={14}
+                                    className={isLoading ? 'animate-spin' : undefined}
+                                />
+                            </button>
                         </>
                     }
                 />
-            </div>
 
-            <div className="flex-1 overflow-auto pb-6">
                 {isError ? (
-                    <div className="card mt-6 p-6 text-center">
+                    <div className="p-6 text-center">
                         <p className="text-sm text-[var(--color-text-body)]">Failed to load storefronts.</p>
                         <button type="button" onClick={() => void refetch()} className="btn btn-secondary mt-4">
                             Try again
                         </button>
                     </div>
                 ) : (
-                    <div className="card mt-6 overflow-hidden">
+                    <div className="min-h-0 flex-1 overflow-auto">
                         <Table
                             data={storefronts}
                             loading={isLoading}

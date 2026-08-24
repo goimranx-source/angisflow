@@ -36,6 +36,8 @@ type KPICardProps = {
     info?: string;
     onClick?: () => void;
     variant?: 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+    /** The figure's recent shape, drawn along the card's lower edge. */
+    spark?: number[] | null;
 };
 
 export function KPICard({
@@ -48,6 +50,7 @@ export function KPICard({
     trend,
     info,
     onClick,
+    spark,
     variant = 'brand',
 }: KPICardProps) {
     return (
@@ -63,6 +66,7 @@ export function KPICard({
             riseIsGood={deltaIsGood}
             trendLabel={comparisonText}
             comparisonHint={info}
+            spark={spark}
             onClick={onClick}
         />
     );

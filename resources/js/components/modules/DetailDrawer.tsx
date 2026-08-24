@@ -154,9 +154,22 @@ export function DetailDrawer({
                 */}
                 <div
                     className="mx-6 mt-4 shrink-0 overflow-hidden rounded-[var(--shell-radius)] border"
-                    style={{ borderColor: 'var(--shell-border)' }}
+                    style={{
+                        borderColor: 'var(--shell-border)',
+
+                        /*
+                         * A shadow small enough to be felt rather than seen.
+                         *
+                         * The head does not move while the content below it
+                         * does, and without some depth the two read as one flat
+                         * surface with rows sliding through it. Enough to lift
+                         * it off the page and no more — a heavy shadow on a
+                         * panel that never moves is just decoration.
+                         */
+                        boxShadow: '0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.04)',
+                    }}
                 >
-                    <div className="flex items-start justify-between gap-4 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3 px-3.5 py-2.5">
                         <div className="min-w-0 flex-1">
                             <h2
                                 id="drawer-title"
@@ -217,7 +230,7 @@ export function DetailDrawer({
                                             key={t.key}
                                             value={t.key}
                                             icon={t.icon}
-                                            className="flex-1 justify-center !rounded-none py-2.5"
+                                            className="flex-1 justify-center !rounded-none py-2"
                                         >
                                             {t.label}
                                         </TabsTrigger>

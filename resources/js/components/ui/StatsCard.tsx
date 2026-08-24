@@ -47,11 +47,130 @@ type StatsCardProps = {
      * reading every label.
      */
     accent?: 'brand' | 'success' | 'warning' | 'danger' | 'info';
+    /**
+     * The figure's recent shape, drawn along the bottom of the card.
+     *
+     * ── Why a shape and not another number ───────────────────────────────
+     *
+     * A headline says where a business is; it says nothing about how it got
+     * there, and the two readings can be opposite. Revenue of £75,000 is good
+     * news climbing and bad news falling, and a percentage delta compresses the
+     * whole month into one figure that hides which.
+     *
+     * Deliberately unlabelled — no axes, no ticks, no numbers. It is not a
+     * chart to read values off; it is the difference between rising and
+     * falling, at a glance, which is the one question a headline cannot answer.
+     *
+     * Nothing is drawn when there is no series or fewer than two points, since
+     * a line through one point is a claim about a trend nobody has.
+     */
+    spark?: number[] | null;
     /** Additional class */
     className?: string;
     /** Click handler */
     onClick?: () => void;
 };
+
+/**
+ * A figure's recent shape, as a filled area under a smooth line.
+ *
+ * ── Why it is drawn here rather than with a charting library ─────────────────
+ *
+ * Because it is twenty numbers and no axes. A chart library brings a
+ * coordinate system, a legend, a tooltip layer and a resize observer, all of
+ * which exist to answer questions this deliberately refuses to answer — it has
+ * no scale to read against and is not meant to.
+ *
+ * ── The curve ────────────────────────────────────────────────────────────────
+ *
+ * Points are joined with a cubic through the midpoints between them, which
+ * gives a smooth line that cannot overshoot: a monotone series stays monotone,
+ * so a figure that only rose is never drawn dipping. Catmull-Rom would be
+ * smoother and does overshoot, and inventing a dip in someone's revenue to
+ * make a curve prettier is not a trade worth making.
+ *
+ * ── The scale ────────────────────────────────────────────────────────────────
+ *
+ * Fitted to the series rather than to zero. Twenty days of revenue between
+ * £74,000 and £76,000 drawn from zero is a flat line, which is true of the
+ * absolute figures and useless as a picture of the month.
+ */
+function Spark({ points, accent }: { points: number[]; accent: string }) {
+    // One point is not a trend, and no points is not a picture.
+    if (points.length < 2) {
+        return null;
+    }
+
+    const W = 100;
+    const H = 28;
+
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+
+    // A flat series would divide by zero; drawn down the middle instead of
+    // along the floor, since flat is a level rather than an absence.
+    const span = max - min || 1;
+    const flat = max === min;
+
+    const at = (i: number): [number, number] => {
+        // Indexed access is checked here: the loop below never leaves the
+        // array, but the compiler cannot see that and a silent NaN in a path
+        // would draw nothing at all rather than complain.
+        const value = points[i] ?? min;
+
+        return [
+            (i / (points.length - 1)) * W,
+            flat ? H / 2 : H - ((value - min) / span) * (H - 2) - 1,
+        ];
+    };
+
+    let line = '';
+
+    for (let i = 0; i < points.length; i++) {
+        const [x, y] = at(i);
+
+        if (i === 0) {
+            line += `M ${x} ${y}`;
+
+            continue;
+        }
+
+        const [px, py] = at(i - 1);
+        const mid = (px + x) / 2;
+
+        line += ` C ${mid} ${py}, ${mid} ${y}, ${x} ${y}`;
+    }
+
+    const id = `spark-${accent}`;
+
+    return (
+        <svg
+            viewBox={`0 0 ${W} ${H}`}
+            preserveAspectRatio="none"
+            className="mt-3 block h-7 w-full"
+            aria-hidden="true"
+        >
+            <defs>
+                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+                    <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+            </defs>
+
+            <path d={`${line} L ${W} ${H} L 0 ${H} Z`} fill={`url(#${id})`} />
+
+            <path
+                d={line}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+            />
+        </svg>
+    );
+}
 
 /**
  * Statistics card component for displaying KPIs.
@@ -99,6 +218,7 @@ export function StatsCard({
     trendLabel,
     comparisonHint,
     accent = 'brand',
+    spark,
     className,
     onClick,
 }: StatsCardProps) {
@@ -114,13 +234,25 @@ export function StatsCard({
             type={onClick ? 'button' : undefined}
             onClick={onClick}
             className={cn(
-                'card p-4 text-left',
+                'card overflow-hidden px-4 pb-0 pt-4 text-left',
                 onClick && 'cursor-pointer transition-colors hover:bg-[var(--shell-hover)]',
                 className,
             )}
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+            <div className="flex items-start gap-3">
+                {/*
+                  The mark first, then what it counts.
+
+                  Read left to right it says what kind of number this is before
+                  saying the number, which is the order somebody scanning four
+                  cards actually wants — the colour and the shape identify the
+                  card, and the figure is what they stopped for.
+                */}
+                <span className={cn('stat-tile shrink-0', accent !== 'brand' && `is-${accent}`)}>
+                    {iconElement ?? <Icon name={icon ?? 'chart-bar'} size={17} />}
+                </span>
+
+                <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                         <p className="truncate text-[0.8125rem] font-medium text-[var(--color-text-muted)]">
                             {label}
@@ -131,17 +263,34 @@ export function StatsCard({
                     </div>
 
                     <p
-                        className="mt-1.5 truncate font-[family-name:var(--font-heading)] text-[1.75rem] leading-tight font-bold text-[var(--color-text-main)] [font-variant-numeric:tabular-nums]"
+                        className="mt-0.5 truncate font-[family-name:var(--font-heading)] text-[1.5rem] leading-tight font-bold text-[var(--color-text-main)] [font-variant-numeric:tabular-nums]"
                         title={valueTitle}
                     >
                         {value}
                     </p>
                 </div>
-
-                <span className={cn('stat-tile', accent !== 'brand' && `is-${accent}`)}>
-                    {iconElement ?? <Icon name={icon ?? 'chart-bar'} size={17} />}
-                </span>
             </div>
+
+            {/*
+              Flush to the card's lower edge, in the accent's own colour —
+              `currentColor` on the wrapper, so the line and its wash both
+              follow whatever the tile above is using and nothing has to be
+              passed down twice.
+            */}
+            {spark && spark.length > 1 && (
+                <div
+                    className={cn(
+                        'stat-spark',
+                        accent === 'brand' && 'text-[var(--color-brand)]',
+                        accent === 'success' && 'text-[var(--color-success)]',
+                        accent === 'warning' && 'text-[var(--color-warning)]',
+                        accent === 'danger' && 'text-[var(--color-danger)]',
+                        accent === 'info' && 'text-[var(--color-info)]',
+                    )}
+                >
+                    <Spark points={spark} accent={accent} />
+                </div>
+            )}
 
             {/*
                 The trend row is drawn whenever the caller says this figure

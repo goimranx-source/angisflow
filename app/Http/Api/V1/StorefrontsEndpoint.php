@@ -176,6 +176,17 @@ class StorefrontsEndpoint
                 // a total that quietly does it is worse than no total.
                 'total_revenue' => round(array_sum(array_column($shops, 'books_revenue')), 2),
             ],
+            /*
+             * The shape behind each figure, for the sparklines on the cards.
+             *
+             * A card can say revenue is 75,815 and be read two opposite ways
+             * depending on whether that is the top of a climb or the end of a
+             * slide, and no single figure tells them apart. The line does,
+             * which is the only reason to draw one — a line invented to fill
+             * the space under a number is worse than the empty space.
+             */
+            'trends' => $this->trends($businessId),
+
             // The list page reads meta for its pagination footer. Every shop is
             // returned in one page — a business has a handful, not thousands.
             'meta' => [
@@ -186,6 +197,98 @@ class StorefrontsEndpoint
             ],
         ]);
     }
+
+    /**
+     * Fourteen days of shape for each headline figure.
+     *
+     * ── Why counted from the orders rather than stored ───────────────────────
+     *
+     * Because a stored daily total is a second copy of what the orders already
+     * say, and the two disagree the first time an order is amended, cancelled
+     * or moved between shops. Counting on demand is one query per series
+     * against an indexed date column, over a fortnight of a single business's
+     * rows — cheap enough that the copy would be optimising the wrong thing.
+     *
+     * ── Days with nothing in them are still days ─────────────────────────────
+     *
+     * A shop that sold nothing on Sunday still has a Sunday. Grouping in SQL
+     * returns only the days that have rows, and drawing those evenly spaced
+     * quietly closes the gap — a quiet week and a busy one come out looking
+     * identical. The frame is built first and filled second.
+     *
+     * @return array<string, list<float|int>>
+     */
+    private function trends(int $businessId): array
+    {
+        $from = now()->subDays(13)->startOfDay();
+
+        $frame = [];
+
+        for ($day = $from->copy(); $day->lte(now()); $day->addDay()) {
+            $frame[$day->toDateString()] = 0;
+        }
+
+        $revenue = $frame;
+        $orders = $frame;
+
+        $rows = Order::query()
+            ->where('business_id', $businessId)
+            ->whereNull('archived_at')
+            ->where('ordered_on', '>=', $from->toDateString())
+            ->selectRaw('ordered_on, COUNT(*) as orders_count, SUM(total_minor) as total_minor')
+            ->groupBy('ordered_on')
+            ->get();
+
+        foreach ($rows as $row) {
+            // Dates come back as datetimes on some drivers, and a row outside
+            // the frame would add a fifteenth point and stretch the line.
+            $day = mb_substr((string) $row->ordered_on, 0, 10);
+
+            if (! array_key_exists($day, $frame)) {
+                continue;
+            }
+
+            $orders[$day] = (int) $row->orders_count;
+
+            // Minor units divided here rather than in the browser, which does
+            // not know the scale of this business's currency.
+            $revenue[$day] = round(((int) $row->total_minor) / 100, 2);
+        }
+
+        /*
+         * Products are counted as they stood at the end of each day.
+         *
+         * It is a total rather than daily activity, so the honest line is the
+         * running one. A count of products *added* each day would draw a line
+         * of mostly zeros beneath a figure reading 24, which says nothing true
+         * about either.
+         */
+        $running = (int) Product::query()
+            ->where('business_id', $businessId)
+            ->where('created_at', '<', $from)
+            ->count();
+
+        $added = Product::query()
+            ->where('business_id', $businessId)
+            ->where('created_at', '>=', $from)
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as added')
+            ->groupBy('day')
+            ->pluck('added', 'day');
+
+        $products = [];
+
+        foreach (array_keys($frame) as $day) {
+            $running += (int) ($added[$day] ?? 0);
+            $products[] = $running;
+        }
+
+        return [
+            'revenue' => array_values($revenue),
+            'orders' => array_values($orders),
+            'products' => $products,
+        ];
+    }
+
 
     /**
      * Add a shop.
