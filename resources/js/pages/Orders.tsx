@@ -174,6 +174,39 @@ type OrdersResponse = {
     };
 };
 
+/**
+ * One step of the pager.
+ *
+ * Its own component because there are four of them and they differ only by
+ * which way they point — written out four times, the disabled styling drifts
+ * on whichever one somebody last touched.
+ */
+function PageStep({
+    icon,
+    label,
+    disabled,
+    onClick,
+}: {
+    icon: string;
+    label: string;
+    disabled: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={label}
+            aria-label={label}
+            className="flex h-7 w-7 items-center justify-center rounded-[var(--shell-radius-sm)] border text-[var(--color-text-body)] transition-colors hover:bg-[var(--shell-hover)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            style={{ borderColor: 'var(--shell-border)' }}
+        >
+            <Icon name={icon} size={13} />
+        </button>
+    );
+}
+
 export default function Orders() {
     useDocumentTitle('Orders');
     const queryClient = useQueryClient();
@@ -1913,108 +1946,145 @@ export default function Orders() {
                             </div>
                         )}
 
-                        {/* Pagination */}
-                        {!isLoading && meta && meta.last_page > 1 && (
-                            <div className="border-t border-[var(--shell-border)] px-4 py-3 sm:px-6">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    {/* Results info */}
-                                    <div className="text-sm text-[var(--color-text-muted)]">
-                                        Showing <span className="font-medium text-[var(--color-text-main)]">{((meta.current_page - 1) * meta.per_page) + 1}</span> to{' '}
-                                        <span className="font-medium text-[var(--color-text-main)]">{Math.min(meta.current_page * meta.per_page, meta.total)}</span> of{' '}
-                                        <span className="font-medium text-[var(--color-text-main)]">{meta.total}</span> results
+                        {/*
+                          ── One footer, two jobs ────────────────────────────
+
+                          These were two stacked bars, each with its own top
+                          rule: a pagination strip, and beneath it a strip
+                          holding nothing but the select-all box. Two rules and
+                          two rows of padding for one line of content.
+
+                          They belong on one line because they answer the two
+                          questions asked at the bottom of a list: what have I
+                          picked, and where am I in it.
+                        */}
+                        {!isLoading && orders.length > 0 && (
+                            <div
+                                className="flex flex-col gap-3 border-t px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                                style={{ borderColor: 'var(--shell-border)' }}
+                            >
+                                {view === 'list' ? (
+                                    <SelectCheckbox
+                                        checked={isAllSelected}
+                                        indeterminate={isSomeSelected}
+                                        onChange={handleSelectAll}
+                                        /*
+                                          The box stays; the words beside it
+                                          change to a count once anything is
+                                          picked, because at that point the
+                                          useful fact is how many rather than
+                                          the offer to pick more.
+                                        */
+                                        label={
+                                            selectedOrders.length > 0
+                                                ? `${selectedOrders.length} selected`
+                                                : `Select all ${orders.length}`
+                                        }
+                                    />
+                                ) : (
+                                    <span />
+                                )}
+
+                                {meta && (
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--color-text-muted)]">
+                                        <span className="whitespace-nowrap">
+                                            Showing{' '}
+                                            <span className="font-medium text-[var(--color-text-main)]">
+                                                {(meta.current_page - 1) * meta.per_page + 1}
+                                                –
+                                                {Math.min(
+                                                    meta.current_page * meta.per_page,
+                                                    meta.total,
+                                                )}
+                                            </span>
+                                        </span>
+
+                                        {/*
+                                          The page size sits inside the sentence
+                                          rather than in a corner of its own. It
+                                          is the number the sentence is about,
+                                          and somebody who wants more rows looks
+                                          where the row count already is.
+                                        */}
+                                        <select
+                                            /*
+                                              w-auto against .field's width:100%.
+                                              
+                                              .field is written for a form, where
+                                              a control fills its column. Inside a
+                                              sentence it has to be the width of
+                                              its own text, or it takes the line
+                                              and the sentence breaks into three.
+                                            */
+                                            className="field h-7 w-auto py-0 pr-7 pl-2 text-xs"
+                                            value={perPage}
+                                            onChange={(event) => {
+                                                setPerPage(Number(event.target.value));
+
+                                                // Page 7 of a 25-row list is
+                                                // past the end of a 100-row one.
+                                                setPage(1);
+                                            }}
+                                            aria-label="Rows per page"
+                                        >
+                                            {[20, 25, 50, 100].map((size) => (
+                                                <option key={size} value={size}>
+                                                    {size} per page
+                                                </option>
+                                            ))}
+                                        </select>
+
+                                        <span className="whitespace-nowrap">
+                                            of{' '}
+                                            <span className="font-medium text-[var(--color-text-main)]">
+                                                {meta.total.toLocaleString()}
+                                            </span>
+                                        </span>
+
+                                        {meta.last_page > 1 && (
+                                            <div className="flex items-center gap-1">
+                                                <PageStep
+                                                    icon="caret-double-left"
+                                                    label="First page"
+                                                    disabled={meta.current_page === 1}
+                                                    onClick={() => setPage(1)}
+                                                />
+                                                <PageStep
+                                                    icon="caret-left"
+                                                    label="Previous page"
+                                                    disabled={meta.current_page === 1}
+                                                    onClick={() =>
+                                                        setPage(Math.max(1, meta.current_page - 1))
+                                                    }
+                                                />
+
+                                                <span className="px-2 whitespace-nowrap tabular-nums">
+                                                    {meta.current_page} / {meta.last_page}
+                                                </span>
+
+                                                <PageStep
+                                                    icon="caret-right"
+                                                    label="Next page"
+                                                    disabled={meta.current_page === meta.last_page}
+                                                    onClick={() =>
+                                                        setPage(
+                                                            Math.min(
+                                                                meta.last_page,
+                                                                meta.current_page + 1,
+                                                            ),
+                                                        )
+                                                    }
+                                                />
+                                                <PageStep
+                                                    icon="caret-double-right"
+                                                    label="Last page"
+                                                    disabled={meta.current_page === meta.last_page}
+                                                    onClick={() => setPage(meta.last_page)}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
-
-                                    {/* Pagination controls */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPage(1)}
-                                            disabled={meta.current_page === 1}
-                                            className="flex h-8 w-8 items-center justify-center rounded border border-[var(--shell-border)] text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-background-subtle)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                                            title="First page"
-                                        >
-                                            <Icon name="caret-double-left" size={14} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPage(Math.max(1, meta.current_page - 1))}
-                                            disabled={meta.current_page === 1}
-                                            className="flex h-8 w-8 items-center justify-center rounded border border-[var(--shell-border)] text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-background-subtle)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                                            title="Previous page"
-                                        >
-                                            <Icon name="caret-left" size={14} />
-                                        </button>
-
-                                        {/* Page numbers */}
-                                        <div className="flex items-center gap-1">
-                                            {Array.from({ length: Math.min(5, meta.last_page) }, (_, i) => {
-                                                // Show pages around current page
-                                                let pageNum: number;
-                                                if (meta.last_page <= 5) {
-                                                    pageNum = i + 1;
-                                                } else if (meta.current_page <= 3) {
-                                                    pageNum = i + 1;
-                                                } else if (meta.current_page >= meta.last_page - 2) {
-                                                    pageNum = meta.last_page - 4 + i;
-                                                } else {
-                                                    pageNum = meta.current_page - 2 + i;
-                                                }
-
-                                                return (
-                                                    <button
-                                                        key={pageNum}
-                                                        type="button"
-                                                        onClick={() => setPage(pageNum)}
-                                                        className={`flex h-8 min-w-[2rem] items-center justify-center rounded border px-2 text-sm transition-colors ${
-                                                            meta.current_page === pageNum
-                                                                ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white'
-                                                                : 'border-[var(--shell-border)] text-[var(--color-text-body)] hover:bg-[var(--color-background-subtle)]'
-                                                        }`}
-                                                    >
-                                                        {pageNum}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setPage(Math.min(meta.last_page, meta.current_page + 1))}
-                                            disabled={meta.current_page === meta.last_page}
-                                            className="flex h-8 w-8 items-center justify-center rounded border border-[var(--shell-border)] text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-background-subtle)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                                            title="Next page"
-                                        >
-                                            <Icon name="caret-right" size={14} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPage(meta.last_page)}
-                                            disabled={meta.current_page === meta.last_page}
-                                            className="flex h-8 w-8 items-center justify-center rounded border border-[var(--shell-border)] text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-background-subtle)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                                            title="Last page"
-                                        >
-                                            <Icon name="caret-double-right" size={14} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Select all - aligned with table row checkboxes */}
-                        {!isLoading && orders.length > 0 && view === 'list' && (
-                            <div className="border-t border-[var(--shell-border)]" style={{ padding: '0.6875rem 1rem' }}>
-                                <SelectCheckbox
-                                    checked={isAllSelected}
-                                    indeterminate={isSomeSelected}
-                                    onChange={handleSelectAll}
-                                    label={
-                                        isAllSelected
-                                            ? `All ${orders.length} orders selected`
-                                            : isSomeSelected
-                                              ? `${selectedOrders.length} of ${orders.length} selected`
-                                              : `Select all ${orders.length} orders`
-                                    }
-                                />
+                                )}
                             </div>
                         )}
                     </div>

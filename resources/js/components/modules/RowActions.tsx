@@ -179,6 +179,29 @@ export function RowActionMenu({
         }
 
         const close = () => setOpen(false);
+
+        /*
+         * Every press except one on the button that opened it.
+         *
+         * ── Why the exception is needed ──────────────────────────────────────
+         *
+         * This closed on any mousedown at all, including the trigger's own. So
+         * pressing an open menu's button ran two things in order: mousedown
+         * closed it, then click toggled `!open` — which by then was false. The
+         * menu shut and reopened inside one press, and looked like a button
+         * that refused to put its menu away.
+         *
+         * The trigger is left to its own toggle, which is the only handler that
+         * knows whether it is opening or closing.
+         */
+        const onPress = (event: MouseEvent) => {
+            if (event.target instanceof Node && trigger.current?.contains(event.target)) {
+                return;
+            }
+
+            close();
+        };
+
         const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
 
         // Closed rather than followed on scroll: a menu anchored to a row that
@@ -186,13 +209,13 @@ export function RowActionMenu({
         // that went away.
         window.addEventListener('scroll', close, true);
         window.addEventListener('resize', close);
-        document.addEventListener('mousedown', close);
+        document.addEventListener('mousedown', onPress);
         document.addEventListener('keydown', onKey);
 
         return () => {
             window.removeEventListener('scroll', close, true);
             window.removeEventListener('resize', close);
-            document.removeEventListener('mousedown', close);
+            document.removeEventListener('mousedown', onPress);
             document.removeEventListener('keydown', onKey);
         };
     }, [open]);

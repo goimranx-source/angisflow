@@ -212,7 +212,7 @@ export function ViewToggleButton({
             onClick={onClick}
             title={label}
             className={cn(
-                'flex items-center gap-1.5 border border-[var(--color-border-light)] px-3 py-1.5 text-sm font-medium transition-colors',
+                'flex h-8 items-center gap-1.5 border border-[var(--color-border-light)] px-3 text-sm font-medium transition-colors',
                 active
                     ? 'bg-[var(--color-brand)] text-white border-[var(--color-brand)]'
                     : 'bg-[var(--color-card-bg)] text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
