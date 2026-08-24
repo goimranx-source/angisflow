@@ -393,7 +393,17 @@ class OrdersEndpoint
             $revenueMinor += $converted ?? 0;
         }
 
-        $awaiting = (clone $query)->where('payment_status', 'unpaid')->count();
+        /*
+         * Orders being worked on right now.
+         *
+         * This counted unpaid ones and the card above it said "Pending
+         * Orders", which is two different questions with one answer between
+         * them: an order can be paid for and still sitting in a picking queue,
+         * and an unpaid one can already be out for delivery on account. What
+         * somebody scanning this page wants is how much work is open, and
+         * that is the status, not the payment.
+         */
+        $processing = (clone $query)->where('status', 'processing')->count();
 
         $scale = 10 ** Currencies::scale($base);
 
@@ -401,7 +411,7 @@ class OrdersEndpoint
             'total_orders' => $orders,
             'total_revenue' => round($revenueMinor / $scale, 2),
             'avg_order_value' => $orders > 0 ? round($revenueMinor / $orders / $scale, 2) : 0.0,
-            'pending_count' => $awaiting,
+            'processing_count' => $processing,
             'currency' => $base,
         ];
     }

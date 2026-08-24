@@ -162,7 +162,7 @@ type OrdersResponse = {
         total_orders: number;
         total_revenue: number;
         avg_order_value: number;
-        pending_count: number;
+        processing_count: number;
     };
     meta: {
         total: number;
@@ -1053,10 +1053,10 @@ export default function Orders() {
                         spark={avgSeries}
                     />
                     <KPICard
-                        label="Pending Orders"
-                        value={compactCount(summary.pending_count)}
-                        valueTitle={summary.pending_count.toLocaleString()}
-                        icon="clock"
+                        label="In Processing"
+                        value={compactCount(summary.processing_count)}
+                        valueTitle={summary.processing_count.toLocaleString()}
+                        icon="spinner-gap"
                         variant="warning"
                     />
                 </div>
