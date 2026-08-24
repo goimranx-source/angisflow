@@ -242,6 +242,7 @@ export function ContextPicker() {
             {open && !(mobileFull && activeSubMenu) && createPortal(
                 <div
                     ref={flyoutRef}
+                    data-flyout-panel
                     className={cn('context-menu', exiting && 'is-exiting', mobileFull && 'context-menu-mobile')}
                     style={mobileFull ? undefined : { top: `${peekTop}px`, left: `${peekLeft}px` }}
                 >
@@ -267,6 +268,7 @@ export function ContextPicker() {
             {open && activeSubMenu && !exiting && createPortal(
                 <div
                     ref={subMenuRef}
+                    data-flyout-panel
                     className={cn('context-submenu', mobileFull && 'context-submenu-mobile')}
                     style={mobileFull ? undefined : { top: `${subPos.top}px`, left: `${subPos.left}px` }}
                 >

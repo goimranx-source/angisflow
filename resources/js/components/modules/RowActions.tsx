@@ -218,6 +218,7 @@ export function RowActionMenu({
                     <div
                         ref={menu}
                         role="menu"
+                        data-flyout-panel
                         style={{ top: at.top, right: at.right }}
                         className="fixed z-[var(--z-toast)] min-w-[10rem] overflow-hidden rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}

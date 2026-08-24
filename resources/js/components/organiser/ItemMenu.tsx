@@ -124,6 +124,7 @@ export function ItemMenu({
                     <div
                         ref={menuRef}
                         className="row-menu"
+                        data-flyout-panel
                         style={{ top: box.top, left: box.left }}
                         role="menu"
                     >
@@ -164,7 +165,7 @@ export function ItemMenu({
                             </button>
 
                             {tagsOpen && (
-                                <div className={cn('row-submenu', box.tagsLeft && 'is-left')} role="menu">
+                                <div className={cn('row-submenu', box.tagsLeft && 'is-left')} role="menu" data-flyout-panel>
                                     {tags.length === 0 ? (
                                         <p className="px-3 py-2.5 text-xs text-[var(--color-text-muted)]">
                                             You don’t have any tags yet

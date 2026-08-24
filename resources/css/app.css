@@ -4450,7 +4450,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         cursor: default;
     }
 
-    html.flyout-open :is([data-flyout-panel], [role='menu'], [role='listbox']) :is(
+    html.flyout-open :is([data-flyout-panel], [role='menu'], [role='listbox'], .confirm-card) :is(
         button,
         a[href],
         select,

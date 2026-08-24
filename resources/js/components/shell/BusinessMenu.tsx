@@ -167,7 +167,7 @@ export function BusinessMenu() {
 
             {open &&
                 createPortal(
-                <div role="menu" className="biz-panel" style={{ top: box.top, right: box.right }}>
+                <div role="menu" data-flyout-panel className="biz-panel" style={{ top: box.top, right: box.right }}>
                     <div className="biz-head">
                         <span className="biz-mark biz-mark-lg">{initials(business)}</span>
                         <span className="min-w-0 flex-1">

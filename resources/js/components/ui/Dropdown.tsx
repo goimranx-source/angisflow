@@ -124,6 +124,7 @@ export function Dropdown({
                         className,
                     )}
                     role="menu"
+                    data-flyout-panel
                     aria-orientation="vertical"
                 >
                     {children}

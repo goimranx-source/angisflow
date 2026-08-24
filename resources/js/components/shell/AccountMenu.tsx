@@ -134,7 +134,7 @@ export function AccountMenu() {
             */}
             {open &&
                 createPortal(
-                <div role="menu" className={`account-menu ${exiting ? 'is-exiting' : ''}`}>
+                <div role="menu" data-flyout-panel className={`account-menu ${exiting ? 'is-exiting' : ''}`}>
                     <div className="account-menu-who">
                         <span className="block truncate font-semibold text-[var(--color-text-main)]">
                             {auth.user.name}

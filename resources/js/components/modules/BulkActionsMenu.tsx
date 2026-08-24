@@ -140,6 +140,7 @@ export function BulkActionsMenu({
                     <div
                         ref={menu}
                         role="menu"
+                        data-flyout-panel
                         style={{
                             top: at?.top ?? -9999,
                             left: at?.left ?? -9999,

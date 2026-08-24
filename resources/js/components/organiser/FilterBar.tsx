@@ -120,7 +120,7 @@ export function FilterBar({
                     {tagsOpen && <FlyoutBackdrop onClose={() => setTagsOpen(false)} dismissOnOutsidePress={false} />}
 
                     {tagsOpen && (
-                        <div className="filter-tags" role="menu">
+                        <div className="filter-tags" role="menu" data-flyout-panel>
                             {tags.length === 0 ? (
                                 <p className="px-3 py-3 text-xs text-[var(--color-text-muted)]">
                                     You don’t have any tags yet

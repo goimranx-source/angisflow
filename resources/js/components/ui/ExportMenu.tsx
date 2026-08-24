@@ -143,7 +143,7 @@ export function ExportMenu({ endpoint, params = {}, className }: ExportMenuProps
             {open && <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
 
             {open && (
-                <div className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] p-1 shadow-[var(--shadow-lg)]">
+                <div data-flyout-panel className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] p-1 shadow-[var(--shadow-lg)]">
                     {FORMATS.map((format) => (
                         <button
                             key={format.key}

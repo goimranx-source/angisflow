@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Marks that a flyout is open. Draws nothing.
@@ -54,6 +54,47 @@ function markOpen(): () => void {
     };
 }
 
+/**
+ * The flyout that is open, so that opening another can close it.
+ *
+ * ── Why this is needed at all ────────────────────────────────────────────────
+ *
+ * Every one of these closes on a press that lands outside itself, and a second
+ * flyout's trigger is outside the first. That should have been enough, and for
+ * most pairs it was. It was not for the ones dismissed from here, because the
+ * listener below deliberately ignores presses on triggers — otherwise a toggle
+ * would close the flyout on `pointerdown` and reopen it on `click`, and it
+ * would look stuck.
+ *
+ * That skip does not distinguish between a flyout's own trigger and somebody
+ * else's, so pressing a second trigger left the first panel sitting there.
+ *
+ * Registering here is the honest fix, and it covers every pair rather than the
+ * ones that happened to work: two menus open at once is not a state anybody
+ * asks for, whichever pair they are.
+ */
+type Registration = { close: () => void };
+
+let openFlyout: Registration | null = null;
+
+function claimExclusive(close: () => void): () => void {
+    const me: Registration = { close };
+
+    // Whatever was open was opened by somebody who has now been left behind.
+    openFlyout?.close();
+    openFlyout = me;
+
+    return () => {
+        // Only if we are still the one holding it. When one flyout replaces
+        // another, React can run the outgoing effect's cleanup after the
+        // incoming one's setup — clearing unconditionally would forget the
+        // flyout that is actually on screen.
+        if (openFlyout === me) {
+            openFlyout = null;
+        }
+    };
+}
+
 export function FlyoutBackdrop({
     onClose,
     dismissOnOutsidePress = true,
@@ -75,6 +116,14 @@ export function FlyoutBackdrop({
     layer?: string;
 }) {
     useEffect(markOpen, []);
+
+    // Kept in a ref so claiming exclusivity does not re-run every time the
+    // parent re-renders and hands down a fresh onClose — which would close the
+    // flyout that is currently open, namely this one.
+    const close = useRef(onClose);
+    close.current = onClose;
+
+    useEffect(() => claimExclusive(() => close.current()), []);
 
     useEffect(() => {
         if (!dismissOnOutsidePress) {

@@ -221,6 +221,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
 
             {open && (
                 <div
+                    data-flyout-panel
                     className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
                     style={{
                         /*

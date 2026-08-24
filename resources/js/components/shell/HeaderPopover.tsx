@@ -126,6 +126,7 @@ export function HeaderPopover({
             {open && createPortal(
                 <div
                     ref={panelRef}
+                    data-flyout-panel
                     className={cn('header-popover', exiting && 'is-exiting')}
                     style={{ top: `${pos.top}px`, right: `${pos.right}px` }}
                     role="dialog"
