@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 
@@ -21,93 +22,175 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
-// Inline sync button with dropdown
-function InlineSyncButton({ 
-    storeId, 
-    isOpen, 
+
+/**
+ * A row's actions, behind one mark.
+ *
+ * ── Why a menu rather than the buttons themselves ────────────────────────────
+ *
+ * The column held a split sync button — a control wide enough to read, on every
+ * row, for something done occasionally. It set the column's width for the sake
+ * of its widest row, and put a thing that changes a shop permanently under the
+ * cursor of somebody scanning a list.
+ *
+ * One mark opens the list, and the list uses words. An icon-only menu trades a
+ * label for a guess, and these are not guessable: two kinds of sync that differ
+ * in what they fetch cannot be told apart by an arrow.
+ *
+ * ── Why it is drawn where it is ──────────────────────────────────────────────
+ *
+ * In a portal at the coordinates of its own button, because the table scrolls
+ * inside a box with its own overflow — a menu positioned inside the row is
+ * clipped by the first ancestor that scrolls, which is how a menu on the last
+ * visible row ends up half a menu.
+ */
+function RowActions({
+    store,
+    open,
     onToggle,
-    onSync, 
+    onSync,
+    onOpen,
     isPending,
-}: { 
-    storeId: string; 
-    isOpen: boolean; 
+}: {
+    store: Storefront;
+    open: boolean;
     onToggle: () => void;
     onSync: (full: boolean) => void;
+    onOpen: () => void;
     isPending: boolean;
 }) {
     const buttonRef = useRef<HTMLButtonElement>(null);
-    
-    const buttonRect = buttonRef.current?.getBoundingClientRect();
-    const dropdownHeight = 120;
-    const spaceBelow = buttonRect ? window.innerHeight - buttonRect.bottom : 999;
-    const spaceAbove = buttonRect?.top ?? 0;
-    const showAbove = isOpen && spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+    const rect = buttonRef.current?.getBoundingClientRect();
+
+    const item =
+        'flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-[var(--shell-hover)]';
 
     return (
-        <div onClick={(e) => e.stopPropagation()}>
+        <>
             <button
                 ref={buttonRef}
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={(e) => {
-                    e.stopPropagation();
+                onClick={(event) => {
+                    // The row itself opens the shop; this must not do both.
+                    event.stopPropagation();
                     onToggle();
                 }}
-                disabled={isPending}
+                className="rounded p-1.5 text-[var(--color-text-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
+                aria-label={`Actions for ${store.name}`}
+                aria-haspopup="menu"
+                aria-expanded={open}
             >
-                <Icon
-                    name={isPending ? 'spinner' : 'arrows-clockwise'}
-                    size={12}
-                    className={isPending ? 'animate-spin' : undefined}
-                />
-                <Icon name="caret-down" size={10} />
+                <Icon name={isPending ? 'spinner' : 'dots-three-vertical'} size={16} className={isPending ? 'animate-spin' : undefined} />
             </button>
-            
-            {isOpen && buttonRect && (
-                <>
-                    <div className="fixed inset-0 z-10" onClick={onToggle} />
-                    <div 
-                        className="fixed z-20 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg"
-                        style={{
-                            top: showAbove ? undefined : `${buttonRect.bottom + 4}px`,
-                            bottom: showAbove ? `${window.innerHeight - buttonRect.top + 4}px` : undefined,
-                            left: `${buttonRect.right - 192}px`,
-                        }}
-                    >
-                        <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--shell-hover)]"
-                            onClick={() => {
+
+            {open &&
+                rect &&
+                createPortal(
+                    <>
+                        <div
+                            className="fixed inset-0 z-[var(--z-modal)]"
+                            onClick={(event) => {
+                                event.stopPropagation();
                                 onToggle();
-                                onSync(false);
                             }}
-                        >
-                            <Icon name="arrows-clockwise" size={14} />
-                            <div>
-                                <div className="font-medium text-[var(--color-text-main)]">Incremental</div>
-                                <div className="text-xs text-[var(--color-text-muted)]">New/modified</div>
-                            </div>
-                        </button>
-                        <button
-                            type="button"
-                            className="flex w-full items-center gap-2 border-t border-[var(--shell-border)] px-3 py-2 text-left text-sm hover:bg-[var(--shell-hover)]"
-                            onClick={() => {
-                                onToggle();
-                                onSync(true);
+                        />
+
+                        <div
+                            role="menu"
+                            className="fixed z-[calc(var(--z-modal)+1)] w-56 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
+                            style={{
+                                borderColor: 'var(--shell-border)',
+                                top: rect.bottom + 6,
+
+                                // Right-aligned to the button, and never off the
+                                // left edge on a narrow window.
+                                left: Math.max(8, rect.right - 224),
                             }}
+                            onClick={(event) => event.stopPropagation()}
                         >
-                            <Icon name="arrow-clockwise" size={14} />
-                            <div>
-                                <div className="font-medium text-[var(--color-text-main)]">Full Sync</div>
-                                <div className="text-xs text-[var(--color-text-muted)]">All records</div>
-                            </div>
-                        </button>
-                    </div>
-                </>
-            )}
-        </div>
+                            <button
+                                type="button"
+                                className={item}
+                                onClick={() => {
+                                    onToggle();
+                                    onOpen();
+                                }}
+                            >
+                                <Icon name="eye" size={15} className="mt-0.5 shrink-0 opacity-70" />
+                                <span>
+                                    <span className="font-medium text-[var(--color-text-main)]">
+                                        Open
+                                    </span>
+                                    <span className="block text-xs text-[var(--color-text-muted)]">
+                                        Details, field mapping and statuses
+                                    </span>
+                                </span>
+                            </button>
+
+                            {store.is_connected && (
+                                <>
+                                    <div
+                                        className="my-1 h-px"
+                                        style={{ background: 'var(--shell-border)' }}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        className={item}
+                                        disabled={isPending}
+                                        onClick={() => {
+                                            onToggle();
+                                            onSync(false);
+                                        }}
+                                    >
+                                        <Icon
+                                            name="arrows-clockwise"
+                                            size={15}
+                                            className="mt-0.5 shrink-0 opacity-70"
+                                        />
+                                        <span>
+                                            <span className="font-medium text-[var(--color-text-main)]">
+                                                Sync new changes
+                                            </span>
+                                            <span className="block text-xs text-[var(--color-text-muted)]">
+                                                Only what has changed since last time
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className={item}
+                                        disabled={isPending}
+                                        onClick={() => {
+                                            onToggle();
+                                            onSync(true);
+                                        }}
+                                    >
+                                        <Icon
+                                            name="arrow-clockwise"
+                                            size={15}
+                                            className="mt-0.5 shrink-0 opacity-70"
+                                        />
+                                        <span>
+                                            <span className="font-medium text-[var(--color-text-main)]">
+                                                Sync everything
+                                            </span>
+                                            <span className="block text-xs text-[var(--color-text-muted)]">
+                                                Every record from the beginning
+                                            </span>
+                                        </span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </>,
+                    document.body,
+                )}
+        </>
     );
 }
+
 
 type Storefront = {
     id: string;
@@ -621,10 +704,25 @@ export default function Storefronts() {
                                     key: 'name',
                                     label: 'Storefront',
                                     render: (store) => (
-                                        <div>
-                                            <p className="font-medium text-[var(--color-text-main)]">{store.name}</p>
-                                            <p className="mt-0.5 text-sm text-[var(--color-brand)]">{store.domain}</p>
-                                        </div>
+                                        /*
+                                          One line, with the address on the
+                                          hover.
+
+                                          A second line under every name makes
+                                          every row twice as tall for something
+                                          almost nobody reads — a domain is
+                                          checked once when a shop is connected
+                                          and then never again. Ten shops on
+                                          screen instead of five is worth more
+                                          than a URL nobody is looking at, and
+                                          the ones who are looking still have it.
+                                        */
+                                        <span
+                                            className="font-medium text-[var(--color-text-main)]"
+                                            title={store.domain ? `${store.name} — ${store.domain}` : store.name}
+                                        >
+                                            {store.name}
+                                        </span>
                                     ),
                                 },
                                 {
@@ -678,17 +776,31 @@ export default function Storefronts() {
                                 },
                                 {
                                     key: 'actions',
-                                    label: '',
+                                    /*
+                                      Named, like every other column.
+
+                                      A blank heading over a column of buttons
+                                      leaves somebody to work out what they are
+                                      by clicking one, which is the wrong way
+                                      round for a column whose contents change
+                                      things.
+                                    */
+                                    label: 'Action',
                                     align: 'right',
-                                    render: (store) => store.is_connected ? (
-                                        <InlineSyncButton
-                                            storeId={store.id}
-                                            isOpen={inlineSyncMenu === store.id}
-                                            onToggle={() => setInlineSyncMenu(inlineSyncMenu === store.id ? null : store.id)}
+                                    render: (store) => (
+                                        <RowActions
+                                            store={store}
+                                            open={inlineSyncMenu === store.id}
+                                            onToggle={() =>
+                                                setInlineSyncMenu(
+                                                    inlineSyncMenu === store.id ? null : store.id,
+                                                )
+                                            }
                                             onSync={(full) => syncShop.mutate({ id: store.id, full })}
+                                            onOpen={() => setSelectedId(store.id)}
                                             isPending={syncShop.isPending}
                                         />
-                                    ) : null,
+                                    ),
                                 },
                             ]}
                             sortBy={sortBy}

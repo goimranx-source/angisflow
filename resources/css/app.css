@@ -4427,13 +4427,25 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* The header is a label strip, not a row of data — quieter type, and the
        shell's own tint rather than a colour of its own, so it reads as part of
        the card's chrome. */
+    /*
+     * ── The heading row is a row, not a band ────────────────────────────────
+     *
+     * It had a fill of its own, a smaller face and a muted colour, which made
+     * three differences where one was wanted. A tinted strip across the top of
+     * every table reads as a piece of furniture the rows are sitting under, and
+     * the smaller face means the column names — the labels somebody scans to
+     * find a column — are the least legible text in the table.
+     *
+     * Same size as the rows and heavier, on the same background. Weight alone
+     * separates a heading from what it heads, which is how it works in every
+     * other kind of document.
+     */
     .table thead th {
         padding: 0.625rem 1rem;
-        background: var(--shell-tint);
         border-bottom: 1px solid var(--shell-border);
-        font-size: 0.75rem;
+        font-size: 0.8125rem;
         font-weight: 600;
-        color: var(--color-text-muted);
+        color: var(--color-text-main);
         text-align: left;
         white-space: nowrap;
     }
