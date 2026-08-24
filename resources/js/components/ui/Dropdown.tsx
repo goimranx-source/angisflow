@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { cn } from '@/lib/utils';
 
 type DropdownProps = {
@@ -101,6 +102,8 @@ export function Dropdown({
             </div>
 
             {/* Dropdown content */}
+            {isOpen && <FlyoutBackdrop onClose={() => setIsOpen(false)} />}
+
             {isOpen && (
                 <div
                     onClick={handleContentClick}

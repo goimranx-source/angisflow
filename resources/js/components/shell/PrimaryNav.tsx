@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { useNavigationLoading } from '@/providers/NavigationLoadingProvider';
 
 /**
- * The four places that exist above any one business.
+ * The five places that exist above any one business.
  *
  * Home points at /home, not /. Both render the same screen for somebody signed
  * in — / is the public landing that swaps to Home once you are — but /home is
@@ -19,6 +19,18 @@ export const PRIMARY_ITEMS = [
     { to: '/workspaces', icon: 'briefcase', label: 'Workspaces', end: false },
     { to: '/businesses', icon: 'buildings', label: 'Businesses', end: false },
     { to: '/inbox', icon: 'chats-circle', label: 'Inbox', end: false },
+
+    /*
+     * Settings belongs here rather than in a business's own menu.
+     *
+     * What it holds -- the account, its people, its billing, the look of the
+     * app -- is true across every business, so reaching it from inside one and
+     * not another was a distinction with nothing behind it.
+     *
+     * It also fills the strip. Four squares spread across the rail's width sat
+     * so far apart they stopped reading as one group; five close the gaps.
+     */
+    { to: '/settings', icon: 'gear', label: 'Settings', end: false },
 ] as const;
 
 /**

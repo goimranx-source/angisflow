@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { createPortal } from 'react-dom';
 
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { api } from '@/lib/api';
@@ -115,7 +117,23 @@ export function AccountMenu() {
                 )}
             </button>
 
-            {open && (
+            {open && <FlyoutBackdrop onClose={closeMenu} layer="calc(var(--z-shell-menu) - 1)" />}
+
+            {/*
+              This leaves the header, and has to.
+
+              A panel inside the topbar is inside the topbar's stacking context,
+              so its z-index is a rank among its siblings and nothing more: the
+              bar sits at 55, and the sheet that has to cover the sidebar sits
+              well above that, so the panel went under its own backdrop.
+
+              Rendered into <body> it is ranked against the sheet directly,
+              which is the comparison that was meant all along. Costs nothing to
+              move -- .account-menu is already position:fixed against the
+              viewport, so it lands in exactly the same place.
+            */}
+            {open &&
+                createPortal(
                 <div role="menu" className={`account-menu ${exiting ? 'is-exiting' : ''}`}>
                     <div className="account-menu-who">
                         <span className="block truncate font-semibold text-[var(--color-text-main)]">
@@ -173,7 +191,8 @@ export function AccountMenu() {
                             {busy ? 'Signing out…' : 'Sign out'}
                         </button>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

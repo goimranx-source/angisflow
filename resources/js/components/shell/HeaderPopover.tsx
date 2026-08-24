@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 
 import { Icon } from '@/components/ui/Icon';
 import { useScrollLock } from '@/hooks/useScrollLock';
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { cn } from '@/lib/utils';
 
 /**
@@ -119,6 +120,8 @@ export function HeaderPopover({
             >
                 <Icon name={icon} size={iconSize} weight="duotone" />
             </button>
+
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} layer="calc(var(--z-shell-menu) - 1)" />}
 
             {open && createPortal(
                 <div

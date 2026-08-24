@@ -132,6 +132,17 @@
      */
     --nav-highlight: #1b3049;
     --nav-highlight-text: #eef4fa;
+
+    /*
+     * The accent a rail row uses to say "this is the page you are on".
+     *
+     * Deliberately not --color-brand-hover, which is a single dark teal for
+     * both themes: right on a white rail, and on a dark one a dim smudge only
+     * a shade off the background it sits on. Cyan 700 here, cyan 400 there --
+     * the same colour as far as the reader is concerned, because what carries
+     * across a theme change is the contrast, not the hex.
+     */
+    --nav-accent: #0e7490;
     /* One corner for the whole frame — the rail, and every panel that floats
        out of it. Three of them had picked their own (5px, 12px, 16px), so a
        flyout never looked like it came from the sidebar it was attached to. */
@@ -321,6 +332,9 @@
     --shell-text-strong: #eef4fa;
     --shell-hover: #1b3049;
     --shell-active-soft: #1b3049;
+
+    /* Cyan 400. The light rail's teal is all but invisible on this one. */
+    --nav-accent: #22d3ee;
     --shell-tint: rgba(255, 255, 255, 0.07);
 }
 
@@ -1303,7 +1317,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
 
     .row-menu {
         position: fixed;
-        z-index: 110;
+        z-index: var(--z-shell-menu); /* .row-menu — above its own sheet */
         width: 13rem;
         padding: 0.25rem;
         border-radius: var(--shell-radius);
@@ -2409,11 +2423,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         color: var(--color-ink-soft);
     }
 
+    /* Pinned to the viewport, because it is rendered into <body> now rather
+       than hung off its trigger — see BusinessMenu for why it had to leave. The
+       top and right come measured, as inline styles. */
     .biz-panel {
-        position: absolute;
-        top: calc(100% + 0.5rem);
-        right: 0;
-        z-index: 60;
+        position: fixed;
+        z-index: var(--z-shell-menu); /* .biz-panel — was 60, under the rail */
         width: 17rem;
         overflow: hidden;
         border-radius: var(--radius-lg);
@@ -3253,7 +3268,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      */
     .context-menu {
         position: fixed;
-        z-index: 120;
+        z-index: var(--z-shell-menu); /* .context-menu */
         display: flex;
         flex-direction: column;
         width: 17.5rem;
@@ -3725,7 +3740,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        clearly sits on top of it. */
     .context-submenu {
         position: fixed;
-        z-index: 121;
+        z-index: calc(var(--z-shell-menu) + 1); /* .context-submenu, one above its parent */
         display: flex;
         flex-direction: column;
         width: 17.5rem;
@@ -5298,23 +5313,23 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * and settles.
      */
     .nav-child.active {
-        color: var(--color-brand-hover);
+        color: var(--nav-accent);
         font-weight: 500;
     }
 
     .nav-child.active::before {
-        background: var(--color-brand);
+        background: var(--nav-accent);
         box-shadow: 0 0 0 3px rgba(0, 212, 232, 0.18);
     }
 
     /* Hovering the page you are already on should not make it look like
        somewhere else. */
     .nav-child.active:hover {
-        color: var(--color-brand-hover);
+        color: var(--nav-accent);
     }
 
     .nav-child.active .nav-child-icon {
-        color: var(--color-brand-hover);
+        color: var(--nav-accent);
         opacity: 1;
     }
 
@@ -5416,6 +5431,46 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     .nav-child:hover > .nav-pin,
     .nav-parent:hover > .nav-pin {
         display: inline-flex;
+    }
+
+    /*
+     * The pin takes the colour of the row it is sitting on.
+     *
+     * It was fixed at --shell-text, a dark grey chosen for a pale rail. The
+     * row goes dark under the pointer, and the pin stayed dark with it: a
+     * near-black mark on a near-black slab, appearing on hover and invisible
+     * the moment it appeared.
+     *
+     * .nav-child is left out on purpose. A nested row does not fill, so its
+     * pin is still sitting on the rail's own background.
+     */
+    .nav-flat:hover > .nav-pin,
+    .nav-parent:hover > .nav-pin,
+    .nav-flat.active > .nav-pin,
+    .nav-parent.holds-active > .nav-pin,
+    html:not(.rail-collapsed) .nav-group.is-open > .nav-parent > .nav-pin,
+    html.rail-peek .nav-group.is-open > .nav-parent > .nav-pin {
+        color: var(--nav-highlight-text);
+        opacity: 0.75;
+    }
+
+    .nav-flat:hover > .nav-pin:hover,
+    .nav-parent:hover > .nav-pin:hover,
+    .nav-flat.active > .nav-pin:hover,
+    .nav-parent.holds-active > .nav-pin:hover {
+        color: var(--nav-highlight-text);
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* Pinned is a state, not a hover, so it keeps the accent either way --
+       and the accent is now the one that reads in both themes. */
+    .nav-flat:hover > .nav-pin.is-pinned,
+    .nav-parent:hover > .nav-pin.is-pinned,
+    .nav-flat.active > .nav-pin.is-pinned,
+    .nav-parent.holds-active > .nav-pin.is-pinned {
+        color: var(--nav-accent);
+        opacity: 1;
     }
 
     /* The mark moves aside rather than being pushed off the end. */
@@ -5649,7 +5704,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         position: fixed;
         top: var(--header-flyout-top);
         right: var(--sidebar-padding);
-        z-index: 120;
+        z-index: var(--z-shell-menu); /* .account-menu */
         width: 15.5rem;
         padding: 0 10px;
         border-radius: var(--shell-radius);
@@ -5687,7 +5742,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        (see HeaderPopover), since these do not live at the row's end. */
     .header-popover {
         position: fixed;
-        z-index: 120;
+        z-index: var(--z-shell-menu); /* .header-popover */
         width: 18rem;
         max-width: calc(100vw - 24px);
         border-radius: var(--shell-radius);

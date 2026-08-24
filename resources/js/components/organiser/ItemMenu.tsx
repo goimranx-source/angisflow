@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ManageTagsModal } from '@/components/organiser/ManageTagsModal';
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { organiserKey, useOrganiser, useOrganiserActions, type ItemType } from '@/hooks/useOrganiser';
 import { cn } from '@/lib/utils';
@@ -109,6 +110,8 @@ export function ItemMenu({
             >
                 <Icon name="dots-three" size={18} weight="duotone" />
             </button>
+
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} layer="calc(var(--z-shell-menu) - 1)" />}
 
             {open &&
                 createPortal(

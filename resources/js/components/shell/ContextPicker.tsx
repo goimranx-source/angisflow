@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 
 import { BusinessBadge, WorkspaceBadge } from '@/components/ui/Badge';
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { api } from '@/lib/api';
@@ -226,6 +227,17 @@ export function ContextPicker() {
                 </span>
                 <Icon name="caret-down" size={12} weight="bold" className="context-trigger-caret" />
             </button>
+
+            {/* One sheet for both slots below, not one each: the submenu
+                replaces the main menu rather than stacking on it, and two
+                sheets would mean the first click after drilling down went to
+                the wrong one. */}
+            {open && (
+                <FlyoutBackdrop
+                    onClose={handleClose}
+                    layer="calc(var(--z-shell-menu) - 1)"
+                />
+            )}
 
             {/* On mobile, opening a submenu drills down full-screen rather than
                 floating beside a card with nowhere to sit — so the main menu

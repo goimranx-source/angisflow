@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -139,8 +140,10 @@ export function ExportMenu({ endpoint, params = {}, className }: ExportMenuProps
                 <Icon name="caret-down" size={12} />
             </button>
 
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} />}
+
             {open && (
-                <div className="absolute right-0 z-[110] mt-1.5 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] p-1 shadow-[var(--shadow-lg)]">
+                <div className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] p-1 shadow-[var(--shadow-lg)]">
                     {FORMATS.map((format) => (
                         <button
                             key={format.key}

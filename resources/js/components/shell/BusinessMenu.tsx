@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -32,6 +34,45 @@ export function BusinessMenu() {
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const container = useRef<HTMLDivElement>(null);
+
+    /*
+     * Where the panel goes once it is out of the header.
+     *
+     * It hung off the trigger with position:absolute, which meant it lived
+     * inside the topbar -- and inside the topbar's stacking context, where its
+     * z-index ranks it against its siblings and nothing else. The bar sits at
+     * 55; the sheet that has to cover the sidebar sits well above that. The
+     * panel went under its own backdrop.
+     *
+     * Measured on open and pinned to the viewport instead, which is the same
+     * thing .account-menu and .header-popover already do.
+     */
+    const [box, setBox] = useState({ top: 0, right: 0 });
+
+    useLayoutEffect(() => {
+        if (!open || !container.current) {
+            return;
+        }
+
+        const place = () => {
+            const rect = container.current?.getBoundingClientRect();
+
+            if (rect) {
+                setBox({
+                    top: rect.bottom + 8,
+
+                    // Right-aligned to the trigger, measured from the window's
+                    // right edge because that is what `right` is relative to.
+                    right: Math.max(8, window.innerWidth - rect.right),
+                });
+            }
+        };
+
+        place();
+        window.addEventListener('resize', place);
+
+        return () => window.removeEventListener('resize', place);
+    }, [open]);
 
     useEffect(() => {
         if (!open) {
@@ -122,8 +163,11 @@ export function BusinessMenu() {
                 />
             </button>
 
-            {open && (
-                <div role="menu" className="biz-panel">
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} layer="calc(var(--z-shell-menu) - 1)" />}
+
+            {open &&
+                createPortal(
+                <div role="menu" className="biz-panel" style={{ top: box.top, right: box.right }}>
                     <div className="biz-head">
                         <span className="biz-mark biz-mark-lg">{initials(business)}</span>
                         <span className="min-w-0 flex-1">
@@ -171,7 +215,8 @@ export function BusinessMenu() {
                             Plan &amp; billing
                         </MenuLink>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

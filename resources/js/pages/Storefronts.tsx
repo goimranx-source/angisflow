@@ -1413,7 +1413,7 @@ export default function Storefronts() {
                         {showSyncMenu && (
                             <>
                                 <div
-                                    className="fixed inset-0 z-10"
+                                    className="flyout-backdrop fixed inset-0 z-10"
                                     onClick={() => setShowSyncMenu(false)}
                                 />
                                 <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">

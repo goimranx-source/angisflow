@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 
@@ -206,6 +207,13 @@ export function RowActionMenu({
                     looks like a button that does one thing and does another. */}
                 <Icon name="caret-down" size={10} />
             </button>
+
+            {open && (
+                <FlyoutBackdrop
+                    onClose={() => setOpen(false)}
+                    layer="calc(var(--z-toast) - 1)"
+                />
+            )}
 
             {open &&
                 at &&

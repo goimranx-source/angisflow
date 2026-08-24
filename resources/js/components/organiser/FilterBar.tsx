@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ManageTagsModal } from '@/components/organiser/ManageTagsModal';
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { useOrganiser } from '@/hooks/useOrganiser';
 import { cn } from '@/lib/utils';
@@ -115,6 +116,8 @@ export function FilterBar({
                             <span className="filter-count">{filters.tags.length}</span>
                         )}
                     </button>
+
+                    {tagsOpen && <FlyoutBackdrop onClose={() => setTagsOpen(false)} />}
 
                     {tagsOpen && (
                         <div className="filter-tags" role="menu">
