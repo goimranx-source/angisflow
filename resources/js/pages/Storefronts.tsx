@@ -819,7 +819,17 @@ export default function Storefronts() {
                                 <button
                                     type="button"
                                     onClick={() => setFiltersOpen(!filtersOpen)}
-                                    className="btn btn-secondary"
+                                    /*
+                                     * The brand colour on hover, because this
+                                     * one opens something.
+                                     *
+                                     * Every other control on the row does its
+                                     * work where it stands. This is the one that
+                                     * puts a panel over the page, and colouring
+                                     * the hover is the cheapest way to say so
+                                     * before it is pressed rather than after.
+                                     */
+                                    className="btn btn-secondary hover:!border-[var(--color-brand)] hover:!bg-[var(--color-brand-hover)] hover:!text-[var(--color-text-on-accent)]"
                                     aria-expanded={filtersOpen}
                                     aria-haspopup="dialog"
                                 >
@@ -828,11 +838,23 @@ export default function Storefronts() {
 
                                     {hasFilters && (
                                         <span
-                                            className="ml-0.5 size-1.5 rounded-full"
-                                            style={{ background: 'var(--color-brand)' }}
+                                            className="size-1.5 rounded-full"
+                                            style={{ background: 'currentColor' }}
                                             aria-label="Filters are applied"
                                         />
                                     )}
+
+                                    {/*
+                                      Turned when it is open, which is the one
+                                      thing a caret can say that a static arrow
+                                      cannot: not "there is more here" but "the
+                                      more is showing".
+                                    */}
+                                    <Icon
+                                        name="caret-down"
+                                        size={12}
+                                        className={`transition-transform ${filtersOpen ? 'rotate-180' : ''}`}
+                                    />
                                 </button>
 
                                 {filtersOpen && (
@@ -847,7 +869,17 @@ export default function Storefronts() {
 
                                         <div
                                             className="absolute right-0 top-full z-[calc(var(--z-dropdown,40)+1)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
-                                            style={{ borderColor: 'var(--shell-border)' }}
+                                            style={{
+                                                borderColor: 'var(--shell-border)',
+
+                                                // The same arrival as the row's
+                                                // menu: two things that open the
+                                                // same way should look the same
+                                                // doing it.
+                                                animation:
+                                                    'context-flyout-slide-up 120ms ease-out',
+                                                transformOrigin: 'top right',
+                                            }}
                                         >
                                             <FilterSelect
                                                 label="Type"

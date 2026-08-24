@@ -98,12 +98,20 @@ export function FilterBar({
                 size={16}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]"
             />
+            {/*
+              A stated height rather than padding.
+            
+              Vertical padding plus a line box came to 38px against the 36 of
+              every button beside it, and two pixels is enough to see on a row
+              of controls without being enough to name. Stating the height means
+              it cannot drift again when the type size changes.
+            */}
             <input
                 type="text"
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-2 pl-10 pr-3 text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                className="h-9 w-full border border-[var(--color-border-light)] bg-[var(--color-card-bg)] pl-10 pr-3 text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                 style={{ borderRadius: 'var(--shell-radius)' }}
             />
         </div>

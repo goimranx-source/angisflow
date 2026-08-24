@@ -202,7 +202,22 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
             </button>
 
             {open && (
-                <div className="absolute right-0 z-[110] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]">
+                <div
+                    className="absolute right-0 z-[110] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
+                    style={{
+                        /*
+                          The same arrival as every other panel that opens over
+                          the page.
+
+                          A calendar is the largest thing on this row and was the
+                          only one appearing without warning — the bigger the
+                          panel, the more it wants a moment to say where it came
+                          from.
+                        */
+                        animation: 'context-flyout-slide-up 120ms ease-out',
+                        transformOrigin: 'top right',
+                    }}
+                >
                     <ul className="hidden w-36 flex-none border-r border-[var(--shell-border)] p-1.5 sm:block">
                         {PRESETS.map((preset) => (
                             <li key={preset.key}>
