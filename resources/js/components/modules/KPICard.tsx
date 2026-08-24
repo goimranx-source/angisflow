@@ -80,25 +80,43 @@ export function KPICard({
  * the wrong height is worse than none: it promises a layout and then breaks it.
  */
 export function KPICardSkeleton() {
+    const block = { borderRadius: 'var(--shell-radius-sm)' };
+
     return (
-        <div className="card p-4">
-            <div className="flex items-start justify-between gap-3">
+        <div className="card overflow-hidden px-4 pb-0 pt-4">
+            <div className="flex items-start gap-3">
+                {/* A disc, because the card's is a disc. A rounded square here
+                    would change shape the moment the data landed. */}
+                <div className="size-9 shrink-0 animate-pulse rounded-full bg-[var(--shell-muted)]" />
+
                 <div className="min-w-0 flex-1">
+                    {/*
+                      Measured off the real card rather than eyeballed.
+
+                      The label's line box is 20px, the figure's is 30, and the
+                      gap between them 2 — approximations put the skeleton 11px
+                      short, which is a skeleton that causes the jump it exists
+                      to prevent. The blocks are drawn narrower than the text
+                      they stand in for, since a full-width grey bar reads as
+                      content rather than as its absence.
+                    */}
+                    <div className="h-5 w-24 animate-pulse bg-[var(--shell-muted)]" style={block} />
                     <div
-                        className="h-[0.8125rem] w-24 animate-pulse bg-[var(--shell-muted)]"
-                        style={{ borderRadius: 'var(--shell-radius-sm)' }}
-                    />
-                    <div
-                        className="mt-1.5 h-7 w-32 animate-pulse bg-[var(--shell-muted)]"
-                        style={{ borderRadius: 'var(--shell-radius-sm)' }}
+                        className="mt-0.5 h-[30px] w-28 animate-pulse bg-[var(--shell-muted)]"
+                        style={block}
                     />
                 </div>
-
-                <div
-                    className="size-9 shrink-0 animate-pulse bg-[var(--shell-muted)]"
-                    style={{ borderRadius: 'var(--shell-radius-sm)' }}
-                />
             </div>
+
+            {/*
+              The line's space is held even though no line is drawn.
+
+              Two of the four cards carry one, and a skeleton that leaves it out
+              is a skeleton the wrong height for those two — the row would grow
+              by twenty-eight pixels the moment the figures arrived, which is
+              precisely the jump a skeleton exists to prevent.
+            */}
+            <div className="mt-3 h-7" aria-hidden="true" />
         </div>
     );
 }

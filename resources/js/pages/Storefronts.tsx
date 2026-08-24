@@ -9,6 +9,7 @@ import {
     DetailDrawer,
     StatusBadge,
     KPICard,
+    KPICardSkeleton,
 } from '@/components/modules';
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker';
 import { confirm } from '@/components/ui/Confirm';
@@ -617,6 +618,24 @@ export default function Storefronts() {
                     }
                 />
             </div>
+
+            {/*
+              Four shapes while the figures are on their way.
+
+              They appeared only once the data had landed, so the row above the
+              table went from nothing to four cards and pushed everything under
+              it down the page — the one thing on this screen that moved after
+              it had finished loading, on a screen where everything else already
+              held its place.
+            */}
+            {!summary && isLoading && (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                </div>
+            )}
 
             {summary && (
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
