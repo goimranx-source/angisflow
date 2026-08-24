@@ -114,6 +114,24 @@
      */
     --shell-hover: #eceef2;
     --shell-active-soft: #e4e7ec;
+
+    /*
+     * The dark rail's highlight, used on the pale one too.
+     *
+     * A wash a few percent off the background is the safe choice and the weak
+     * one: it has to be looked for, and on a rail of forty rows "which one is
+     * lit" should not be a question anybody squints at.
+     *
+     * Dark on light is the same trick the dark rail plays in reverse, and it
+     * costs nothing the pale wash was buying -- the row is unmistakable from
+     * the far side of the screen.
+     *
+     * Hover and active share it deliberately. They are not two facts competing
+     * for one eye: only one row can be pointed at, and the row you are on says
+     * so in its weight and in the colour of its mark.
+     */
+    --nav-highlight: #1b3049;
+    --nav-highlight-text: #eef4fa;
     /* One corner for the whole frame — the rail, and every panel that floats
        out of it. Three of them had picked their own (5px, 12px, 16px), so a
        flyout never looked like it came from the sidebar it was attached to. */
@@ -137,6 +155,21 @@
      */
     --z-shell: 60; /* topbar, sidebar */
     --z-shell-menu: 130; /* menus and flyouts belonging to the shell */
+
+    /*
+     * A page's own flyout, and the sheet under it.
+     *
+     * These were being written as z-10, z-20, z-40 -- numbers picked to beat
+     * whatever was nearby on the same page, which works until the thing nearby
+     * is the sidebar at 70. A sheet meant to swallow every click on the page
+     * swallowed only the clicks in the middle of it, and the rail stayed live
+     * and pointing underneath.
+     *
+     * Above the shell, below a dialog: a filter panel should cover the menu,
+     * and a dialog should cover the filter panel.
+     */
+    --z-flyout: 140; /* the sheet that catches the click that closes it */
+    --z-flyout-panel: 141; /* the panel itself */
     --z-overlay: 200; /* the dimmed backdrop behind a dialog */
     --z-modal: 210; /* the dialog or drawer itself */
     --z-toast: 300; /* above everything, always */
@@ -2911,6 +2944,16 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     .primary-strip {
         display: flex;
         align-items: center;
+
+        /*
+         * Spread, not stretched.
+         *
+         * These shared the rail's width between them, which made each one a
+         * wide short slab with an icon adrift in the middle -- the hover lit up
+         * a letterbox rather than the icon. They are squares now, spaced across
+         * the strip, so what lights up is the thing that was aimed at.
+         */
+        justify-content: space-between;
         gap: 4px;
         overflow-x: auto;
         scrollbar-width: none;
@@ -2932,10 +2975,10 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        they would shrink below a hittable size, the strip scrolls instead. */
     .primary-chip {
         display: grid;
-        flex: 1 0 auto;
+        flex: none;
         place-items: center;
-        min-width: 2.25rem;
-        height: 2.25rem;
+        width: 2rem;
+        height: 2rem;
         border-radius: 5px;
         color: var(--shell-text);
         transition:
@@ -2946,13 +2989,13 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* Collapsed there is one column, so they stack at a fixed size instead. */
     html.rail-collapsed:not(.rail-peek) .primary-chip {
         flex: none;
-        width: 2.25rem;
-        height: 2.25rem;
+        width: 2rem;
+        height: 2rem;
     }
 
     .primary-chip:hover {
-        background: var(--shell-active-soft);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
 
     .primary-chip.is-active {
@@ -4834,8 +4877,9 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        the same hover-to-reveal bar as everywhere else, not a permanently
        invisible one. */
 
+    /* Tight. It is a strip of four icons, not a section. */
     .rail-primary {
-        padding: 10px;
+        padding: 6px 8px;
     }
 
 
@@ -4889,9 +4933,16 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         border-radius: 5px;
         border: 1px solid var(--shell-border);
         color: var(--shell-text);
-        background: transparent;
+        /*
+         * Filled, not a hairline on white.
+         *
+         * At 65% opacity on the rail's own background this was the suggestion
+         * of a button. It is the only way to fold the rail, so it has to look
+         * like something before it is hovered rather than after.
+         */
+        background: var(--shell-hover);
         cursor: pointer;
-        opacity: 0.65;
+        opacity: 1;
         transition:
             opacity 0.15s ease,
             background-color 0.15s ease,
@@ -4955,17 +5006,18 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      */
     .nav-flat:hover,
     .nav-parent:hover {
-        background: var(--shell-hover);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
 
     .nav-flat.active {
-        background: var(--shell-active-soft);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
+        font-weight: 500;
     }
     
     .nav-flat.active:hover {
-        background: var(--shell-active-soft);
+        background: var(--nav-highlight);
     }
 
     .nav-icon {
@@ -5004,7 +5056,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
 
     .nav-flat.active .nav-icon {
         background: transparent;
-        color: var(--shell-text-strong);
+        color: var(--nav-highlight-text);
     }
 
     /* One line each, so the list keeps its rhythm. "Courier & Delivery"
@@ -5024,13 +5076,13 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        top-level page does. Folded shut it is the only thing saying where you
        are, and a colour change alone was too quiet to do that job. */
     .nav-parent.holds-active {
-        background: var(--shell-active-soft);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
 
     .nav-parent.holds-active:hover {
-        background: var(--shell-active-soft);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
     
     .nav-parent.holds-active .nav-caret {
@@ -5045,8 +5097,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        be one piece with. */
     html:not(.rail-collapsed) .nav-group.is-open > .nav-parent,
     html.rail-peek .nav-group.is-open > .nav-parent {
-        background: var(--shell-hover);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
 
     .nav-caret {
@@ -5150,12 +5202,20 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        edge and the line is the room a 7px dot needs to straddle the line
        and still be whole. The margin/padding split below keeps every row's
        final x-position identical to what it was. */
+    /*
+     * Indented enough to read as nested, not enough to run out of line.
+     *
+     * 12px of margin and 23px of padding put every nested row 35px in from the
+     * rail's edge -- a third of the usable width spent saying "this belongs to
+     * the row above", which the guide line was already saying on its own. Long
+     * names ran out of room and ellipsised to pay for it.
+     */
     .nav-children {
         position: relative;
         min-height: 0;
         overflow: hidden;
-        margin-left: 12px;
-        padding: 10px 0 10px 23px;
+        margin-left: 6px;
+        padding: 8px 0 8px 18px;
     }
 
     .nav-children::before {
@@ -5173,8 +5233,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         display: flex;
         align-items: center;
         gap: 4px;
-        padding: 7px 5px;
-        margin-bottom: 4px;
+        padding: 6px 3px;
+        margin-bottom: 3px;
         border-radius: 5px;
         font-size: 0.8125rem;
         line-height: 1.35;
@@ -5209,12 +5269,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         content: '';
         position: absolute;
         /* Centred on the guide line: .nav-children indents its rows by
-           23px and draws the line 4px in from its own left edge, so 22px
+           18px and draws the line 4px in from its own left edge, so 17px
            back from a row puts this 7px dot's middle on the line's middle
            — and 1px clear of the clip, which is what the line being a
            pseudo-element rather than a border buys. Move the line and this
            moves with it. */
-        left: -22px;
+        left: -17px;
         top: 50%;
         width: 7px;
         height: 7px;

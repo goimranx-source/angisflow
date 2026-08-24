@@ -863,12 +863,12 @@ export default function Storefronts() {
                                             is what people expect of something
                                             that opened over the page. */}
                                         <div
-                                            className="flyout-backdrop fixed inset-0 z-[var(--z-dropdown,40)]"
+                                            className="flyout-backdrop fixed inset-0 z-[var(--z-flyout)]"
                                             onClick={() => setFiltersOpen(false)}
                                         />
 
                                         <div
-                                            className="absolute right-0 top-full z-[calc(var(--z-dropdown,40)+1)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
+                                            className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
                                             style={{
                                                 borderColor: 'var(--shell-border)',
 

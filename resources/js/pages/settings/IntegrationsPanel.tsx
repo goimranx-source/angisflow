@@ -59,9 +59,12 @@ function IntegrationSyncButton({
             
             {isOpen && buttonRect && (
                 <>
-                    <div className="fixed inset-0 z-10" onClick={onToggle} />
+                    <div
+                        className="flyout-backdrop fixed inset-0 z-[var(--z-flyout)]"
+                        onClick={onToggle}
+                    />
                     <div 
-                        className="fixed z-20 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg"
+                        className="fixed z-[var(--z-flyout-panel)] w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg"
                         style={{
                             top: showAbove ? undefined : `${buttonRect.bottom + 4}px`,
                             bottom: showAbove ? `${window.innerHeight - buttonRect.top + 4}px` : undefined,

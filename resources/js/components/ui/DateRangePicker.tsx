@@ -202,8 +202,28 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
             </button>
 
             {open && (
+                /*
+                  A sheet under it, like every other panel that opens over the
+                  page.
+
+                  This closed on an outside click through a document listener
+                  and drew nothing, so while the calendar was open the whole
+                  page stayed live underneath: every button still lit on hover
+                  and still showed a hand, and the first click on any of them
+                  went to that button rather than closing the calendar.
+
+                  The listener stays -- it is what handles a click that lands
+                  outside the window entirely, and Escape.
+                */
                 <div
-                    className="absolute right-0 z-[110] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
+                    className="flyout-backdrop fixed inset-0 z-[var(--z-flyout)]"
+                    onClick={() => setOpen(false)}
+                />
+            )}
+
+            {open && (
+                <div
+                    className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
                     style={{
                         /*
                           The same arrival as every other panel that opens over
