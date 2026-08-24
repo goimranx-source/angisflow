@@ -171,9 +171,19 @@ export function Confirm({
 }
 
 /**
- * Simplified confirm utility function.
+ * Ask before destroying something, and wait for the answer.
  *
- * For quick confirmations without managing state manually.
+ * -- This used to be a lie -----------------------------------------------------
+ *
+ * It was a placeholder that called `window.confirm` and left a comment saying a
+ * global provider would be needed one day. So every call site that reached for
+ * the tidy-looking helper got the browser's grey box with the page's URL above
+ * it -- and the two dozen that called `window.confirm` outright were, at least,
+ * not pretending otherwise.
+ *
+ * The provider exists now, in `@/lib/confirm`. The signature did not change, so
+ * the call sites already awaiting this one got the real dialog without being
+ * touched.
  *
  * @example
  * ```tsx
@@ -182,21 +192,5 @@ export function Confirm({
  * }
  * ```
  */
-export function confirm(
-    title: string,
-    description: string,
-    _options?: {
-        confirmText?: string;
-        cancelText?: string;
-        variant?: ConfirmVariant;
-    },
-): Promise<boolean> {
-    return new Promise((resolve) => {
-        // This would require a global confirm provider
-        // For now, components should use the Confirm component directly
-        // This is a placeholder for future implementation
-        const result = window.confirm(`${title}\n\n${description}`);
-        resolve(result);
-    });
-}
+export { confirm } from '@/lib/confirm';
 

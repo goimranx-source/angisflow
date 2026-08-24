@@ -11,6 +11,7 @@ import { NavigationLoadingProvider, useNavigationLoading } from '@/providers/Nav
 import { SearchFlyout } from '@/components/shell/SearchFlyout';
 import { Sidebar } from '@/components/shell/Sidebar';
 import { Toasts } from '@/components/shell/Toasts';
+import { ConfirmHost } from '@/components/ui/ConfirmHost';
 import { Topbar } from '@/components/shell/Topbar';
 import { useSession } from '@/providers/SessionProvider';
 
@@ -374,6 +375,7 @@ function AppLayoutInner({ children }: { children: ReactNode }) {
             />
 
             <Toasts />
+            <ConfirmHost />
         </div>
         </PovaProvider>
     );

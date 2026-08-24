@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
+import { confirm } from '@/lib/confirm';
 
 type Transaction = {
     id: string;
@@ -165,8 +166,8 @@ export default function Transactions() {
         // TODO: Implement export
     };
 
-    const handleBulkVoid = () => {
-        if (confirm(`Void ${selectedTransactions.length} transactions? They will be marked as voided but kept for audit.`)) {
+    const handleBulkVoid = async () => {
+        if (await confirm(`Void ${selectedTransactions.length} transactions? They will be marked as voided but kept for audit.`)) {
             console.log('Voiding transactions:', selectedTransactions);
             // TODO: Implement void
             setSelectedTransactions([]);
@@ -181,8 +182,8 @@ export default function Transactions() {
     };
 
     // Void single transaction
-    const handleVoidTransaction = (id: string, reference: string) => {
-        if (confirm(`Void transaction ${reference}?`)) {
+    const handleVoidTransaction = async (id: string, reference: string) => {
+        if (await confirm(`Void transaction ${reference}?`)) {
             console.log('Voiding transaction:', id);
             // TODO: Implement void
         }

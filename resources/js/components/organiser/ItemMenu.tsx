@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { ManageTagsModal } from '@/components/organiser/ManageTagsModal';
 import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
+import { confirm } from '@/lib/confirm';
 import { organiserKey, useOrganiser, useOrganiserActions, type ItemType } from '@/hooks/useOrganiser';
 import { cn } from '@/lib/utils';
 
@@ -37,7 +38,12 @@ export function ItemMenu({
     const { setFavourite, assignTag } = useOrganiserActions();
     const [open, setOpen] = useState(false);
     const [managing, setManaging] = useState(false);
-    const [confirming, setConfirming] = useState(false);
+    /*
+     * Deleting a workspace takes its books with it. That belongs in the
+     * sentence somebody reads before typing the name, not in a toast
+     * afterwards.
+     */
+    const cascade = type === 'workspace' && (holds ?? 0) > 0;
     const [tagsOpen, setTagsOpen] = useState(false);
     const [box, setBox] = useState({ top: 0, left: 0, above: false, tagsLeft: false });
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -223,9 +229,34 @@ export function ItemMenu({
                         <button
                             type="button"
                             role="menuitem"
-                            onClick={() => {
-                                setConfirming(true);
+                            onClick={async () => {
                                 setOpen(false);
+
+                                /*
+                                  Typing the name, in the app's own dialog.
+
+                                  This used to raise a private copy of the
+                                  confirmation -- its own backdrop, its own
+                                  buttons, its own idea of what a dangerous
+                                  question looks like. The typing is the part
+                                  worth keeping; the rest is now the same
+                                  dialog every other delete in the app uses.
+                                */
+                                const sure = await confirm(
+                                    `Delete ${name}?`,
+                                    type === 'workspace'
+                                        ? cascade
+                                            ? holds === 1
+                                                ? 'The workspace goes, and so does the set of books kept in it — along with every figure in them.'
+                                                : `The workspace goes, and so do all ${holds} sets of books kept in it — along with every figure in them.`
+                                            : 'The workspace is removed from every list.'
+                                        : 'This set of books is removed from every list, along with the figures kept in it.',
+                                    { requireText: name, confirmText: 'Yes, Delete' },
+                                );
+
+                                if (sure) {
+                                    onDelete();
+                                }
                             }}
                             className="row-menu-item is-danger"
                         >
@@ -238,118 +269,6 @@ export function ItemMenu({
 
             {managing && <ManageTagsModal onClose={() => setManaging(false)} />}
 
-            {confirming && (
-                <ConfirmDelete
-                    name={name}
-                    type={type}
-                    holds={holds}
-                    onCancel={() => setConfirming(false)}
-                    onConfirm={() => {
-                        setConfirming(false);
-                        onDelete();
-                    }}
-                />
-            )}
         </>
-    );
-}
-
-/**
- * Type the name to delete it.
- *
- * ── Why typing rather than a second button ───────────────────────────────────
- *
- * "Are you sure?" is answered yes by reflex. Writing the name out is the only
- * confirmation that requires reading which thing is about to go — which is the
- * actual question, because the row above and the row below look the same.
- */
-function ConfirmDelete({
-    name,
-    type,
-    holds,
-    onCancel,
-    onConfirm,
-}: {
-    name: string;
-    type: ItemType;
-    holds?: number;
-    onCancel: () => void;
-    onConfirm: () => void;
-}) {
-    const [typed, setTyped] = useState('');
-    const matches = typed.trim() === name.trim();
-
-    // Deleting a workspace takes its books with it. That has to be said here,
-    // in the sentence somebody reads before typing the name — not discovered
-    // afterwards from a toast.
-    const cascade = type === 'workspace' && (holds ?? 0) > 0;
-
-    useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onCancel();
-            }
-        };
-
-        document.addEventListener('keydown', onKey);
-
-        return () => document.removeEventListener('keydown', onKey);
-    }, [onCancel]);
-
-    return createPortal(
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-            <div className="absolute inset-0" onClick={onCancel} aria-hidden />
-
-            <div className="modal">
-                <div className="flex items-start gap-3">
-                    <span className="modal-icon is-danger">
-                        <Icon name="warning" size={18} weight="duotone" />
-                    </span>
-                    <div className="min-w-0">
-                        <h2 className="text-base font-semibold text-[var(--color-text-main)]">
-                            Delete {name}?
-                        </h2>
-                        <p className="mt-1 text-[0.8125rem] text-[var(--color-text-body)]">
-                            {type === 'workspace'
-                                ? cascade
-                                    ? holds === 1
-                                        ? 'The workspace goes, and so does the set of books kept in it — along with every figure in them.'
-                                        : `The workspace goes, and so do all ${holds} sets of books kept in it — along with every figure in them.`
-                                    : 'The workspace is removed from every list.'
-                                : 'This set of books is removed from every list, along with the figures kept in it.'}
-                        </p>
-                    </div>
-                </div>
-
-                <label className="mt-4 block">
-                    <span className="mb-1.5 block text-[0.8125rem] text-[var(--color-text-body)]">
-                        Type <strong className="font-semibold">{name}</strong> to confirm
-                    </span>
-                    <input
-                        autoFocus
-                        value={typed}
-                        onChange={(event) => setTyped(event.target.value)}
-                        className="field"
-                        placeholder={name}
-                        aria-label={`Type ${name} to confirm`}
-                    />
-                </label>
-
-                <div className="mt-4 flex justify-end gap-2">
-                    <button type="button" onClick={onCancel} className="todo-action">
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        disabled={!matches}
-                        onClick={onConfirm}
-                        className="modal-danger-action"
-                    >
-                        Delete
-                    </button>
-                </div>
-            </div>
-        </div>,
-        document.body,
     );
 }

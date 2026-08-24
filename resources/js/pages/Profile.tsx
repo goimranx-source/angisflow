@@ -13,6 +13,7 @@ import { toast } from '@/lib/toast';
 import { isPasskeySupported, registerPasskey } from '@/lib/webauthn';
 import { useSession } from '@/providers/SessionProvider';
 import type { BootPayload } from '@/types';
+import { confirm } from '@/lib/confirm';
 
 type Passkey = {
     id: string;
@@ -185,7 +186,7 @@ function DetailsCard({ onSaved }: { onSaved: (boot: BootPayload) => void }) {
     const removeAvatar = async () => {
         if (!auth?.user.avatar) return;
         
-        if (!window.confirm('Remove your profile picture?')) {
+        if (!await confirm('Remove your profile picture?')) {
             return;
         }
 
@@ -392,7 +393,7 @@ function TwoFactorCard({ onSensitive }: { onSensitive: (error: unknown) => boole
         }
     };
 
-    const confirm = (event: React.FormEvent) => {
+    const submitCode = (event: React.FormEvent) => {
         event.preventDefault();
 
         void confirmForm.post<{ recovery_codes: string[] }>('/auth/two-factor/confirm', {
@@ -410,7 +411,7 @@ function TwoFactorCard({ onSensitive }: { onSensitive: (error: unknown) => boole
     };
 
     const disable = async () => {
-        if (!window.confirm('Turn off two-factor authentication?')) {
+        if (!await confirm('Turn off two-factor authentication?')) {
             return;
         }
 
@@ -478,7 +479,7 @@ function TwoFactorCard({ onSensitive }: { onSensitive: (error: unknown) => boole
                     {setup.secret}
                 </p>
 
-                <form onSubmit={confirm} className="mt-5 space-y-3">
+                <form onSubmit={submitCode} className="mt-5 space-y-3">
                     <Field
                     label="Code from the app" error={confirmForm.errors.code}
                     type="text"
@@ -561,7 +562,7 @@ function PasskeysCard({ onSensitive }: { onSensitive: (error: unknown) => boolea
     };
 
     const remove = async (passkey: Passkey) => {
-        if (!window.confirm(`Remove "${passkey.name}"?`)) {
+        if (!await confirm(`Remove "${passkey.name}"?`)) {
             return;
         }
 

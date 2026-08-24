@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
+import { confirm } from '@/lib/confirm';
 
 type Employee = {
     id: string;
@@ -170,8 +171,8 @@ export default function Employees() {
         // TODO: Implement export
     };
 
-    const handleBulkDeactivate = () => {
-        if (confirm(`Terminate ${selectedEmployees.length} employees?`)) {
+    const handleBulkDeactivate = async () => {
+        if (await confirm(`Terminate ${selectedEmployees.length} employees?`)) {
             console.log('Terminating employees:', selectedEmployees);
             // TODO: Implement terminate
             setSelectedEmployees([]);

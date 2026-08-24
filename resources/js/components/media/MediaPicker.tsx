@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import type { MediaItem, MediaKind, MediaSort, MediaStats } from '@/types/settings';
+import { confirm } from '@/lib/confirm';
 
 type MediaPage = { data: MediaItem[]; meta: { next_cursor: string | null; has_more: boolean } };
 
@@ -239,7 +240,7 @@ export function MediaPicker({
             return;
         }
 
-        if (!window.confirm(`Remove ${ids.length} ${ids.length === 1 ? 'file' : 'files'} from the library? This cannot be undone.`)) {
+        if (!await confirm(`Remove ${ids.length} ${ids.length === 1 ? 'file' : 'files'} from the library? This cannot be undone.`)) {
             return;
         }
 

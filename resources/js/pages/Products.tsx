@@ -23,6 +23,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
+import { confirm } from '@/lib/confirm';
 
 import { ProductEditor } from './catalogue/ProductEditor';
 
@@ -159,24 +160,24 @@ export default function Products() {
         // TODO: Implement export
     };
 
-    const handleBulkActivate = () => {
-        if (confirm(`Activate ${selectedProducts.length} products?`)) {
+    const handleBulkActivate = async () => {
+        if (await confirm(`Activate ${selectedProducts.length} products?`)) {
             console.log('Activating products:', selectedProducts);
             // TODO: Implement activate
             setSelectedProducts([]);
         }
     };
 
-    const handleBulkDeactivate = () => {
-        if (confirm(`Deactivate ${selectedProducts.length} products?`)) {
+    const handleBulkDeactivate = async () => {
+        if (await confirm(`Deactivate ${selectedProducts.length} products?`)) {
             console.log('Deactivating products:', selectedProducts);
             // TODO: Implement deactivate
             setSelectedProducts([]);
         }
     };
 
-    const handleBulkDelete = () => {
-        if (confirm(`Delete ${selectedProducts.length} products? This cannot be undone.`)) {
+    const handleBulkDelete = async () => {
+        if (await confirm(`Delete ${selectedProducts.length} products? This cannot be undone.`)) {
             console.log('Deleting products:', selectedProducts);
             // TODO: Implement delete
             setSelectedProducts([]);

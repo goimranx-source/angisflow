@@ -35,6 +35,7 @@ import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
+import { confirm } from '@/lib/confirm';
 
 type Order = {
     id: string;
@@ -668,7 +669,7 @@ export default function Orders() {
     const [dispatchAmount, setDispatchAmount] = useState<string>('');
     const [selectedCourier, setSelectedCourier] = useState<string>('');
 
-    const handleApplyBulkAction = () => {
+    const handleApplyBulkAction = async () => {
         if (!bulkAction) {
             toast.error('Please select a bulk action first.');
             return;
@@ -695,11 +696,11 @@ export default function Orders() {
                 bulkUpdate.mutate({ order_ids: selectedOrders, action: 'mark_paid' });
                 break;
             case 'cancel':
-                if (!confirm(`Cancel ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'}?`)) return;
+                if (!await confirm(`Cancel ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'}?`)) return;
                 bulkUpdate.mutate({ order_ids: selectedOrders, action: 'cancel' });
                 break;
             case 'trash':
-                if (!confirm(`Move ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'} to trash?`)) return;
+                if (!await confirm(`Move ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'} to trash?`)) return;
                 bulkUpdate.mutate({ order_ids: selectedOrders, action: 'trash' });
                 break;
             case 'restore':
@@ -709,7 +710,7 @@ export default function Orders() {
                 bulkUpdate.mutate({ order_ids: selectedOrders, action: 'unarchive' });
                 break;
             case 'delete_permanently':
-                if (!confirm(`⚠️ PERMANENTLY DELETE ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'}?\n\nThis action CANNOT be undone!\n\nThe order data will be completely removed from the database.`)) return;
+                if (!await confirm(`⚠️ PERMANENTLY DELETE ${selectedOrders.length} order${selectedOrders.length === 1 ? '' : 's'}?\n\nThis action CANNOT be undone!\n\nThe order data will be completely removed from the database.`)) return;
                 bulkUpdate.mutate({ order_ids: selectedOrders, action: 'delete_permanently' });
                 break;
             case 'courier':
@@ -1382,8 +1383,8 @@ export default function Orders() {
                                                             <button
                                                                 type="button"
                                                                 className="mt-1 block text-xs font-medium text-[var(--color-danger)] hover:underline"
-                                                                onClick={() => {
-                                                                    if (window.confirm(`Cancel shipment for ${order.order_number}?`)) {
+                                                                onClick={async () => {
+                                                                    if (await confirm(`Cancel shipment for ${order.order_number}?`)) {
                                                                         cancelDispatch.mutate(order.id);
                                                                     }
                                                                 }}
@@ -1445,9 +1446,9 @@ export default function Orders() {
                                                         icon="trash"
                                                         label="Delete permanently"
                                                         variant="danger"
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             if (
-                                                                window.confirm(
+                                                                await confirm(
                                                                     `Permanently delete order ${order.order_number}? This cannot be undone.`,
                                                                 )
                                                             ) {
@@ -1496,9 +1497,9 @@ export default function Orders() {
                                                         icon="trash"
                                                         label="Move to trash"
                                                         variant="danger"
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             if (
-                                                                window.confirm(
+                                                                await confirm(
                                                                     `Move order ${order.order_number} to trash?`,
                                                                 )
                                                             ) {
@@ -1846,9 +1847,9 @@ export default function Orders() {
                                               icon: 'trash',
                                               variant: 'danger',
                                               description: 'Removed from the database, not recoverable',
-                                              onSelect: () => {
+                                              onSelect: async () => {
                                                   if (
-                                                      window.confirm(
+                                                      await confirm(
                                                           `Permanently delete ${noun}? This cannot be undone.`,
                                                       )
                                                   ) {
@@ -1968,8 +1969,8 @@ export default function Orders() {
                                                         key: 'cancel',
                                                         label: 'Cancel orders',
                                                         icon: 'x-circle',
-                                                        onSelect: () => {
-                                                            if (window.confirm(`Cancel ${noun}?`)) {
+                                                        onSelect: async () => {
+                                                            if (await confirm(`Cancel ${noun}?`)) {
                                                                 bulkUpdate.mutate({
                                                                     order_ids: selectedOrders,
                                                                     action: 'cancel',
@@ -1984,8 +1985,8 @@ export default function Orders() {
                                               icon: 'trash',
                                               variant: 'danger' as const,
                                               description: 'Recoverable from the Trash tab',
-                                              onSelect: () => {
-                                                  if (window.confirm(`Move ${noun} to trash?`)) {
+                                              onSelect: async () => {
+                                                  if (await confirm(`Move ${noun} to trash?`)) {
                                                       bulkUpdate.mutate({
                                                           order_ids: selectedOrders,
                                                           action: 'trash',
@@ -2457,9 +2458,9 @@ export default function Orders() {
                                         icon="trash"
                                         label="Delete permanently"
                                         variant="danger"
-                                        onClick={() => {
+                                        onClick={async () => {
                                             if (
-                                                window.confirm(
+                                                await confirm(
                                                     `Permanently delete order ${selectedOrder.order_number}? This cannot be undone.`,
                                                 )
                                             ) {
@@ -2517,9 +2518,9 @@ export default function Orders() {
                                         icon="trash"
                                         label="Move to trash"
                                         variant="danger"
-                                        onClick={() => {
+                                        onClick={async () => {
                                             if (
-                                                window.confirm(
+                                                await confirm(
                                                     `Move order ${selectedOrder.order_number} to trash?`,
                                                 )
                                             ) {

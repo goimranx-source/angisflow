@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { confirm } from '@/lib/confirm';
 
 type Credential = {
     id: string;
@@ -232,8 +233,8 @@ export default function Credentials() {
                                       </button>
                                       <button
                                           className="btn-ghost text-xs text-red-600 hover:text-red-700"
-                                          onClick={() => {
-                                              if (confirm(`Revoke "${c.label}"? This cannot be undone.`)) {
+                                          onClick={async () => {
+                                              if (await confirm(`Revoke "${c.label}"? This cannot be undone.`)) {
                                                   revoke.mutate(c.id);
                                               }
                                           }}

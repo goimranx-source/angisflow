@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
+import { confirm } from '@/lib/confirm';
 
 type Customer = {
     id: string;
@@ -114,8 +115,8 @@ export default function Customers() {
         // TODO: Implement export
     };
 
-    const handleBulkDelete = () => {
-        if (confirm(`Delete ${selectedCustomers.length} customers?`)) {
+    const handleBulkDelete = async () => {
+        if (await confirm(`Delete ${selectedCustomers.length} customers?`)) {
             console.log('Deleting customers:', selectedCustomers);
             // TODO: Implement delete
             setSelectedCustomers([]);

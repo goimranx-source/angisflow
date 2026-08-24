@@ -18,6 +18,7 @@ import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { useSession } from '@/providers/SessionProvider';
+import { confirm } from '@/lib/confirm';
 
 type FiscalYear = {
     id: string;
@@ -130,16 +131,16 @@ export default function FiscalYears() {
     };
 
     // Close fiscal year
-    const handleCloseFiscalYear = (id: string, name: string) => {
-        if (confirm(`Close fiscal year "${name}"? This will prevent new transactions from being posted to this period.`)) {
+    const handleCloseFiscalYear = async (id: string, name: string) => {
+        if (await confirm(`Close fiscal year "${name}"? This will prevent new transactions from being posted to this period.`)) {
             console.log('Closing fiscal year:', id);
             // TODO: Implement close
         }
     };
 
     // Lock fiscal year
-    const handleLockFiscalYear = (id: string, name: string) => {
-        if (confirm(`Lock fiscal year "${name}"? This is permanent and cannot be undone.`)) {
+    const handleLockFiscalYear = async (id: string, name: string) => {
+        if (await confirm(`Lock fiscal year "${name}"? This is permanent and cannot be undone.`)) {
             console.log('Locking fiscal year:', id);
             // TODO: Implement lock
         }

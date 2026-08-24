@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import type { MediaItem } from '@/types/settings';
+import { confirm } from '@/lib/confirm';
 
 /**
  * One file, in full — the panel a click on a tile opens.
@@ -60,7 +61,7 @@ export function MediaDetail({
     };
 
     const remove = async () => {
-        if (!window.confirm(`Remove "${item.name}" from the library? This cannot be undone.`)) {
+        if (!await confirm(`Remove "${item.name}" from the library? This cannot be undone.`)) {
             return;
         }
 
