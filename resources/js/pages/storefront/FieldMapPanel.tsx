@@ -187,7 +187,20 @@ const ENTITIES = [
  * product sold through two shops can carry a different value in each, and there
  * is no single true one to put on the product itself.
  */
-export function FieldMapPanel({ connectionId }: { connectionId: string }) {
+export function FieldMapPanel({
+    connectionId,
+    onSummary,
+}: {
+    connectionId: string;
+    /**
+     * How much is mapped, handed upwards.
+     *
+     * The counts belong beside Sync in the drawer's own header, where they
+     * describe the connection rather than the panel — and the panel is the only
+     * thing that can work them out. So it says, and the drawer shows.
+     */
+    onSummary?: (summary: { mapped: number; unmapped: number }) => void;
+}) {
     const queryClient = useQueryClient();
 
     const [entity, setEntity] = useState('order');
@@ -486,6 +499,13 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
      * how much of it will appear when somebody edits a record, and how many
      * rows are asking for something before they will work.
      */
+    /*
+     * Told to the drawer whenever it changes, and only then.
+     *
+     * Guarded by the values themselves rather than by an array of dependencies:
+     * `rows` is a new array on every keystroke in the filter, so depending on it
+     * would report identical counts a hundred times while somebody types.
+     */
     const summary = {
         mapped: rows.length,
         hidden: rows.filter((row) => row.visible === false).length,
@@ -493,6 +513,11 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
             (row) => needsOptions(row.transform) && (row.options?.length ?? 0) === 0,
         ).length,
     };
+
+    useEffect(() => {
+        onSummary?.({ mapped: summary.mapped, unmapped: summary.needing + summary.hidden });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [summary.mapped, summary.needing, summary.hidden]);
 
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
@@ -640,57 +665,32 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                         </TabsList>
                     </Tabs>
 
-                    {/*
-                      What is on screen, said beside the thing that decides it.
+                    </div>
 
-                      These sat to the right of the search box, where they read
-                      as a result count for a search nobody had typed. They
-                      describe the mapping for whichever of Orders and Products
-                      is selected, so they belong next to that choice.
-                    */}
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
-                        <span>{summary.mapped} mapped</span>
-
-                        {summary.hidden > 0 && (
-                            <span className="flex items-center gap-1">
-                                <Icon name="eye" size={11} />
-                                {summary.hidden} hidden
-                            </span>
-                        )}
-
-                        {summary.needing > 0 && (
-                            <span
-                                className="flex items-center gap-1"
-                                style={{ color: 'var(--color-warning-text)' }}
-                            >
-                                <Icon name="warning" size={11} />
-                                {summary.needing} need choices
-                            </span>
-                        )}
-
+                    <div className="flex flex-wrap items-center gap-2">
                         {/*
-                          The sentence that used to run the width of the panel,
-                          on a mark instead.
+                          The filter, beside the buttons rather than on a row of
+                          its own.
 
-                          It said something worth knowing once — that this shop
-                          describes its own fields, so the list includes ones no
-                          record has used — and then went on saying it above
-                          every visit thereafter. A line read once and skipped
-                          for ever is a line that has become furniture.
+                          A search box given a whole row claims as much of the
+                          screen as the table it filters, which is more weight
+                          than a thing nobody uses until they need it deserves.
                         */}
-                        {sample?.described && (
-                            <span
-                                className="cursor-help opacity-60"
-                                title="This shop describes its own fields, so everything it has is listed below — including fields no order or product has used yet."
-                                aria-label="This shop describes its own fields, so everything it has is listed below — including fields no order or product has used yet."
-                            >
-                                <Icon name="info" size={12} />
-                            </span>
-                        )}
-                    </div>
-                    </div>
+                        <div className="relative w-56">
+                            <Icon
+                                name="magnifying-glass"
+                                size={13}
+                                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                            />
+                            <input
+                                className="field w-full pl-8 text-sm"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Find a field…"
+                                aria-label="Filter the mapping"
+                            />
+                        </div>
 
-                    <div className="flex items-center gap-2">
                         {/* Only offered when there is something to offer — a
                             button that does nothing when pressed teaches people
                             to stop pressing buttons. */}
@@ -717,20 +717,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                     </div>
                 </div>
 
-                <div className="relative">
-                    <Icon
-                        name="magnifying-glass"
-                        size={13}
-                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
-                    />
-                    <input
-                        className="field w-full pl-8 text-sm"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Find a field — by its name here, its name there, or its value"
-                        aria-label="Filter the mapping"
-                    />
-                </div>
             </div>
 
             {/*

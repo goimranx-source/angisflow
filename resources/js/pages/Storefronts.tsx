@@ -180,6 +180,15 @@ export default function Storefronts() {
     const [newType, setNewType] = useState('online');
     const [newStatus, setNewStatus] = useState('active');
     const [storeTab, setStoreTab] = useState<'details' | 'fields' | 'statuses'>('details');
+
+    /*
+     * What the open panel has to say about itself.
+     *
+     * Held here rather than in the panel because it is shown here — beside Sync,
+     * where it describes the connection. Cleared when the tab changes, so the
+     * field mapping's counts never linger over the status list.
+     */
+    const [panelCounts, setPanelCounts] = useState<{ mapped: number; unmapped: number } | null>(null);
     const [showSyncMenu, setShowSyncMenu] = useState(false);
     const [inlineSyncMenu, setInlineSyncMenu] = useState<string | null>(null);
     
@@ -843,6 +852,50 @@ export default function Storefronts() {
                  */
                 actions={
                     selectedStorefront?.is_connected && selectedStorefront?.connection_id ? (
+                        <>
+                            {/*
+                              What is mapped, in a box of its own beside Sync.
+
+                              Bordered to match the button next to it, so the two
+                              read as one group of things about this connection
+                              rather than as a stray phrase that drifted into the
+                              header. Divided down the middle because the two
+                              numbers answer opposite questions, and a run of
+                              small grey words does not say which is which.
+                            */}
+                            {storeTab !== 'details' && panelCounts && (
+                                <div
+                                    className="hidden items-stretch overflow-hidden rounded-[var(--shell-radius)] border text-xs sm:flex"
+                                    style={{ borderColor: 'var(--shell-border)' }}
+                                >
+                                    <span className="px-2.5 py-1.5 text-[var(--color-text-muted)]">
+                                        <span className="font-medium text-[var(--color-text-main)]">
+                                            {panelCounts.mapped}
+                                        </span>{' '}
+                                        mapped
+                                    </span>
+
+                                    <span
+                                        className="w-px"
+                                        style={{ background: 'var(--shell-border)' }}
+                                        aria-hidden="true"
+                                    />
+
+                                    <span
+                                        className="px-2.5 py-1.5"
+                                        style={{
+                                            color:
+                                                panelCounts.unmapped > 0
+                                                    ? 'var(--color-warning-text)'
+                                                    : 'var(--color-text-muted)',
+                                        }}
+                                    >
+                                        <span className="font-medium">{panelCounts.unmapped}</span> not
+                                        mapped
+                                    </span>
+                                </div>
+                            )}
+
                     <div className="relative">
                         <div className="flex gap-0">
                             <button
@@ -911,6 +964,7 @@ export default function Storefronts() {
                             </>
                         )}
                     </div>
+                        </>
                     ) : undefined
                 }
                 /*
@@ -1024,14 +1078,23 @@ export default function Storefronts() {
                                 <Tabs
                                     defaultValue="details"
                                     value={storeTab}
-                                    onValueChange={(next) =>
-                                        setStoreTab(next as 'details' | 'fields' | 'statuses')
-                                    }
+                                    onValueChange={(next) => {
+                                        setStoreTab(next as 'details' | 'fields' | 'statuses');
+
+                                        // The next panel will report its own.
+                                        setPanelCounts(null);
+                                    }}
                                 >
-                                    <TabsList className="!border-b-0">
-                                        <TabsTrigger value="details">Details</TabsTrigger>
-                                        <TabsTrigger value="fields">Field mapping</TabsTrigger>
-                                        <TabsTrigger value="statuses">Statuses</TabsTrigger>
+                                    <TabsList>
+                                        <TabsTrigger value="details" icon="info">
+                                            Details
+                                        </TabsTrigger>
+                                        <TabsTrigger value="fields" icon="arrows-clockwise">
+                                            Field mapping
+                                        </TabsTrigger>
+                                        <TabsTrigger value="statuses" icon="list">
+                                            Statuses
+                                        </TabsTrigger>
                                     </TabsList>
                                 </Tabs>
 
@@ -1039,11 +1102,17 @@ export default function Storefronts() {
                         )}
 
                         {storeTab === 'fields' && selectedStorefront.connection_id && (
-                            <FieldMapPanel connectionId={selectedStorefront.connection_id} />
+                            <FieldMapPanel
+                                connectionId={selectedStorefront.connection_id}
+                                onSummary={setPanelCounts}
+                            />
                         )}
 
                         {storeTab === 'statuses' && selectedStorefront.connection_id && (
-                            <StatusMapPanel connectionId={selectedStorefront.connection_id} />
+                            <StatusMapPanel
+                                connectionId={selectedStorefront.connection_id}
+                                onSummary={setPanelCounts}
+                            />
                         )}
 
                         {storeTab === 'details' && (

@@ -14,9 +14,10 @@ import { cn } from '@/lib/utils';
  *
  * So there are two looks, and they mean something.
  *
- *   underline    Where am I? The top of a page, the top of a drawer. Reads as
- *                part of the surface it sits on, because it is naming the
- *                surface.
+ *   contained    Where am I? The top of a page, the top of a drawer. A bar of
+ *                its own with a rule under the chosen item, so the group reads
+ *                as one control holding several places rather than as a row of
+ *                text that happens to be clickable.
  *
  *   segmented    Which view of this? A control inside a panel, sitting in its
  *                own tinted track so it reads as an object placed on the page
@@ -32,7 +33,7 @@ import { cn } from '@/lib/utils';
  * anybody passed a rounded corner for an unrelated reason. The list knows what
  * it is; the triggers should be told rather than left to infer.
  */
-type Variant = 'underline' | 'segmented';
+type Variant = 'contained' | 'segmented';
 
 type TabsContextType = {
     activeTab: string;
@@ -60,7 +61,7 @@ type TabsProps = {
     /** Callback when tab changes */
     onValueChange?: (value: string) => void;
     /**
-     * 'underline' names the surface — a page or a drawer.
+     * 'contained' names the surface — a page or a drawer.
      * 'segmented' chooses a view within one, and is what nested tabs use.
      */
     variant?: Variant;
@@ -87,7 +88,7 @@ export function Tabs({
     defaultValue,
     value: controlledValue,
     onValueChange,
-    variant = 'underline',
+    variant = 'contained',
     children,
     className,
 }: TabsProps) {
@@ -120,10 +121,17 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
             className={cn(
                 'flex items-center',
 
-                // A rule the full width of the surface, with the active tab's
-                // marker sitting on it. The rule is what makes it read as a
-                // division of the page rather than as a row of buttons.
-                variant === 'underline' && 'gap-1 border-b border-[var(--color-border-light)]',
+                /*
+                 * A bar of its own, sized to its contents.
+                 *
+                 * It was a rule drawn the full width of whatever it sat in,
+                 * which put a hairline across the page for the sake of marking
+                 * one word on it. Contained, the group reads as a single control
+                 * holding three places, and the space to its right is free for
+                 * the things that act on the whole screen.
+                 */
+                variant === 'contained' &&
+                    'inline-flex gap-0.5 rounded-[var(--shell-radius)] border border-[var(--shell-border)] p-1',
 
                 // A track, so the group reads as one control. Tight, because it
                 // sits inside something that already has its own padding.
@@ -166,19 +174,20 @@ export function TabsTrigger({ value, children, disabled = false, className, badg
                 'relative flex items-center gap-1.5 text-sm font-medium transition-colors duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-subtle)]',
 
-                variant === 'underline' && [
-                    'px-3 py-2',
+                variant === 'contained' && [
+                    'rounded-[var(--shell-radius-sm)] px-3 py-1.5',
 
                     /*
-                     * The marker sits *on* the rule, not above it.
+                     * A short rule under the chosen item, inset from its edges.
                      *
-                     * -bottom-px puts it over the list's own border, so the
-                     * active tab looks joined to the panel below rather than
-                     * underlined twice.
+                     * Inset rather than full-bleed so it reads as marking the
+                     * word rather than as a border on the button, which is the
+                     * difference between a tab that looks selected and one that
+                     * looks like a different kind of button.
                      */
                     isActive
-                        ? 'text-[var(--color-brand)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-[var(--color-brand)]'
-                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]',
+                        ? 'text-[var(--color-brand)] after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-[var(--color-brand)]'
+                        : 'text-[var(--color-text-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]',
                 ],
 
                 variant === 'segmented' && [

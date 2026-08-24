@@ -17,7 +17,14 @@ import type { StatusCatalogue } from '@/pages/settings/integrations/types';
  * One answer serves both directions: read in, the map is inverted; pushed out,
  * it is used directly.
  */
-export function StatusMapPanel({ connectionId }: { connectionId: string }) {
+export function StatusMapPanel({
+    connectionId,
+    onSummary,
+}: {
+    connectionId: string;
+    /** How much is matched, for the badge beside Sync in the drawer's header. */
+    onSummary?: (summary: { mapped: number; unmapped: number }) => void;
+}) {
     const queryClient = useQueryClient();
 
     const [rules, setRules] = useState<Record<string, string>>({});
@@ -97,6 +104,11 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
 
     const mapped = Object.keys(rules).length;
     const unmapped = (catalogue?.ours.length ?? 0) - mapped;
+
+    useEffect(() => {
+        onSummary?.({ mapped, unmapped });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mapped, unmapped]);
 
     return (
         <div className="space-y-4">
@@ -180,18 +192,12 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
                               the rest of the toolbar.
                             */}
                             <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
-                                <span>{mapped} matched</span>
-
-                                {unmapped > 0 && (
-                                    <span
-                                        className="flex items-center gap-1"
-                                        style={{ color: 'var(--color-warning-text)' }}
-                                    >
-                                        <Icon name="warning" size={11} />
-                                        {unmapped} not matched
-                                    </span>
-                                )}
-
+                                {/*
+                                  The counts themselves are in the drawer's
+                                  header now, beside Sync. What stays is the one
+                                  thing that has no home up there: the statuses
+                                  this shop sends that nothing here listens for.
+                                */}
                                 {catalogue && catalogue.unclaimed.length > 0 && (
                                     <span
                                         className="cursor-help opacity-60"
