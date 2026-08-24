@@ -5024,12 +5024,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        top-level page does. Folded shut it is the only thing saying where you
        are, and a colour change alone was too quiet to do that job. */
     .nav-parent.holds-active {
-        background: rgba(0, 212, 232, 0.08);
+        background: var(--shell-active-soft);
         color: var(--shell-text-strong);
     }
 
     .nav-parent.holds-active:hover {
-        background: var(--shell-tint);
+        background: var(--shell-active-soft);
         color: var(--shell-text-strong);
     }
     
@@ -5045,7 +5045,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        be one piece with. */
     html:not(.rail-collapsed) .nav-group.is-open > .nav-parent,
     html.rail-peek .nav-group.is-open > .nav-parent {
-        background: var(--shell-tint);
+        background: var(--shell-hover);
         color: var(--shell-text-strong);
     }
 
