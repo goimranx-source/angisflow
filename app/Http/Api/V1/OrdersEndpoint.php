@@ -459,6 +459,7 @@ class OrdersEndpoint
 
         $orders = $frame;
         $revenue = $frame;
+        $processing = $frame;
 
         $rows = (clone $query)
             ->where('ordered_on', '>=', $from->toDateString())
@@ -467,6 +468,23 @@ class OrdersEndpoint
             ->select('ordered_on')
             ->selectRaw('COUNT(*) as orders_count')
             ->selectRaw('SUM(total_minor) as total_minor')
+            /*
+             * Which of that day's orders are still being worked on.
+             *
+             * ── What this can and cannot say ─────────────────────────────────
+             *
+             * Not "how many were in processing on the 3rd" -- nothing here
+             * knows that. An order carries one status, the one it has now, and
+             * reconstructing last Tuesday's would mean replaying the activity
+             * log, which only goes back as far as the day that log was added.
+             *
+             * What it says instead is which days' work is still open: of the
+             * orders placed on the 3rd, how many have not moved past
+             * processing yet. That is the more useful reading of the two on a
+             * card counting open work, because it points at the days that are
+             * stuck rather than at a queue length nobody can act on.
+             */
+            ->selectRaw("SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_count")
             ->groupBy('ordered_on')
             ->get();
 
@@ -483,6 +501,7 @@ class OrdersEndpoint
 
             $orders[$day] = (int) $row->orders_count;
             $revenue[$day] = round(((int) $row->total_minor) / $scale, 2);
+            $processing[$day] = (int) $row->processing_count;
         }
 
         $orders = array_values($orders);
@@ -491,6 +510,7 @@ class OrdersEndpoint
         return [
             'orders' => $orders,
             'revenue' => $revenue,
+            'processing' => array_values($processing),
             'delta' => [
                 'orders' => $this->weekOnWeek($orders),
                 'revenue' => $this->weekOnWeek($revenue),

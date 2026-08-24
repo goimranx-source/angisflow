@@ -156,6 +156,8 @@ type OrdersResponse = {
     trends: {
         orders: number[];
         revenue: number[];
+        /** Of each day's orders, how many are still being worked on. */
+        processing: number[];
         delta: { orders: number | null; revenue: number | null };
     };
     summary: {
@@ -1058,6 +1060,15 @@ export default function Orders() {
                         valueTitle={summary.processing_count.toLocaleString()}
                         icon="spinner-gap"
                         variant="warning"
+                        /*
+                          Which days' work is still open, rather than a queue
+                          length per day -- an order carries only the status it
+                          has now, so nothing here knows what was in processing
+                          three weeks ago. This points at the days that are
+                          stuck, which is the more useful of the two on a card
+                          counting open work.
+                        */
+                        spark={trends?.processing}
                     />
                 </div>
             )}
