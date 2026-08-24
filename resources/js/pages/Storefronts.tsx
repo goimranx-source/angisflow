@@ -11,7 +11,6 @@ import {
 } from '@/components/modules';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
 import { StatusMapPanel } from '@/pages/storefront/StatusMapPanel';
 import { useMoney } from '@/hooks/useMoney';
@@ -987,6 +986,47 @@ export default function Storefronts() {
                  * scrolling stays for the screens genuinely too small for it.
                  */
                 size={storeTab === 'details' ? 'md' : '2xl'}
+                /*
+                 * The tabs live in the drawer's own head now.
+                 *
+                 * They used to be the first thing in the scrolling body, which
+                 * meant pinning them, measuring their height, publishing it for
+                 * the toolbar beneath to stack against, and covering the strip
+                 * of padding they scrolled through. All of that existed to make
+                 * them behave like part of the head. Putting them in the head
+                 * is the same effect and none of the machinery.
+                 */
+                tabs={
+                    selectedStorefront?.is_connected && selectedStorefront?.connection_id
+                        ? [
+                              {
+                                  key: 'details',
+                                  label: 'Details',
+                                  icon: 'info',
+                                  content: null,
+                              },
+                              {
+                                  key: 'fields',
+                                  label: 'Field mapping',
+                                  icon: 'arrows-clockwise',
+                                  content: null,
+                              },
+                              {
+                                  key: 'statuses',
+                                  label: 'Statuses',
+                                  icon: 'list',
+                                  content: null,
+                              },
+                          ]
+                        : undefined
+                }
+                activeTab={storeTab}
+                onTabChange={(next) => {
+                    setStoreTab(next as 'details' | 'fields' | 'statuses');
+
+                    // The next panel will report its own.
+                    setPanelCounts(null);
+                }}
             >
                 {selectedStorefront && (
                     <div className="space-y-4">
@@ -996,111 +1036,6 @@ export default function Storefronts() {
                           its custom fields. A business with three shops maps
                           three different sets.
                         */}
-                        {selectedStorefront.is_connected && selectedStorefront.connection_id && (
-                            /*
-                             * Pinned, and measuring itself.
-                             *
-                             * Scrolling the mapping used to carry these tabs off
-                             * the top while the mapping's own toolbar stayed —
-                             * leaving a strip of empty drawer between the shop's
-                             * name and the first control, and no way back to
-                             * Details without scrolling to the top first.
-                             *
-                             * The height is published rather than assumed
-                             * because the toolbar inside the mapping stacks
-                             * directly beneath it, and that toolbar in turn
-                             * carries the column headings. Three sticky layers,
-                             * each needing to know the height of the one above,
-                             * and none of them a constant: this row wraps on a
-                             * narrow drawer, and the toolbar grows a button when
-                             * there are shop fields to add.
-                             */
-                            <div
-                                className="sticky z-30 -mx-6 -mt-4 flex flex-wrap items-center justify-between gap-2 px-6 pb-2 pt-4"
-                                style={{
-                                    background: 'var(--color-card-bg)',
-
-                                    /*
-                                     * ── The strip above, occupied rather than
-                                     * painted ────────────────────────────────
-                                     *
-                                     * The drawer body has 16px of top padding
-                                     * and rows scroll up through it, so a bar
-                                     * pinned at the scrollport top had content
-                                     * sliding past above it.
-                                     *
-                                     * A shadow was painted over that strip,
-                                     * which hid the rows and did nothing else:
-                                     * a shadow is not in the layout and cannot
-                                     * take a click, so the select that had just
-                                     * scrolled out of sight was still there to
-                                     * be opened by anybody clicking the blank
-                                     * band under the drawer's title. Invisible
-                                     * and clickable is worse than visible.
-                                     *
-                                     * The bar now reaches into the strip for
-                                     * real — a negative top margin to extend the
-                                     * box, matching padding so its contents do
-                                     * not move, and a negative sticky offset
-                                     * because sticky constrains the *margin*
-                                     * box: -16px there puts the border box
-                                     * exactly on the scrollport's top edge.
-                                     */
-                                    top: '-1rem',
-                                }}
-                                ref={(node) => {
-                                    if (!node) return;
-
-                                    const publish = () =>
-                                        document.documentElement.style.setProperty(
-                                            '--store-tabs-height',
-                                            `${Math.round(node.getBoundingClientRect().height)}px`,
-                                        );
-
-                                    publish();
-
-                                    // Republished on resize, since wrapping
-                                    // changes the height without anything here
-                                    // re-rendering.
-                                    const observer = new ResizeObserver(publish);
-                                    observer.observe(node);
-                                }}
-                            >
-                                {/*
-                                  The drawer's own tabs, in the shared component.
-
-                                  A row of bordered buttons before this, which
-                                  read as three things to press rather than as
-                                  one choice with three answers — and matched
-                                  neither the page behind them nor the panel
-                                  inside them.
-                                */}
-                                <Tabs
-                                    defaultValue="details"
-                                    value={storeTab}
-                                    onValueChange={(next) => {
-                                        setStoreTab(next as 'details' | 'fields' | 'statuses');
-
-                                        // The next panel will report its own.
-                                        setPanelCounts(null);
-                                    }}
-                                >
-                                    <TabsList>
-                                        <TabsTrigger value="details" icon="info">
-                                            Details
-                                        </TabsTrigger>
-                                        <TabsTrigger value="fields" icon="arrows-clockwise">
-                                            Field mapping
-                                        </TabsTrigger>
-                                        <TabsTrigger value="statuses" icon="list">
-                                            Statuses
-                                        </TabsTrigger>
-                                    </TabsList>
-                                </Tabs>
-
-                            </div>
-                        )}
-
                         {storeTab === 'fields' && selectedStorefront.connection_id && (
                             <FieldMapPanel
                                 connectionId={selectedStorefront.connection_id}

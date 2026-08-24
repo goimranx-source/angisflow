@@ -605,10 +605,15 @@ export function FieldMapPanel({
             */}
             <div
                 className="sticky z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
-                style={{
-                    top: 'var(--store-tabs-height, 0px)',
-                    background: 'var(--color-card-bg)',
-                }}
+                /*
+                 * Pinned to the top of the scrolling area, plainly.
+                 *
+                 * It used to stack under the drawer's tabs, offset by a height
+                 * they measured and published for it. The tabs live in the
+                 * drawer's head now, outside anything that scrolls, so there is
+                 * nothing above this to make room for.
+                 */
+                style={{ top: 0, background: 'var(--color-card-bg)' }}
                 ref={(node) => {
                     /*
                      * The toolbar measures itself, and the column headings stick

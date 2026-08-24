@@ -16,7 +16,7 @@ type DetailDrawerProps = {
     /** Drawer content */
     children: ReactNode;
     /** Tab configuration if using tabs */
-    tabs?: { key: string; label: string; content: ReactNode }[];
+    tabs?: { key: string; label: string; content: ReactNode; icon?: string }[];
     /** Active tab key */
     activeTab?: string;
     /** Tab change handler */
@@ -142,54 +142,85 @@ export function DetailDrawer({
                 aria-modal="true"
                 aria-labelledby="drawer-title"
             >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4 px-6 py-4">
-                    <div className="min-w-0 flex-1">
-                        <h2
-                            id="drawer-title"
-                            className="text-lg font-semibold text-[var(--color-text-main)] truncate"
-                        >
-                            {title}
-                        </h2>
-                        {subtitle && (
-                            <p className="mt-0.5 text-sm text-[var(--color-text-muted)] truncate">
-                                {subtitle}
-                            </p>
-                        )}
-                    </div>
+                {/*
+                  ── The name and the places, in one box ─────────────────────
+                  Header and tabs share a border, divided rather than separated.
 
-                    {/* Actions */}
-                    {actions && (
-                        <div className="flex items-center gap-2">
-                            {actions}
+                  They had a rule under each and a gap between, which drew three
+                  horizontal lines within an inch and made the title look like a
+                  thing apart from the tabs that belong to it. One outline says
+                  what the gaps were trying to: this is the drawer's head, and
+                  everything below it is the drawer's content.
+                */}
+                <div
+                    className="mx-6 mt-4 shrink-0 overflow-hidden rounded-[var(--shell-radius)] border"
+                    style={{ borderColor: 'var(--shell-border)' }}
+                >
+                    <div className="flex items-start justify-between gap-4 px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                            <h2
+                                id="drawer-title"
+                                className="truncate text-lg font-semibold text-[var(--color-text-main)]"
+                            >
+                                {title}
+                            </h2>
+                            {subtitle && (
+                                <p className="mt-0.5 truncate text-sm text-[var(--color-text-muted)]">
+                                    {subtitle}
+                                </p>
+                            )}
                         </div>
-                    )}
 
-                    {/* Close button */}
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="flex-none rounded p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
-                        aria-label="Close"
-                    >
-                        <Icon name="x" size={20} />
-                    </button>
-                </div>
+                        {actions && <div className="flex items-center gap-2">{actions}</div>}
 
-                {/* Tabs */}
-                {tabs && tabs.length > 0 && activeTab && onTabChange && (
-                    <div className="border-b border-[var(--color-border-light)] px-6">
-                        <Tabs defaultValue={activeTab} value={activeTab} onValueChange={onTabChange}>
-                            <TabsList>
-                                {tabs.map((t) => (
-                                    <TabsTrigger key={t.key} value={t.key}>
-                                        {t.label}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </Tabs>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-none rounded p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
+                            aria-label="Close"
+                        >
+                            <Icon name="x" size={20} />
+                        </button>
                     </div>
-                )}
+
+                    {tabs && tabs.length > 0 && activeTab && onTabChange && (
+                        <>
+                            <div
+                                className="h-px"
+                                style={{ background: 'var(--shell-border)' }}
+                                aria-hidden="true"
+                            />
+
+                            {/*
+                              Sharing the width between them.
+
+                              A tab bar hugging its words leaves the rest of the
+                              row empty and the group floating at one end of a
+                              box it is supposed to fill. Divided evenly, the
+                              targets are larger, and the box reads as one thing
+                              rather than as a bar someone left in a corner.
+                            */}
+                            <Tabs
+                                defaultValue={activeTab}
+                                value={activeTab}
+                                onValueChange={onTabChange}
+                            >
+                                <TabsList className="w-full !rounded-none !border-0 !p-0">
+                                    {tabs.map((t) => (
+                                        <TabsTrigger
+                                            key={t.key}
+                                            value={t.key}
+                                            icon={t.icon}
+                                            className="flex-1 justify-center !rounded-none py-2.5"
+                                        >
+                                            {t.label}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                            </Tabs>
+                        </>
+                    )}
+                </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto px-6 py-4">
