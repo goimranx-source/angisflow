@@ -967,25 +967,19 @@ export default function Storefronts() {
                     ) : undefined
                 }
                 /*
-                 * Wider for the two tabs that are grids rather than summaries.
+                 * One width, whichever tab is open.
                  *
-                 * Details is a dozen labelled values and reads well narrow.
-                 * Field mapping is seven columns of controls across forty rows,
-                 * and each column has a width below which its contents stop
-                 * being readable — "⇄ Both" becomes "⇄", "Text (UPPERCASE)"
-                 * becomes "Text (UPPERCA".
+                 * It used to narrow for Details and widen for the other two,
+                 * which meant the drawer jumped every time somebody moved
+                 * between them — the shop's name sliding sideways under the
+                 * cursor that had just clicked a tab beside it.
                  *
-                 * Those widths add up to more than the narrower drawer has, and
-                 * the table scrolls rather than squeezing, which is right. But a
-                 * horizontal scrollbar sits at the bottom of the table, forty
-                 * rows below where somebody is looking, so scrolling that works
-                 * perfectly is scrolling nobody finds.
-                 *
-                 * The honest fix is the room, not the scrollbar: at this width
-                 * every column is legible without scrolling at all, and the
-                 * scrolling stays for the screens genuinely too small for it.
+                 * Sized for the widest of the three rather than each in turn,
+                 * because the alternative to a stable frame is a frame that
+                 * argues with its own tabs. Details has room to spare and looks
+                 * calmer for it.
                  */
-                size={storeTab === 'details' ? 'md' : '2xl'}
+                size="2xl"
                 /*
                  * The tabs live in the drawer's own head now.
                  *

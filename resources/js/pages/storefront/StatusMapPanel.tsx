@@ -113,33 +113,17 @@ export function StatusMapPanel({
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4">
             {/*
-              The same toolbar as the field mapping, in the same place.
-
-              Save used to sit at the bottom, past every row, which on a shop
-              with thirty statuses meant scrolling to the end to keep a change
-              made at the top. Two panels behind one tab strip should not
-              disagree about where their controls live.
+              The toolbar belongs to the table, above its headings and divided
+              from them — the same arrangement as the drawer's head, and the
+              same reason: pinned above the box instead, the table's own top
+              border slid underneath it before any row moved, so the first thing
+              scrolling did was take the frame away.
             */}
             <div
-                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3"
-                /*
-                 * Pinned to the top of the scrolling area, plainly.
-                 *
-                 * It used to stack under the drawer's tabs, offset by a height
-                 * they measured and published for it. The tabs live in the
-                 * drawer's head now, outside anything that scrolls, so there is
-                 * nothing above this to make room for.
-                 */
-                style={{ top: 0, background: 'var(--color-card-bg)' }}
-                ref={(node) => {
-                    if (!node) return;
-
-                    node.parentElement?.style.setProperty(
-                        '--toolbar-height',
-                        `${Math.round(node.getBoundingClientRect().height)}px`,
-                    );
-                }}
+                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--shell-radius)] border"
+                style={{ borderColor: 'var(--shell-border)' }}
             >
+                <div className="shrink-0 space-y-2.5 px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     {/* Statuses are added to this tool, never to the shop —
                         theirs are whatever their software sends. */}
@@ -240,7 +224,6 @@ export function StatusMapPanel({
                         aria-label="Filter the statuses"
                     />
                 </div>
-            </div>
 
             {isLoading && (
                 <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />
@@ -264,10 +247,18 @@ export function StatusMapPanel({
               drawer's head, its padding and this toolbar — a number that
               changes with all three.
             */}
-            {catalogue && (
-                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--shell-radius)]">
+                </div>
+
+                <div
+                    className="h-px shrink-0"
+                    style={{ background: 'var(--shell-border)' }}
+                    aria-hidden="true"
+                />
+
+                {catalogue && (
+                <div className="min-h-0 flex-1 overflow-auto">
                     <table
-                        className="table table-framed w-full min-w-[28rem] table-fixed"
+                        className="table table-framed w-full min-w-[28rem] table-fixed !rounded-none !border-0"
                         /*
                          * `.table-framed` sets overflow:hidden to clip its rows
                          * inside its rounded corners, which makes the table its
@@ -343,7 +334,8 @@ export function StatusMapPanel({
                         </tbody>
                     </table>
                 </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

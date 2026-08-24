@@ -237,7 +237,7 @@ export function DetailDrawer({
                   content — for a table of forty rows that is forty rows, and the
                   box grows to fit them and scrolls nothing.
                 */}
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4 pt-[15px]">
                     {tabs && tabs.length > 0 && activeTab ? (
                         tabs.find((t) => t.key === activeTab)?.content ?? children
                     ) : (

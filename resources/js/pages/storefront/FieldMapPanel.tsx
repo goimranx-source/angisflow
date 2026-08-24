@@ -600,44 +600,26 @@ export function FieldMapPanel({
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4">
             {/*
-              The toolbar sticks, because the alternative is scrolling back to
-              the top of forty rows to save the change just made at the bottom.
+              ── The toolbar belongs to the table ────────────────────────────
+
+              It sat above the table as a separate thing that had to be pinned,
+              and the pinning is what produced the odd little scroll at the
+              start: the table's own top border slid underneath it before any
+              row moved, so the first thing scrolling did was take the frame
+              away.
+
+              Inside the box, above the headings and divided from them, there is
+              nothing to pin. The frame belongs to the box, so it cannot scroll;
+              only the rows move, and they move from the first pixel.
+
+              The same arrangement as the drawer's head above it — a name, a
+              divider, the things it names — which is rather the point.
             */}
             <div
-                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3"
-                /*
-                 * Pinned to the top of the scrolling area, plainly.
-                 *
-                 * It used to stack under the drawer's tabs, offset by a height
-                 * they measured and published for it. The tabs live in the
-                 * drawer's head now, outside anything that scrolls, so there is
-                 * nothing above this to make room for.
-                 */
-                style={{ top: 0, background: 'var(--color-card-bg)' }}
-                ref={(node) => {
-                    /*
-                     * The toolbar measures itself, and the column headings stick
-                     * directly beneath it.
-                     *
-                     * Its height is not a constant worth guessing at: it changes
-                     * when the shop-fields button appears, when the counts wrap
-                     * on a narrow panel, when a longer label pushes to two
-                     * lines. A guessed offset would leave a gap on one screen
-                     * and hide the first row on another, so it is read from the
-                     * element that actually has it.
-                     */
-                    if (node) {
-                        node.style.setProperty(
-                            '--toolbar-height',
-                            `${Math.round(node.getBoundingClientRect().height)}px`,
-                        );
-                        node.parentElement?.style.setProperty(
-                            '--toolbar-height',
-                            `${Math.round(node.getBoundingClientRect().height)}px`,
-                        );
-                    }
-                }}
+                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--shell-radius)] border"
+                style={{ borderColor: 'var(--shell-border)' }}
             >
+                <div className="shrink-0 space-y-2.5 px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     {/*
                       Which records, and how many of them — one group.
@@ -681,7 +663,7 @@ export function FieldMapPanel({
                           screen as the table it filters, which is more weight
                           than a thing nobody uses until they need it deserves.
                         */}
-                        <div className="relative w-56">
+                        <div className="relative w-72">
                             <Icon
                                 name="magnifying-glass"
                                 size={13}
@@ -722,7 +704,6 @@ export function FieldMapPanel({
                     </div>
                 </div>
 
-            </div>
 
             {/*
               Where the paths came from. A mapping built against the platform's
@@ -797,8 +778,16 @@ export function FieldMapPanel({
               drawer's head, its padding and this toolbar — a number that
               changes with all three.
             */}
-            {sample && (
-                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--shell-radius)]">
+                </div>
+
+                <div
+                    className="h-px shrink-0"
+                    style={{ background: 'var(--shell-border)' }}
+                    aria-hidden="true"
+                />
+
+                {sample && (
+                <div className="min-h-0 flex-1 overflow-auto">
                     {/*
                       Fixed layout, with the widths stated.
 
@@ -813,7 +802,7 @@ export function FieldMapPanel({
                       table is the same shape whichever shop is being mapped.
                     */}
                     <table
-                        className="table table-framed w-full min-w-[67rem] table-fixed"
+                        className="table table-framed w-full min-w-[67rem] table-fixed !rounded-none !border-0"
                         /*
                          * `.table-framed` sets overflow:hidden to clip its rows
                          * inside its rounded corners, which makes the table its
@@ -1328,7 +1317,8 @@ export function FieldMapPanel({
                         </tbody>
                     </table>
                 </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
