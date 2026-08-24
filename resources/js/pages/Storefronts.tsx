@@ -11,6 +11,7 @@ import {
     KPICard,
 } from '@/components/modules';
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker';
+import { confirm } from '@/components/ui/Confirm';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
@@ -62,22 +63,24 @@ function RowActions({
     store,
     open,
     onToggle,
-    onSync,
     onOpen,
+    onEdit,
+    onDelete,
     isPending,
 }: {
     store: Storefront;
     open: boolean;
     onToggle: () => void;
-    onSync: (full: boolean) => void;
     onOpen: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
     isPending: boolean;
 }) {
     const buttonRef = useRef<HTMLButtonElement>(null);
     const rect = buttonRef.current?.getBoundingClientRect();
 
     const item =
-        'flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-[var(--shell-hover)]';
+        'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition';
 
     return (
         <>
@@ -85,13 +88,13 @@ function RowActions({
                 ref={buttonRef}
                 type="button"
                 onClick={(event) => {
-                    // The row itself opens the shop; this must not do both.
+                    // The name opens the shop; this must not do both.
                     event.stopPropagation();
                     onToggle();
                 }}
                 /*
                   Boxed, because a bare glyph is not obviously a button.
-                
+
                   Three dots on their own read as a decoration or a truncation
                   mark until somebody happens to hover them. An outline says
                   "press this" without a label, which is the whole job of an
@@ -103,7 +106,11 @@ function RowActions({
                 aria-haspopup="menu"
                 aria-expanded={open}
             >
-                <Icon name={isPending ? 'spinner' : 'dots-three-vertical'} size={16} className={isPending ? 'animate-spin' : undefined} />
+                <Icon
+                    name={isPending ? 'spinner' : 'dots-three-vertical'}
+                    size={16}
+                    className={isPending ? 'animate-spin' : undefined}
+                />
             </button>
 
             {open &&
@@ -120,22 +127,18 @@ function RowActions({
 
                         <div
                             role="menu"
-                            className="fixed z-[calc(var(--z-modal)+1)] w-56 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
+                            className="fixed z-[calc(var(--z-modal)+1)] w-44 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
                             style={{
                                 borderColor: 'var(--shell-border)',
 
                                 /*
                                   Rising into place, briefly.
-                                
+
                                   A menu that simply exists on the next frame
                                   leaves the reader to work out where it came
                                   from; one that rises from its button says so.
                                   120ms — long enough to be seen and short
                                   enough that nobody waits for it.
-                                
-                                  The same keyframe the command palette uses, so
-                                  two things that open the same way look the
-                                  same doing it.
                                 */
                                 animation: 'context-flyout-slide-up 120ms ease-out',
                                 transformOrigin: 'top right',
@@ -143,85 +146,67 @@ function RowActions({
 
                                 // Right-aligned to the button, and never off the
                                 // left edge on a narrow window.
-                                left: Math.max(8, rect.right - 224),
+                                left: Math.max(8, rect.right - 176),
                             }}
                             onClick={(event) => event.stopPropagation()}
                         >
+                            {/*
+                              Three words, no sentences.
+
+                              The descriptions under each line doubled the menu's
+                              height to explain things their own verbs already
+                              said. "Preview" needs no gloss; a menu somebody
+                              reads is a menu they are slower to use.
+                            */}
                             <button
                                 type="button"
-                                className={item}
+                                className={`${item} text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]`}
                                 onClick={() => {
                                     onToggle();
                                     onOpen();
                                 }}
                             >
-                                <Icon name="eye" size={15} className="mt-0.5 shrink-0 opacity-70" />
-                                <span>
-                                    <span className="font-medium text-[var(--color-text-main)]">
-                                        Open
-                                    </span>
-                                    <span className="block text-xs text-[var(--color-text-muted)]">
-                                        Details, field mapping and statuses
-                                    </span>
-                                </span>
+                                <Icon name="eye" size={15} className="shrink-0 opacity-70" />
+                                <span>Preview</span>
                             </button>
 
-                            {store.is_connected && (
-                                <>
-                                    <div
-                                        className="my-1 h-px"
-                                        style={{ background: 'var(--shell-border)' }}
-                                    />
+                            <button
+                                type="button"
+                                className={`${item} text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]`}
+                                onClick={() => {
+                                    onToggle();
+                                    onEdit();
+                                }}
+                            >
+                                <Icon name="pencil" size={15} className="shrink-0 opacity-70" />
+                                <span>Edit</span>
+                            </button>
 
-                                    <button
-                                        type="button"
-                                        className={item}
-                                        disabled={isPending}
-                                        onClick={() => {
-                                            onToggle();
-                                            onSync(false);
-                                        }}
-                                    >
-                                        <Icon
-                                            name="arrows-clockwise"
-                                            size={15}
-                                            className="mt-0.5 shrink-0 opacity-70"
-                                        />
-                                        <span>
-                                            <span className="font-medium text-[var(--color-text-main)]">
-                                                Sync new changes
-                                            </span>
-                                            <span className="block text-xs text-[var(--color-text-muted)]">
-                                                Only what has changed since last time
-                                            </span>
-                                        </span>
-                                    </button>
+                            {/*
+                              Set apart, and coloured.
 
-                                    <button
-                                        type="button"
-                                        className={item}
-                                        disabled={isPending}
-                                        onClick={() => {
-                                            onToggle();
-                                            onSync(true);
-                                        }}
-                                    >
-                                        <Icon
-                                            name="arrow-clockwise"
-                                            size={15}
-                                            className="mt-0.5 shrink-0 opacity-70"
-                                        />
-                                        <span>
-                                            <span className="font-medium text-[var(--color-text-main)]">
-                                                Sync everything
-                                            </span>
-                                            <span className="block text-xs text-[var(--color-text-muted)]">
-                                                Every record from the beginning
-                                            </span>
-                                        </span>
-                                    </button>
-                                </>
-                            )}
+                              It is the one item here that cannot be undone from
+                              this screen, and a destructive line that looks
+                              exactly like the two above it is a line somebody
+                              reaches by muscle memory.
+                            */}
+                            <div
+                                className="my-1 h-px"
+                                style={{ background: 'var(--shell-border)' }}
+                            />
+
+                            <button
+                                type="button"
+                                className={`${item} hover:bg-[var(--color-danger-subtle)]`}
+                                style={{ color: 'var(--color-danger-text)' }}
+                                onClick={() => {
+                                    onToggle();
+                                    onDelete();
+                                }}
+                            >
+                                <Icon name="trash" size={15} className="shrink-0" />
+                                <span>Delete</span>
+                            </button>
                         </div>
                     </>,
                     document.body,
@@ -468,7 +453,15 @@ export default function Storefronts() {
     });
 
     const removeShop = useMutation({
-        mutationFn: () => api.delete(`/storefronts/${selectedStorefront?.id}`),
+        /*
+         * Told which shop, rather than reading whichever drawer is open.
+         *
+         * It took the id from the open drawer, which was fine while the only
+         * way to delete was from inside one. The row's menu deletes without
+         * opening anything, and left as it was it would have deleted nothing —
+         * or, worse, whatever had been looked at last.
+         */
+        mutationFn: (id?: string) => api.delete(`/storefronts/${id ?? selectedStorefront?.id}`),
         onSuccess: () => {
             toast.success('Shop removed.');
             void queryClient.invalidateQueries({ queryKey: ['storefronts'] });
@@ -683,7 +676,7 @@ export default function Storefronts() {
               the scrolling region caps it when there are enough of them to
               need capping.
             */}
-            <div className="card mt-6 flex flex-col overflow-hidden">
+            <div className="card mt-6 flex flex-col">
                 <FilterBar
                     compact
                     className="!rounded-none !border-0 !border-b"
@@ -819,7 +812,18 @@ export default function Storefronts() {
                         </button>
                     </div>
                 ) : (
-                    <div className="max-h-[min(60vh,40rem)] overflow-auto">
+                    /*
+                     * The clipping lives here, not on the card.
+                     *
+                     * The card had `overflow-hidden` to keep its rows inside its
+                     * corners, and that also clipped everything the toolbar
+                     * above them opens — the date picker's calendar came out
+                     * half a calendar, cut off at the card's lower edge.
+                     *
+                     * Only the rows need clipping. The toolbar sits outside it,
+                     * and its popovers hang over the page as they should.
+                     */
+                    <div className="max-h-[min(60vh,40rem)] overflow-auto rounded-b-[var(--shell-radius)]">
                         <Table
                             data={storefronts}
                             loading={isLoading}
@@ -842,12 +846,18 @@ export default function Storefronts() {
                                           than a URL nobody is looking at, and
                                           the ones who are looking still have it.
                                         */
-                                        <span
-                                            className="font-medium text-[var(--color-text-main)]"
-                                            title={store.domain ? `${store.name} — ${store.domain}` : store.name}
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedId(store.id)}
+                                            className="text-left font-medium text-[var(--color-text-main)] transition hover:text-[var(--color-brand)]"
+                                            title={
+                                                store.domain
+                                                    ? `${store.name} — ${store.domain}`
+                                                    : store.name
+                                            }
                                         >
                                             {store.name}
-                                        </span>
+                                        </button>
                                     ),
                                 },
                                 {
@@ -921,9 +931,33 @@ export default function Storefronts() {
                                                     inlineSyncMenu === store.id ? null : store.id,
                                                 )
                                             }
-                                            onSync={(full) => syncShop.mutate({ id: store.id, full })}
                                             onOpen={() => setSelectedId(store.id)}
-                                            isPending={syncShop.isPending}
+                                            onEdit={() => {
+                                                setSelectedId(store.id);
+                                                setStoreTab('details');
+                                                setEditing(true);
+                                            }}
+                                            onDelete={async () => {
+                                                /*
+                                                  Asked before, not undone after.
+
+                                                  A shop carries its orders, its
+                                                  mapping and its statuses, and
+                                                  none of that comes back from a
+                                                  toast with an Undo on it.
+                                                */
+                                                const sure = await confirm(
+                                                    `Remove ${store.name}?`,
+                                                    'Its field mapping and status mapping go with it. Orders already imported stay where they are.',
+                                                );
+
+                                                if (sure) {
+                                                    removeShop.mutate(store.id);
+                                                }
+                                            }}
+                                            isPending={
+                                                syncShop.isPending || removeShop.isPending
+                                            }
                                         />
                                     ),
                                 },
@@ -931,8 +965,15 @@ export default function Storefronts() {
                             sortBy={sortBy}
                             sortDirection={sortDirection}
                             onSort={handleSort}
-                            onRowClick={(store) => setSelectedId(store.id)}
-                            clickable
+                            /*
+                              The name opens the shop, not the row.
+
+                              A whole row that responds to a click makes every
+                              pixel of it a target, including the cells somebody
+                              is reading a figure out of and the gaps between
+                              controls. The name is the thing that looks like a
+                              way in, so it is the thing that is one.
+                            */
                             getRowKey={(store) => store.id}
                             emptyState={
                                 <EmptyState
@@ -1714,7 +1755,7 @@ export default function Storefronts() {
                                     <button
                                         type="button"
                                         className="btn btn-secondary"
-                                        onClick={() => removeShop.mutate()}
+                                        onClick={() => removeShop.mutate(selectedStorefront?.id)}
                                     >
                                         <Icon name="trash" size={14} />
                                         <span>Remove</span>

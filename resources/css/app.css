@@ -26,7 +26,22 @@
        is written, without touching each usage. */
     --breakpoint-md: 55rem;
 
-    --color-site-bg: #f4f9fd;
+    /*
+     * ── The page behind everything ──────────────────────────────────────────
+     *
+     * #f4f9fd carried a blue cast strong enough to read as a tint rather than
+     * as paper, and it fought every blue on top of it — brand buttons, links,
+     * the status pills — because they were all the same hue at different
+     * strengths.
+     *
+     * A near-neutral grey with the faintest warmth instead. It sits behind
+     * white cards without competing, and it lets the one colour on screen that
+     * is supposed to mean something actually mean it. This is the shade most
+     * ledgers and desktop finance tools settle on, and they settle on it for
+     * the same reason: a screen somebody reads for eight hours should be the
+     * quietest thing in the room.
+     */
+    --color-site-bg: #f7f8fa;
     --color-card-bg: #ffffff;
     --color-card-raised: #eaf5fb;
     --color-border-light: #d6eaf8;
@@ -4487,8 +4502,19 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         border-bottom: 0;
     }
 
+    /*
+     * ── A hover you feel rather than see ────────────────────────────────────
+     *
+     * The row highlight was strong enough to read as a selection, which on a
+     * table nobody selects rows in is a promise that goes nowhere — and moving
+     * the pointer down a list lit each row like something was happening.
+     *
+     * Barely there is enough. Its whole job is to keep the eye on one line
+     * across a wide table, and a tint two percent off the paper does that
+     * without announcing itself.
+     */
     .table tbody tr:hover {
-        background: var(--shell-hover);
+        background: color-mix(in srgb, var(--color-text-main) 2.5%, transparent);
     }
 
     /* The first cell is the one you read to know which record this is, so it
