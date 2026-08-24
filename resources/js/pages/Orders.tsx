@@ -32,6 +32,7 @@ import {
     type DocumentKind,
 } from './orders/documents';
 import { Icon } from '@/components/ui/Icon';
+import type { BadgeVariant } from '@/components/modules/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
@@ -1158,10 +1159,19 @@ export default function Orders() {
         return acc;
     }, {} as Record<string, string>);
 
-    const statusVariants: Record<string, 'warning' | 'info' | 'brand' | 'success' | 'danger' | 'neutral'> = allStatuses.reduce((acc, status) => {
-        acc[status.value] = (status.tone as 'warning' | 'info' | 'brand' | 'success' | 'danger' | 'neutral') ?? 'neutral';
+    /*
+     * The badge's own list of tones, not a copy of it.
+     *
+     * This spelled the six out by hand in three places, so a tone added to the
+     * badge was a tone this page cast away — `as` does not change the value, so
+     * the colour would have arrived and worked while the types said it could
+     * not exist. The next person to add one would have found it working here
+     * and been unable to say why.
+     */
+    const statusVariants: Record<string, BadgeVariant> = allStatuses.reduce((acc, status) => {
+        acc[status.value] = (status.tone as BadgeVariant) ?? 'neutral';
         return acc;
-    }, {} as Record<string, 'warning' | 'info' | 'brand' | 'success' | 'danger' | 'neutral'>);
+    }, {} as Record<string, BadgeVariant>);
 
     const paymentLabels: Record<string, string> = {
         paid: 'Paid',

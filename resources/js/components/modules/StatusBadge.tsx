@@ -1,7 +1,45 @@
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 
-type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand';
+/*
+ * ── Ten states needed more than six colours ─────────────────────────────────
+ *
+ * An order can be in ten, and there were six tones to say so — which meant On
+ * hold and Follow-up were the same amber, Cancelled and Failed the same red,
+ * and Pending, Refunded and Changed all the same grey. A colour shared by two
+ * states is a colour that answers "which one is this?" with "one of these two",
+ * which is most of the way to answering nothing.
+ *
+ * Four more, chosen to stay apart from the six already here and from each
+ * other: purple, teal, orange and rose. They are separate hues rather than
+ * shades of the existing ones, because two ambers a step apart are harder to
+ * tell from each other than one amber and one orange.
+ */
+export type BadgeVariant =
+    | 'success'
+    | 'warning'
+    | 'danger'
+    | 'info'
+    | 'neutral'
+    | 'brand'
+    | 'purple'
+    | 'teal'
+    | 'orange'
+    | 'rose'
+    /*
+     * ── Three kept for statuses this application did not name ───────────────
+     *
+     * A business can add its own — "Awaiting parts", "With the workshop" — and
+     * nothing here knows what they mean, so none of the ten above is the right
+     * colour for one. They were all neutral, which made every added status the
+     * same grey as Pending and as each other.
+     *
+     * These three are set aside for them. Kept apart from the ten so an added
+     * status never wears the colour of a built-in one and gets read as it.
+     */
+    | 'indigo'
+    | 'lime'
+    | 'slate';
 type BadgeSize = 'sm' | 'md' | 'lg';
 
 type StatusBadgeProps = {
@@ -63,6 +101,27 @@ export function StatusBadge({
         brand: dot
             ? 'text-[var(--color-brand-text)] bg-[var(--color-brand-subtle)]'
             : 'bg-[var(--color-brand)] text-white',
+        purple: dot
+            ? 'text-purple-700 bg-purple-50'
+            : 'bg-purple-600 text-white',
+        teal: dot
+            ? 'text-teal-700 bg-teal-50'
+            : 'bg-teal-600 text-white',
+        orange: dot
+            ? 'text-orange-700 bg-orange-50'
+            : 'bg-orange-600 text-white',
+        rose: dot
+            ? 'text-rose-700 bg-rose-50'
+            : 'bg-rose-600 text-white',
+        indigo: dot
+            ? 'text-indigo-700 bg-indigo-50'
+            : 'bg-indigo-600 text-white',
+        lime: dot
+            ? 'text-lime-800 bg-lime-50'
+            : 'bg-lime-600 text-white',
+        slate: dot
+            ? 'text-slate-700 bg-slate-100'
+            : 'bg-slate-600 text-white',
     };
 
     const sizeClasses = {

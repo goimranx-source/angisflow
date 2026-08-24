@@ -51,7 +51,9 @@ final class OrderStatuses
             'on_hold' => ['label' => 'On hold', 'tone' => 'warning',
                 'sets' => ['status' => 'on_hold']],
 
-            'follow_up' => ['label' => 'Follow-up', 'tone' => 'warning',
+            // Orange, not the amber On hold uses. Both are "somebody has to
+            // do something", and telling which was which meant reading the word.
+            'follow_up' => ['label' => 'Follow-up', 'tone' => 'orange',
                 'sets' => ['status' => 'follow_up']],
 
             'completed' => ['label' => 'Completed', 'tone' => 'success',
@@ -65,13 +67,20 @@ final class OrderStatuses
 
             // Not 'unpaid'. The money arrived and then went back; calling it
             // unpaid would put the order into the receivables being chased.
-            'refunded' => ['label' => 'Refunded', 'tone' => 'neutral',
+            // Purple rather than a third grey. Money going back out is not a
+            // quiet state, and it shared its colour with Pending and Changed.
+            'refunded' => ['label' => 'Refunded', 'tone' => 'purple',
                 'sets' => ['status' => 'refunded']],
 
-            'failed' => ['label' => 'Failed', 'tone' => 'danger',
+            // Rose, near the red Cancelled uses but not it. They are both bad
+            // endings and they are not the same one: cancelled is a decision,
+            // failed is a thing that went wrong.
+            'failed' => ['label' => 'Failed', 'tone' => 'rose',
                 'sets' => ['status' => 'failed', 'payment_status' => 'unpaid']],
 
-            'changed' => ['label' => 'Changed', 'tone' => 'neutral',
+            // Teal. It is the state that says "look at this", which grey is
+            // the wrong colour for.
+            'changed' => ['label' => 'Changed', 'tone' => 'teal',
                 'sets' => ['status' => 'changed']],
         ];
     }
@@ -98,7 +107,7 @@ final class OrderStatuses
 
             $all[$key] = [
                 'label' => $label,
-                'tone' => 'neutral',
+                'tone' => self::customTone($key),
                 // An added status settles the lifecycle column and nothing else.
                 // Nothing here could know whether "Awaiting parts" means paid.
                 'sets' => ['status' => $key],
@@ -107,6 +116,34 @@ final class OrderStatuses
         }
 
         return $all;
+    }
+
+    /**
+     * A colour for a status this application did not name.
+     *
+     * ── Why it is derived and not stored ─────────────────────────────────────
+     *
+     * Every added status was neutral, so a business with three of them had
+     * three identical grey badges, all the same grey as Pending. Asking whoever
+     * adds one to choose a colour is a question they have no basis to answer at
+     * the moment they are asked -- they are naming a workflow step, not
+     * designing a palette -- and a field nobody fills is a field that defaults
+     * back to grey.
+     *
+     * Derived from the key, so it is the same colour on every screen and after
+     * every deploy without anything being stored. crc32 rather than a running
+     * index: an index would reshuffle every badge the day somebody deletes the
+     * first of their custom statuses.
+     *
+     * Three tones, not ten. They are held apart from the built-in colours so an
+     * added status never wears Cancelled's red or Completed's green and gets
+     * read as one.
+     */
+    private static function customTone(string $key): string
+    {
+        $palette = ['indigo', 'lime', 'slate'];
+
+        return $palette[crc32($key) % count($palette)];
     }
 
     /** @return array<string, string> key => label */
