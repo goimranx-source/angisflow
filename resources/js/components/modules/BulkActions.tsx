@@ -163,8 +163,18 @@ export function SelectCheckbox({
     label?: string;
 }) {
     return (
-        <label className="flex items-center gap-2 cursor-pointer group">
-            <div className="relative">
+        <label className="group flex cursor-pointer items-center gap-2">
+            {/*
+              The box centres on the words, rather than sitting a pixel or two
+              above them.
+
+              `items-center` on this label was already doing its part; the
+              wrapper inside it was not. A block div containing an <input>
+              takes the height of a line box, and the input aligns to that
+              line's baseline — so the div centred correctly and the box inside
+              it hung high. A flex wrapper has no baseline to hang from.
+            */}
+            <span className="relative flex items-center">
                 <input
                     type="checkbox"
                     checked={checked}
@@ -174,10 +184,10 @@ export function SelectCheckbox({
                         }
                     }}
                     onChange={(e) => onChange(e.target.checked)}
-                    className="size-4 cursor-pointer border-2 border-[var(--color-border-strong)] text-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)] focus:ring-offset-1"
+                    className="block size-4 cursor-pointer border-2 border-[var(--color-border-strong)] text-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)] focus:ring-offset-1"
                     style={{ borderRadius: 'var(--shell-radius-sm)' }}
                 />
-            </div>
+            </span>
             {label && (
                 <span className="text-sm text-[var(--color-text-body)] group-hover:text-[var(--color-text-main)]">
                     {label}

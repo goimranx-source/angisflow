@@ -175,6 +175,35 @@ type OrdersResponse = {
 };
 
 /**
+ * An order's reference, set as an identifier rather than as prose.
+ *
+ * ── Why it is not just the string ────────────────────────────────────────────
+ *
+ * `SO-2026-0022` on its own reads as a code somebody has to decide how to
+ * interpret. Three things make it read as a reference instead, and they are
+ * what every invoice and every order system in the world already does:
+ *
+ * The hash says "this is a number for this thing", so nobody has to work out
+ * whether SO is a customer or a status. It is set quieter than the rest,
+ * because it is punctuation and not information — the eye should land on what
+ * follows it.
+ *
+ * Tabular figures, so the digits sit in fixed columns and a list of references
+ * lines up down the page instead of ragging like ordinary text.
+ *
+ * And the whole thing on one line, because a reference that wraps is a
+ * reference somebody reads back wrong over the phone.
+ */
+function OrderRef({ value }: { value: string }) {
+    return (
+        <span className="inline-flex items-baseline whitespace-nowrap font-semibold tabular-nums text-[var(--color-text-main)]">
+            <span className="text-[var(--color-text-subtle)]">#</span>
+            {value}
+        </span>
+    );
+}
+
+/**
  * One step of the pager.
  *
  * Its own component because there are four of them and they differ only by
@@ -1385,9 +1414,9 @@ export default function Orders() {
                                           has a column.
                                         */
                                         render: (order) => (
-                                            <span className="font-semibold whitespace-nowrap text-[var(--color-text-main)]">
-                                                {order.reference ?? order.order_number}
-                                            </span>
+                                            <OrderRef
+                                                value={order.reference ?? order.order_number}
+                                            />
                                         ),
                                     },
                                     {
@@ -1567,8 +1596,25 @@ export default function Orders() {
                                          * same reason: a bare 440 in a business
                                          * with three shops is not an amount.
                                          */
+                                        /*
+                                          ── One line, and a mark when there were two ─────
+
+                                          An order taken in another currency showed the
+                                          amount charged and, under it, what it came to in
+                                          the books. Both are true and only one of them is
+                                          being scanned — and the second line doubled the
+                                          height of a handful of rows, so a column of
+                                          figures was no longer a column of figures.
+
+                                          The amount charged stays: it is what the customer
+                                          paid and what the shop will say if asked. The
+                                          converted figure moves to a mark beside it, which
+                                          also does the job the second line was quietly
+                                          doing — saying that this row is not in the
+                                          currency the rest of the column is in.
+                                        */
                                         render: (o) => (
-                                            <div className="text-right">
+                                            <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                                                 <span
                                                     className="font-semibold tabular-nums"
                                                     title={`Taken in ${o.source_currency}`}
@@ -1582,13 +1628,13 @@ export default function Orders() {
 
                                                 {o.is_converted && (
                                                     <span
-                                                        className="mt-0.5 block text-xs tabular-nums text-[var(--color-text-muted)]"
-                                                        title={`In the books, converted to ${o.currency}`}
+                                                        className="inline-flex shrink-0 cursor-help text-[var(--color-text-subtle)]"
+                                                        title={`Taken in ${o.source_currency} — ${formatMoney(o.total)} in the books`}
                                                     >
-                                                        ≈ {formatMoney(o.total)}
+                                                        <Icon name="arrows-left-right" size={12} weight="duotone" />
                                                     </span>
                                                 )}
-                                            </div>
+                                            </span>
                                         ),
                                     },
                                     {

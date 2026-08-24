@@ -222,7 +222,16 @@ export function QuickActionButton({
             type="button"
             onClick={onClick}
             className={cn(
-                'flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-colors',
+                /*
+                  A height, not vertical padding.
+
+                  This sat beside two .btn secondaries in every page header and
+                  measured 36px against their 32 — padding plus a 14px line box
+                  happens to land somewhere, and where it lands is not where a
+                  button with a stated height lands. Matching .btn exactly is
+                  the point: they are three buttons on one row.
+                */
+                'flex h-8 items-center gap-2 px-4 text-sm font-semibold transition-colors',
                 variantClasses[variant],
             )}
             style={{ borderRadius: 'var(--shell-radius)' }}
