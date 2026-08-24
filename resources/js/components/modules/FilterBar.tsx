@@ -19,6 +19,14 @@ type FilterBarProps = {
     /** Compact mode (smaller height) */
     compact?: boolean;
     /**
+     * Anything that belongs beside the search rather than opposite it.
+     *
+     * A period picker narrows *what is being looked at*, which is the same job
+     * the search box does — so it sits with the search, and the controls that
+     * decide how the list is shown stay on the other side of the row.
+     */
+    trailingSearch?: ReactNode;
+    /**
      * Put the filters on their own row beneath the search.
      *
      * ── Why this is opt-in ───────────────────────────────────────────────
@@ -79,6 +87,7 @@ export function FilterBar({
     viewControls,
     actions,
     compact = false,
+    trailingSearch,
     stacked = false,
     className,
 }: FilterBarProps) {
@@ -160,6 +169,8 @@ export function FilterBar({
             )}
         >
             {search}
+
+            {trailingSearch}
 
             {filters && <div className="flex flex-wrap items-center gap-2">{filters}</div>}
 

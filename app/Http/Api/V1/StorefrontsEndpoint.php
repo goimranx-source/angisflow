@@ -11,6 +11,7 @@ use App\Domain\Integrations\PlatformRegistry;
 use App\Domain\Integrations\PullSync;
 use App\Domain\Integrations\Support\StatusMap;
 use App\Domain\Money\Currencies;
+use Carbon\Carbon;
 use App\Domain\Money\CurrencyService;
 use App\Domain\Sales\Models\Order;
 use App\Domain\Storefront\StoreCode;
@@ -79,6 +80,20 @@ class StorefrontsEndpoint
     /** Every shop this business sells through. */
     public function index(Request $request): JsonResponse
     {
+        /*
+         * The period the figures describe.
+         *
+         * Absent by default, which means all of it — a shop's lifetime takings
+         * are the honest answer to "how much has this shop made" until somebody
+         * asks a narrower question.
+         *
+         * Applied to the per-shop figures, the totals above them and the lines
+         * under those, so the whole screen answers one question. A picker that
+         * moved only some of them would leave two numbers on one row quietly
+         * measuring different things.
+         */
+        $since = $request->filled('from') ? mb_substr((string) $request->query('from'), 0, 10) : null;
+        $until = $request->filled('to') ? mb_substr((string) $request->query('to'), 0, 10) : null;
         $businessId = $this->businessId();
 
         $query = Storefront::query()->where('business_id', $businessId);
@@ -128,7 +143,7 @@ class StorefrontsEndpoint
         $shops = $query
             ->orderBy($by, $direction)
             ->get()
-            ->map(fn (Storefront $s): array => $this->summarise($s, $businessId, $codes))
+            ->map(fn (Storefront $s): array => $this->summarise($s, $businessId, $codes, $since, $until))
             ->all();
 
         /*
@@ -185,7 +200,7 @@ class StorefrontsEndpoint
              * which is the only reason to draw one — a line invented to fill
              * the space under a number is worse than the empty space.
              */
-            'trends' => $this->trends($businessId),
+            'trends' => $this->trends($businessId, $since, $until),
 
             // The list page reads meta for its pagination footer. Every shop is
             // returned in one page — a business has a handful, not thousands.
@@ -218,13 +233,23 @@ class StorefrontsEndpoint
      *
      * @return array<string, list<float|int>>
      */
-    private function trends(int $businessId): array
+    private function trends(int $businessId, ?string $since = null, ?string $until = null): array
     {
-        $from = now()->subDays(13)->startOfDay();
+        /*
+         * A fortnight, unless a period was asked for.
+         *
+         * Capped at ninety points: a year of daily figures in eighty pixels is
+         * a texture rather than a trend, and the line stops saying anything
+         * long before it stops being drawn.
+         */
+        $end = $until !== null ? Carbon::parse($until)->endOfDay() : now();
+        $from = $since !== null
+            ? Carbon::parse($since)->startOfDay()->max($end->copy()->subDays(89))
+            : $end->copy()->subDays(13)->startOfDay();
 
         $frame = [];
 
-        for ($day = $from->copy(); $day->lte(now()); $day->addDay()) {
+        for ($day = $from->copy(); $day->lte($end); $day->addDay()) {
             $frame[$day->toDateString()] = 0;
         }
 
@@ -235,6 +260,7 @@ class StorefrontsEndpoint
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->where('ordered_on', '>=', $from->toDateString())
+            ->where('ordered_on', '<=', $end->toDateString())
             ->selectRaw('ordered_on, COUNT(*) as orders_count, SUM(total_minor) as total_minor')
             ->groupBy('ordered_on')
             ->get();
@@ -594,8 +620,13 @@ class StorefrontsEndpoint
      * @param  array<int, string>|null  $codes  resolved once by the caller where it
      *                                          lists more than one shop
      */
-    private function summarise(Storefront $shop, int $businessId, ?array $codes = null): array
-    {
+    private function summarise(
+        Storefront $shop,
+        int $businessId,
+        ?array $codes = null,
+        ?string $since = null,
+        ?string $until = null,
+    ): array {
         // Uniqueness is a property of the whole set, so this cannot be worked
         // out per shop. Resolved here only when summarising one on its own.
         $codes ??= StoreCode::forBusiness($businessId);

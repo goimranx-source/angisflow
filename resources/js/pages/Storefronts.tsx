@@ -10,6 +10,7 @@ import {
     StatusBadge,
     KPICard,
 } from '@/components/modules';
+import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
@@ -22,6 +23,19 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
+
+/**
+ * A date as the endpoint wants it, in the reader's own day.
+ *
+ * `toISOString` would be shorter and wrong either side of midnight: it converts
+ * to UTC first, so a range picked on the 1st in Dhaka is sent as the 31st and
+ * the figures come back for a month nobody chose.
+ */
+function toIsoDay(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 /**
  * A row's actions, behind one mark.
@@ -461,11 +475,29 @@ export default function Storefronts() {
     const [sortBy, setSortBy] = useState<string | null>('created_at');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>('desc');
 
+    /*
+     * The period every figure on this screen describes.
+     *
+     * Null is all of it, which is the honest default: a shop's lifetime takings
+     * are the right answer to "how much has this made" until somebody asks
+     * something narrower.
+     */
+    const [range, setRange] = useState<DateRange | null>(null);
+
+    // Whether the filters are showing. They were four controls on the row at
+    // all times, for something touched once a session.
+    const [filtersOpen, setFiltersOpen] = useState(false);
+
     const { data, isLoading, isError, refetch } = useQuery({
-        queryKey: ['storefronts', { search, typeFilter, statusFilter, sortBy, sortDirection }],
+        queryKey: [
+            'storefronts',
+            { search, typeFilter, statusFilter, sortBy, sortDirection, range },
+        ],
         queryFn: ({ signal }) =>
             api.get<StorefrontsResponse>('/storefronts', {
                 params: {
+                    from: range?.start ? toIsoDay(range.start) : undefined,
+                    to: range?.end ? toIsoDay(range.end) : undefined,
                     search,
                     type: typeFilter || undefined,
                     status: statusFilter || undefined,
@@ -487,6 +519,7 @@ export default function Storefronts() {
      * always the current row.
      */
     const selectedStorefront = storefronts.find((shop) => shop.id === selectedId) ?? null;
+
     const summary = data?.summary;
     const trends = data?.trends;
 
@@ -616,8 +649,18 @@ export default function Storefronts() {
               are one thing — a way into a list and the list — and they read as
               one thing now, divided rather than separated.
             */}
-            <div className="card mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/*
+              As tall as its rows, and no taller.
+
+              `flex-1` made the card fill the page, so one shop sat above a
+              hundred and sixty pixels of nothing inside a border — a box
+              promising rows that were not coming. The rows decide the height;
+              the scrolling region caps it when there are enough of them to
+              need capping.
+            */}
+            <div className="card mt-6 flex flex-col overflow-hidden">
                 <FilterBar
+                    compact
                     className="!rounded-none !border-0 !border-b"
 
                     searchValue={search}
@@ -632,33 +675,90 @@ export default function Storefronts() {
                      * the row says what it is at a glance — find something on
                      * one side, narrow the list on the other.
                      */
+                    trailingSearch={
+                        /*
+                          The period sits with the search, because both narrow
+                          what is being looked at rather than how it is shown.
+                        */
+                        <DateRangePicker value={range} onChange={setRange} />
+                    }
                     actions={
                         <>
-                            <FilterSelect
-                                label="Type"
-                                value={typeFilter}
-                                onChange={setTypeFilter}
-                                options={types}
-                                placeholder="All types"
-                            />
-                            <FilterSelect
-                                label="Status"
-                                value={statusFilter}
-                                onChange={setStatusFilter}
-                                options={statuses}
-                                placeholder="All statuses"
-                            />
+                            {/*
+                              Behind a button, with a mark when it is doing
+                              something.
 
-                            {hasFilters && (
+                              Two selects on the row at all times cost the width
+                              of their widest option for a choice made once a
+                              session — and left the row reading as four controls
+                              of equal weight, when one of them is the search.
+                            */}
+                            <div className="relative">
                                 <button
                                     type="button"
-                                    onClick={handleClearFilters}
-                                    className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
+                                    onClick={() => setFiltersOpen(!filtersOpen)}
+                                    className="btn btn-secondary"
+                                    aria-expanded={filtersOpen}
+                                    aria-haspopup="dialog"
                                 >
-                                    <Icon name="x" size={14} />
-                                    <span>Clear</span>
+                                    <Icon name="funnel" size={14} />
+                                    <span>Filter</span>
+
+                                    {hasFilters && (
+                                        <span
+                                            className="ml-0.5 size-1.5 rounded-full"
+                                            style={{ background: 'var(--color-brand)' }}
+                                            aria-label="Filters are applied"
+                                        />
+                                    )}
                                 </button>
-                            )}
+
+                                {filtersOpen && (
+                                    <>
+                                        {/* A click anywhere else closes it, which
+                                            is what people expect of something
+                                            that opened over the page. */}
+                                        <div
+                                            className="fixed inset-0 z-[var(--z-dropdown,40)]"
+                                            onClick={() => setFiltersOpen(false)}
+                                        />
+
+                                        <div
+                                            className="absolute right-0 top-full z-[calc(var(--z-dropdown,40)+1)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
+                                            style={{ borderColor: 'var(--shell-border)' }}
+                                        >
+                                            <FilterSelect
+                                                label="Type"
+                                                value={typeFilter}
+                                                onChange={setTypeFilter}
+                                                options={types}
+                                                placeholder="All types"
+                                            />
+                                            <FilterSelect
+                                                label="Status"
+                                                value={statusFilter}
+                                                onChange={setStatusFilter}
+                                                options={statuses}
+                                                placeholder="All statuses"
+                                            />
+
+                                            {hasFilters && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleClearFilters();
+                                                        setFiltersOpen(false);
+                                                    }}
+                                                    className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
+                                                >
+                                                    <Icon name="x" size={14} />
+                                                    <span>Clear filters</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
                             {/*
                               Fetching the list again, which is not the same as
@@ -694,7 +794,7 @@ export default function Storefronts() {
                         </button>
                     </div>
                 ) : (
-                    <div className="min-h-0 flex-1 overflow-auto">
+                    <div className="max-h-[min(60vh,40rem)] overflow-auto">
                         <Table
                             data={storefronts}
                             loading={isLoading}
