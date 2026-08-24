@@ -2470,8 +2470,11 @@ export default function Orders() {
                                   documents,
 
                                   {
-                                      label: 'Manage',
-                                      icon: 'gear',
+                                      /*
+                                        No heading. Two verbs that explain
+                                        themselves do not need a noun above
+                                        them saying they are management.
+                                      */
                                       items: [
                                           ...(tab === 'archived'
                                               ? [
@@ -2506,7 +2509,14 @@ export default function Orders() {
                                               label: 'Move to trash',
                                               icon: 'trash',
                                               variant: 'danger' as const,
-                                              description: 'Recoverable from the Trash tab',
+                                              /*
+                                                No description. The confirmation
+                                                that follows says what trashing
+                                                means and what can be undone --
+                                                saying it on the button as well
+                                                puts the reassurance before the
+                                                question it reassures about.
+                                              */
                                               onSelect: async () => {
                                                   if (await confirm(`Move ${noun} to trash?`)) {
                                                       bulkUpdate.mutate({

@@ -86,18 +86,31 @@ export function BulkActions({
             }}
         >
             {/*
-               The count in the figure, the noun in the words.
+              The count in a mark of its own.
 
-               A 32px brand-coloured tile for a number that is usually one digit
-               was the loudest thing in the bar, and it was competing with the
-               buttons — which are the reason the bar exists. The number carries
-               the weight; the tile is gone.
-             */}
-            <span className="whitespace-nowrap text-sm text-[var(--color-text-body)]">
-                <span className="font-semibold tabular-nums text-[var(--color-text-main)]">
+              This bar arrives without being asked for, over the page somebody
+              was reading, and it is the only thing on screen that acts on many
+              records at once. A filled mark is what carries that from the
+              corner of the eye — the words beside it are read second, and only
+              once somebody has noticed the bar is there at all.
+
+              Sized to its digits rather than fixed: "3" and "1,204" both fit,
+              where a square holding a four-digit number is a square with the
+              number spilling out of it.
+            */}
+            <span className="flex shrink-0 items-center gap-2">
+                <span
+                    className="flex h-7 min-w-7 items-center justify-center rounded-[var(--shell-radius-sm)] px-1.5 text-sm font-semibold tabular-nums"
+                    style={{
+                        background: 'var(--color-brand)',
+                        color: 'var(--color-text-on-accent)',
+                    }}
+                >
                     {selectedCount}
-                </span>{' '}
-                {selectedCount === 1 ? 'selected' : 'selected'}
+                </span>
+                <span className="whitespace-nowrap text-sm text-[var(--color-text-body)]">
+                    selected
+                </span>
             </span>
 
             <span

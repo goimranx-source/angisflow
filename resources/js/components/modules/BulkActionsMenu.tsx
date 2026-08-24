@@ -40,7 +40,16 @@ export type BulkActionItem = {
 };
 
 export type BulkActionGroup = {
-    label: string;
+    /**
+     * What the group is for, or nothing.
+     *
+     * Left off for a group that is a pair of plain actions rather than a set of
+     * choices. "Cancel orders" and "Move to trash" under a heading reading
+     * "Manage" is a heading explaining two verbs that already explain
+     * themselves — and it makes the menu look like it has one more section than
+     * it has decisions in it.
+     */
+    label?: string;
     icon?: string;
     items: BulkActionItem[];
 };
@@ -160,15 +169,40 @@ export function BulkActionsMenu({
                     >
                         {groups.map((group, index) => (
                             <div
-                                key={group.label}
+                                key={group.label ?? `group-${index}`}
                                 className={cn(
-                                    index > 0 && 'mt-1 border-t border-[var(--color-border-light)] pt-1',
+                                    index > 0 && 'mt-1 border-t pt-1',
                                 )}
+                                style={
+                                    index > 0
+                                        ? { borderColor: 'var(--shell-border)' }
+                                        : undefined
+                                }
                             >
-                                <p className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                    {group.icon && <Icon name={group.icon} size={12} />}
-                                    {group.label}
-                                </p>
+                                {/*
+                                  A heading you can actually see.
+
+                                  11px, uppercase, wide-tracked and grey is the
+                                  style of something trying not to be read --
+                                  which is the wrong instruction for the only
+                                  words in the menu that say what the choices
+                                  below them are. Same size as the items, darker
+                                  than them, and no tracking: a heading, not a
+                                  watermark.
+                                */}
+                                {group.label && (
+                                    <p className="flex items-center gap-2 px-3 pb-1 pt-2 text-xs font-semibold text-[var(--color-text-main)]">
+                                        {group.icon && (
+                                            <Icon
+                                                name={group.icon}
+                                                size={13}
+                                                weight="duotone"
+                                                className="shrink-0 opacity-60"
+                                            />
+                                        )}
+                                        {group.label}
+                                    </p>
+                                )}
 
                                 {group.items.map((item) => (
                                     <button
@@ -180,24 +214,45 @@ export function BulkActionsMenu({
                                             setOpen(false);
                                             item.onSelect();
                                         }}
+                                        /*
+                                          Every item indented the same, whether
+                                          it has an icon or not.
+
+                                          The icon slot is always drawn, so a
+                                          group whose items have no icons still
+                                          starts its words where the ones above
+                                          it start theirs. Without it the menu
+                                          has two left margins and reads as two
+                                          menus stacked.
+
+                                          Indented past the heading as well: the
+                                          items belong to it, and a heading
+                                          sharing a margin with its own contents
+                                          is a heading doing nothing.
+                                        */
                                         className={cn(
-                                            'flex w-full items-start gap-2.5 px-3 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                            'flex w-full items-center gap-2 py-1.5 pl-3 pr-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                                             item.variant === 'danger'
-                                                ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger-subtle)]'
+                                                ? 'hover:bg-[var(--color-danger-subtle)]'
                                                 : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
                                         )}
+                                        style={
+                                            item.variant === 'danger'
+                                                ? { color: 'var(--color-danger-text)' }
+                                                : undefined
+                                        }
                                     >
-                                        <span className="mt-0.5 w-4 shrink-0">
-                                            {item.icon && <Icon name={item.icon} size={15} />}
-                                        </span>
-                                        <span className="min-w-0">
-                                            <span className="block text-sm">{item.label}</span>
-                                            {item.description && (
-                                                <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                                                    {item.description}
-                                                </span>
+                                        <span className="flex w-4 shrink-0 justify-center">
+                                            {item.icon && (
+                                                <Icon
+                                                    name={item.icon}
+                                                    size={15}
+                                                    weight="duotone"
+                                                    className="opacity-70"
+                                                />
                                             )}
                                         </span>
+                                        <span className="min-w-0 truncate">{item.label}</span>
                                     </button>
                                 ))}
                             </div>
