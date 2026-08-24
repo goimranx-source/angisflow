@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
+import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { cn } from '@/lib/utils';
 
 export type DateRange = { start: Date; end: Date };
@@ -124,6 +126,8 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     const [anchor, setAnchor] = useState<Date | null>(null);
     const [hovered, setHovered] = useState<Date | null>(null);
     const container = useRef<HTMLDivElement>(null);
+    const button = useRef<HTMLButtonElement>(null);
+    const calendar = useRef<HTMLDivElement>(null);
 
     // Dismissed by clicking away or pressing Escape — both, because a panel
     // that only closes one way is one people end up clicking around.
@@ -133,10 +137,25 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
         }
 
         const onDown = (event: MouseEvent) => {
-            if (!container.current?.contains(event.target as Node)) {
-                setOpen(false);
-                setAnchor(null);
+            const target = event.target as Element | null;
+
+            /*
+             * The calendar is rendered into <body> now, so it is no longer
+             * inside `container` and `contains` says false for every click in
+             * it -- which would close the picker on the first date pressed.
+             *
+             * It carries data-flyout-panel, which is the app's one answer to
+             * "is this press inside an open flyout".
+             */
+            if (
+                container.current?.contains(target as Node) ||
+                target?.closest?.('[data-flyout-panel]')
+            ) {
+                return;
             }
+
+            setOpen(false);
+            setAnchor(null);
         };
 
         const onKey = (event: KeyboardEvent) => {
@@ -154,6 +173,17 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
             document.removeEventListener('keydown', onKey);
         };
     }, [open]);
+
+    /*
+     * Placed against the window rather than hung off the button.
+     *
+     * A two-month calendar is the widest panel in the app and the tallest, and
+     * `absolute right-0` put it below its trigger and hoped. Opened from a
+     * toolbar low in a short window, the second month and the whole bottom row
+     * of dates were past the fold; opened from the left of a narrow one, it ran
+     * off the side.
+     */
+    const at = useFlyoutPosition({ open, trigger: button, panel: calendar });
 
     const cells = useMemo(() => monthGrid(view), [view]);
 
@@ -187,6 +217,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     return (
         <div ref={container} className={cn('relative', className)}>
             <button
+                ref={button}
                 type="button"
                 onClick={() => setOpen((was) => !was)}
                 aria-expanded={open}
@@ -219,10 +250,12 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                 <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
-            {open && (
+            {open &&
+                createPortal(
                 <div
+                    ref={calendar}
                     data-flyout-panel
-                    className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 flex overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
+                    className="fixed z-[var(--z-flyout-panel)] flex overflow-auto rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-[var(--shadow-lg)]"
                     style={{
                         /*
                           The same arrival as every other panel that opens over
@@ -234,7 +267,15 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                           from.
                         */
                         animation: 'context-flyout-slide-up 120ms ease-out',
-                        transformOrigin: 'top right',
+                        transformOrigin: at?.side === 'above' ? 'bottom right' : 'top right',
+
+                        // Hidden for the one frame it spends being measured.
+                        // It has to be in the document to have a size, and it
+                        // cannot be placed without one.
+                        visibility: at ? 'visible' : 'hidden',
+                        top: at?.top ?? 0,
+                        left: at?.left ?? 0,
+                        maxHeight: at?.maxHeight,
                     }}
                 >
                     <ul className="hidden w-36 flex-none border-r border-[var(--shell-border)] p-1.5 sm:block">
@@ -319,7 +360,8 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                             {anchor ? 'Pick the end date' : formatRange(value ?? null)}
                         </p>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

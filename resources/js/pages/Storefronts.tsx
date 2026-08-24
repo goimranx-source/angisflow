@@ -23,6 +23,7 @@ import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -101,7 +102,16 @@ function RowActions({
     isPending: boolean;
 }) {
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const rect = buttonRef.current?.getBoundingClientRect();
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    /*
+     * Measured against the window rather than dropped below the button.
+     *
+     * The last row of a table is close enough to the bottom that a menu opened
+     * from it went off the screen -- and the last row is exactly where somebody
+     * is when they reach for the delete on the thing they just added.
+     */
+    const at = useFlyoutPosition({ open, trigger: buttonRef, panel: menuRef });
 
     const item =
         'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition';
@@ -138,7 +148,6 @@ function RowActions({
             </button>
 
             {open &&
-                rect &&
                 createPortal(
                     <>
                         <FlyoutGuard
@@ -146,9 +155,10 @@ function RowActions({
                         />
 
                         <div
+                            ref={menuRef}
                             role="menu"
                             data-flyout-panel
-                            className="fixed z-[calc(var(--z-modal)+1)] w-44 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
+                            className="fixed z-[calc(var(--z-modal)+1)] w-44 overflow-y-auto overflow-x-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
                             style={{
                                 borderColor: 'var(--shell-border)',
 
@@ -162,12 +172,24 @@ function RowActions({
                                   enough that nobody waits for it.
                                 */
                                 animation: 'context-flyout-slide-up 120ms ease-out',
-                                transformOrigin: 'top right',
-                                top: rect.bottom + 6,
+                                transformOrigin:
+                                    at?.side === 'above' ? 'bottom right' : 'top right',
 
-                                // Right-aligned to the button, and never off the
-                                // left edge on a narrow window.
-                                left: Math.max(8, rect.right - 176),
+                                /*
+                                  Off-screen until it has been measured.
+                                  
+                                  It has to be in the document to have a height,
+                                  and it cannot be placed until it has one. The
+                                  measuring happens in a layout effect, before
+                                  the browser paints, so this frame is never
+                                  seen -- but `visibility` rather than a missing
+                                  panel, because an element that is not there
+                                  cannot be measured either.
+                                */
+                                visibility: at ? 'visible' : 'hidden',
+                                top: at?.top ?? 0,
+                                left: at?.left ?? 0,
+                                maxHeight: at?.maxHeight,
                             }}
                             onClick={(event) => event.stopPropagation()}
                         >
@@ -579,6 +601,23 @@ export default function Storefronts() {
     // all times, for something touched once a session.
     const [filtersOpen, setFiltersOpen] = useState(false);
 
+    const filterButton = useRef<HTMLButtonElement>(null);
+    const filterPanel = useRef<HTMLDivElement>(null);
+
+    /*
+     * Placed against the window, not hung off the button.
+     *
+     * `absolute top-full` puts a panel below its trigger and trusts there to be
+     * room. On a short window there is not, and the Clear button at the bottom
+     * of it -- the one somebody opened the panel to reach -- was the part that
+     * went past the fold.
+     */
+    const filterAt = useFlyoutPosition({
+        open: filtersOpen,
+        trigger: filterButton,
+        panel: filterPanel,
+    });
+
     const { data, isLoading, isError, refetch } = useQuery({
         queryKey: [
             'storefronts',
@@ -816,6 +855,7 @@ export default function Storefronts() {
                             */}
                             <div className="relative">
                                 <button
+                                    ref={filterButton}
                                     type="button"
                                     onClick={() => setFiltersOpen(!filtersOpen)}
                                     /*
@@ -866,15 +906,17 @@ export default function Storefronts() {
                                     />
                                 </button>
 
-                                {filtersOpen && (
-                                    <>
+                                {filtersOpen &&
+                                    createPortal(
+                                        <>
                                         <FlyoutGuard
                                             onClose={() => setFiltersOpen(false)}
                                         />
 
                                         <div
+                                            ref={filterPanel}
                                             data-flyout-panel
-                                            className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
+                                            className="fixed z-[var(--z-flyout-panel)] w-64 space-y-3 overflow-y-auto rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
                                             style={{
                                                 borderColor: 'var(--shell-border)',
 
@@ -884,7 +926,19 @@ export default function Storefronts() {
                                                 // doing it.
                                                 animation:
                                                     'context-flyout-slide-up 120ms ease-out',
-                                                transformOrigin: 'top right',
+                                                transformOrigin:
+                                                    filterAt?.side === 'above'
+                                                        ? 'bottom right'
+                                                        : 'top right',
+
+                                                // Hidden for the frame it spends
+                                                // being measured. See the row
+                                                // menu for why it is visibility
+                                                // rather than not rendering.
+                                                visibility: filterAt ? 'visible' : 'hidden',
+                                                top: filterAt?.top ?? 0,
+                                                left: filterAt?.left ?? 0,
+                                                maxHeight: filterAt?.maxHeight,
                                             }}
                                         >
                                             <FilterSelect
@@ -916,8 +970,9 @@ export default function Storefronts() {
                                                 </button>
                                             )}
                                         </div>
-                                    </>
-                                )}
+                                        </>,
+                                        document.body,
+                                    )}
                             </div>
 
                             {/*
