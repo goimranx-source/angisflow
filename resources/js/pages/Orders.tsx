@@ -175,6 +175,34 @@ type OrdersResponse = {
 };
 
 /**
+ * How an order is named wherever it is named in full.
+ *
+ * ── Why the shop's number is not shown bare ──────────────────────────────────
+ *
+ * "(9586)" is a number from somebody's sequence and does not say whose. A
+ * business selling through two shops has two orders numbered 1043, and the
+ * bracket alone cannot tell them apart — which defeats the point of showing it,
+ * since the reason it is there is so somebody can quote it back to the right
+ * shop.
+ *
+ * "(VB-9586)" says which sequence. It is the same tag the Store column uses, so
+ * the two read as one fact rather than as two facts about numbers.
+ *
+ * A counter sale has no shop and no second number, so it is just the reference.
+ */
+function orderName(order: Order): string {
+    const own = order.reference ?? order.order_number;
+
+    if (!order.reference || !order.store) {
+        return `#${own}`;
+    }
+
+    const tag = order.store_code ?? order.store.name;
+
+    return `#${own} (${tag}-${order.order_number})`;
+}
+
+/**
  * An order's reference, set as an identifier rather than as prose.
  *
  * ── Why it is not just the string ────────────────────────────────────────────
@@ -2444,7 +2472,12 @@ export default function Orders() {
 
                                   {
                                       label: 'Order status',
-                                      icon: 'circle-notch',
+                                      /* `circle-notch` is a spinner: an
+                                         incomplete ring, which beside a group
+                                         of statuses reads as the fallback a
+                                         missing icon leaves behind. A flag is
+                                         what a state is marked with. */
+                                      icon: 'flag',
                                       items: allStatuses.map((status) => ({
                                           key: `status-${status.value}`,
                                           label: `${status.label}${status.custom ? ' (Custom)' : ''}`,
@@ -2457,32 +2490,21 @@ export default function Orders() {
                                       })),
                                   },
 
-                                  {
-                                      label: 'Payment',
-                                      icon: 'currency-dollar',
-                                      items: [
-                                          ...availablePaymentStatuses.map((status) => ({
-                                              key: `payment-${status.value}`,
-                                              label: status.label,
-                                              onSelect: () =>
-                                                  bulkUpdate.mutate({
-                                                      order_ids: selectedOrders,
-                                                      action: 'update_status',
-                                                      payment_status: status.value,
-                                                  }),
-                                          })),
-                                          {
-                                              key: 'mark_paid',
-                                              label: 'Mark as paid in full',
-                                              icon: 'check-circle',
-                                              onSelect: () =>
-                                                  bulkUpdate.mutate({
-                                                      order_ids: selectedOrders,
-                                                      action: 'mark_paid',
-                                                  }),
-                                          },
-                                      ],
-                                  },
+                                  /*
+                                    ── No payment status here ──────────────────
+
+                                    A payment status set by hand is a claim
+                                    about money that no money was moved to
+                                    support: mark ten orders paid and the ledger
+                                    still says they owe, so the badge and the
+                                    books disagree and only one of them is
+                                    right.
+
+                                    It follows the payments recorded against an
+                                    order and nothing else. Recording a payment
+                                    is how it changes, which is also the thing
+                                    somebody actually meant to do.
+                                  */
 
                                   ...(availableFulfilmentStatuses.length > 0
                                       ? [
@@ -2511,11 +2533,45 @@ export default function Orders() {
                                                 items: couriers.map((courier) => ({
                                                     key: `courier-${courier.id}`,
                                                     label: courier.label,
-                                                    onSelect: () =>
+                                                    /*
+                                                      One order is asked about;
+                                                      several are not.
+
+                                                      Dispatching from a row
+                                                      opens a box for the amount
+                                                      to collect, because a COD
+                                                      order goes to the courier
+                                                      with a figure attached and
+                                                      that figure is not always
+                                                      the order's total —
+                                                      part-paid, a delivery fee
+                                                      agreed on the phone. From
+                                                      here it went straight out
+                                                      at whatever the server
+                                                      assumed, so the same
+                                                      action did two different
+                                                      things depending on which
+                                                      control was used.
+
+                                                      For a set there is no one
+                                                      figure to ask for, so that
+                                                      case keeps the bulk call.
+                                                    */
+                                                    onSelect: () => {
+                                                        if (only !== null) {
+                                                            handleInlineDispatch(
+                                                                only.id,
+                                                                courier.id,
+                                                            );
+
+                                                            return;
+                                                        }
+
                                                         bulkDispatch.mutate({
                                                             order_ids: selectedOrders,
                                                             courier_id: courier.id,
-                                                        }),
+                                                        });
+                                                    },
                                                 })),
                                             },
                                         ]
@@ -2596,15 +2652,7 @@ export default function Orders() {
                               everywhere else. Several get the count, which is
                               the only honest thing to say about a set.
                             */
-                            heading={
-                                only !== null
-                                    ? `#${only.reference ?? only.order_number}${
-                                          only.reference && only.store
-                                              ? ` (${only.order_number})`
-                                              : ''
-                                      }`
-                                    : `${noun}`
-                            }
+                            heading={only !== null ? orderName(only) : noun}
                             busy={busy}
                         />
                     );
@@ -2642,15 +2690,7 @@ export default function Orders() {
                   is entirely about one order was the one place not calling it
                   what the rest of the application calls it.
                 */
-                title={
-                    selectedOrder
-                        ? `#${selectedOrder.reference ?? selectedOrder.order_number}${
-                              selectedOrder.reference && selectedOrder.store
-                                  ? ` (${selectedOrder.order_number})`
-                                  : ''
-                          }`
-                        : ''
-                }
+                title={selectedOrder ? orderName(selectedOrder) : ''}
                 subtitle={selectedOrder ? `${selectedOrder.customer?.name ?? 'Walk-in'} · ${formatDate(selectedOrder.date)}` : ''}
                 tabs={[
                     {

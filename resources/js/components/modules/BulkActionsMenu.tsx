@@ -275,13 +275,20 @@ export function BulkActionsMenu({
                                           has two left margins and reads as two
                                           menus stacked.
 
-                                          Indented past the heading as well: the
-                                          items belong to it, and a heading
-                                          sharing a margin with its own contents
-                                          is a heading doing nothing.
+                                          Indented past the heading, and the
+                                          icon indented with it.
+
+                                          Aligning the text alone was not
+                                          enough: an item's icon then shared its
+                                          left edge with the heading's, so a
+                                          group whose items have icons -- the
+                                          documents, the couriers -- read as
+                                          un-indented beside a group whose
+                                          items have none. The row moves, not
+                                          just the words in it.
                                         */
                                         className={cn(
-                                            'flex w-full items-center gap-2 py-1.5 pl-3 pr-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                            'flex w-full items-center gap-2 py-1.5 pl-6 pr-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                                             item.variant === 'danger'
                                                 ? 'hover:bg-[var(--color-danger-subtle)]'
                                                 : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
@@ -333,7 +340,7 @@ export function BulkActionsMenu({
                                             setOpen(false);
                                             item.onSelect();
                                         }}
-                                        className="flex w-full items-center gap-2 py-1.5 pl-3 pr-3 text-left text-sm transition-colors hover:bg-[var(--color-danger-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="flex w-full items-center gap-2 py-1.5 pl-6 pr-3 text-left text-sm transition-colors hover:bg-[var(--color-danger-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
                                         style={{ color: 'var(--color-danger-text)' }}
                                     >
                                         <span className="flex w-4 shrink-0 justify-center">
