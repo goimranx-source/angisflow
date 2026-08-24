@@ -25,28 +25,10 @@ import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { api } from '@/lib/api';
+import { compactCount } from '@/lib/money';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
-
-/**
- * A count, shortened once it stops being readable in full.
- *
- * Money has `both()` for this; a plain tally had nothing, so twelve thousand
- * products rendered as "12,000" and a hundred thousand pushed the card wider
- * than its neighbours. Below a thousand there is nothing to gain — "412" is
- * shorter than "0.4K" and says more.
- */
-function compactCount(value: number): string {
-    if (Math.abs(value) < 1000) {
-        return value.toLocaleString();
-    }
-
-    return new Intl.NumberFormat(undefined, {
-        notation: 'compact',
-        maximumFractionDigits: 1,
-    }).format(value);
-}
 
 /**
  * A date as the endpoint wants it, in the reader's own day.

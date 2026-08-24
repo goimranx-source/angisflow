@@ -125,3 +125,26 @@ export function money(symbol: string, value: string | number): { short: string; 
         exact: formatMoneyWith(symbol, value),
     };
 }
+
+/**
+ * A count, shortened once it stops being readable in full.
+ *
+ * Money has `both()` for this; a plain tally had nothing, so twelve thousand
+ * products rendered as "12,000" and a hundred thousand pushed a card wider than
+ * its neighbours. Below a thousand there is nothing to gain — "412" is shorter
+ * than "0.4K" and says more.
+ *
+ * Lives here rather than in the page that needed it first. It was written in
+ * Storefronts.tsx, which is where the second page to want it would not have
+ * looked.
+ */
+export function compactCount(value: number): string {
+    if (Math.abs(value) < 1000) {
+        return value.toLocaleString();
+    }
+
+    return new Intl.NumberFormat(undefined, {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+    }).format(value);
+}

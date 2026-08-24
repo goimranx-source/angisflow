@@ -13,6 +13,7 @@ import {
     SelectCheckbox,
     QuickCreateModal,
     QuickActionButton,
+    KPICardSkeleton,
     KPICard,
     ImportModal,
 } from '@/components/modules';
@@ -37,6 +38,7 @@ import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { api } from '@/lib/api';
+import { compactCount } from '@/lib/money';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { confirm } from '@/lib/confirm';
@@ -952,12 +954,29 @@ export default function Orders() {
                 />
             </div>
 
-            {/* KPI row */}
+            {/*
+              Four shapes while the figures are on their way.
+
+              They appeared only once the data had landed, so the row above the
+              table went from nothing to four cards and pushed everything under
+              it down the page -- the one thing on this screen that moved after
+              it had finished loading.
+            */}
+            {!summary && isLoading && (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                    <KPICardSkeleton />
+                </div>
+            )}
+
             {summary && (
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <KPICard
                         label="Total Orders"
-                        value={summary.total_orders.toLocaleString()}
+                        value={compactCount(summary.total_orders)}
+                        valueTitle={summary.total_orders.toLocaleString()}
                         icon="shopping-cart"
                         variant="brand"
                     />
@@ -985,7 +1004,8 @@ export default function Orders() {
                     />
                     <KPICard
                         label="Pending Orders"
-                        value={summary.pending_count.toLocaleString()}
+                        value={compactCount(summary.pending_count)}
+                        valueTitle={summary.pending_count.toLocaleString()}
                         icon="clock"
                         variant="warning"
                     />

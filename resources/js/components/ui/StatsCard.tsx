@@ -95,7 +95,30 @@ type StatsCardProps = {
  * £74,000 and £76,000 drawn from zero is a flat line, which is true of the
  * absolute figures and useless as a picture of the month.
  */
-function Spark({ points, accent }: { points: number[]; accent: string }) {
+/**
+ * The series under the figure, as bars.
+ *
+ * ── Why bars rather than the line it was ─────────────────────────────────────
+ *
+ * A line says "this value moved from here to there", and it is the right
+ * picture for something continuous. What these cards carry is not continuous:
+ * it is a count per day. There is no value between Tuesday and Wednesday, and a
+ * curve drawn through them invents one — smoothed, it invents a Tuesday
+ * afternoon peak that never happened.
+ *
+ * Bars say the true thing: fourteen days, each its own height, nothing claimed
+ * about the gaps. They also read at this size, where a 1.5px line across 28px
+ * of card is closer to a texture than a chart.
+ *
+ * ── The floor ────────────────────────────────────────────────────────────────
+ *
+ * Bars are measured from zero, not from the smallest value in the series.
+ * Starting at the minimum is what makes a sparkline flatter a quiet week into a
+ * dramatic one — the shortest bar vanishes and the tallest fills the card,
+ * whatever the actual difference was. A day with two orders and a day with
+ * three should look nearly the same, because they are.
+ */
+function Spark({ points }: { points: number[] }) {
     // One point is not a trend, and no points is not a picture.
     if (points.length < 2) {
         return null;
@@ -104,44 +127,18 @@ function Spark({ points, accent }: { points: number[]; accent: string }) {
     const W = 100;
     const H = 28;
 
-    const min = Math.min(...points);
-    const max = Math.max(...points);
+    const max = Math.max(...points, 0);
 
-    // A flat series would divide by zero; drawn down the middle instead of
-    // along the floor, since flat is a level rather than an absence.
-    const span = max - min || 1;
-    const flat = max === min;
-
-    const at = (i: number): [number, number] => {
-        // Indexed access is checked here: the loop below never leaves the
-        // array, but the compiler cannot see that and a silent NaN in a path
-        // would draw nothing at all rather than complain.
-        const value = points[i] ?? min;
-
-        return [
-            (i / (points.length - 1)) * W,
-            flat ? H / 2 : H - ((value - min) / span) * (H - 2) - 1,
-        ];
-    };
-
-    let line = '';
-
-    for (let i = 0; i < points.length; i++) {
-        const [x, y] = at(i);
-
-        if (i === 0) {
-            line += `M ${x} ${y}`;
-
-            continue;
-        }
-
-        const [px, py] = at(i - 1);
-        const mid = (px + x) / 2;
-
-        line += ` C ${mid} ${py}, ${mid} ${y}, ${x} ${y}`;
-    }
-
-    const id = `spark-${accent}`;
+    /*
+     * Share the width evenly, and spend a fifth of each share on the gap.
+     *
+     * As a fraction rather than a pixel count, because the viewBox is stretched
+     * to the card's width by preserveAspectRatio="none" — a gap set in viewBox
+     * units would come out wider on a wide card and thinner on a narrow one,
+     * and a row of four cards would have four different bar spacings.
+     */
+    const slot = W / points.length;
+    const bar = slot * 0.62;
 
     return (
         <svg
@@ -150,24 +147,31 @@ function Spark({ points, accent }: { points: number[]; accent: string }) {
             className="mt-3 block h-7 w-full"
             aria-hidden="true"
         >
-            <defs>
-                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
-                    <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                </linearGradient>
-            </defs>
+            {points.map((value, i) => {
+                /*
+                 * A floor of one unit, so a day with nothing in it is still a
+                 * mark on the axis rather than a hole in the row. A gap reads
+                 * as missing data; a stub reads as a quiet day, which is what
+                 * it is.
+                 */
+                const height = max === 0 ? 1 : Math.max(1, (value / max) * (H - 1));
 
-            <path d={`${line} L ${W} ${H} L 0 ${H} Z`} fill={`url(#${id})`} />
-
-            <path
-                d={line}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-            />
+                return (
+                    <rect
+                        key={i}
+                        x={i * slot + (slot - bar) / 2}
+                        y={H - height}
+                        width={bar}
+                        height={height}
+                        rx="0.6"
+                        fill="currentColor"
+                        /* The tallest bars carry the colour; the quiet ones
+                           recede, so the shape is legible before the values
+                           are read. */
+                        opacity={max === 0 ? 0.25 : 0.35 + (value / max) * 0.65}
+                    />
+                );
+            })}
         </svg>
     );
 }
@@ -288,7 +292,7 @@ export function StatsCard({
                         accent === 'info' && 'text-[var(--color-info)]',
                     )}
                 >
-                    <Spark points={spark} accent={accent} />
+                    <Spark points={spark} />
                 </div>
             )}
 
