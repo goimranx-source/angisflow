@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
@@ -174,6 +174,151 @@ type OrdersResponse = {
         last_page: number;
     };
 };
+
+/**
+ * The stages an order passes through, and where this one has reached.
+ *
+ * ── Why a fixed six and not the status list ──────────────────────────────────
+ *
+ * A business can add its own statuses, and several of the built-in ones are not
+ * stages at all — On hold, Follow-up and Changed are things that happen *to* an
+ * order rather than steps along it, and Cancelled, Failed and Refunded are ways
+ * of leaving the line rather than points on it. A stepper drawn from that list
+ * would grow a seventh circle the day somebody added "Awaiting parts", and
+ * would have to draw "Cancelled" as a step to pass through on the way to
+ * delivered.
+ *
+ * These six are the journey itself. Where an order has got to is read from the
+ * facts — the dates it carries and the shipment attached to it — not from the
+ * status label, because the label is one word and the journey is six.
+ */
+const JOURNEY = [
+    { key: 'created', label: 'Order created', icon: 'shopping-bag' },
+    { key: 'processing', label: 'In progress', icon: 'package' },
+    { key: 'ready', label: 'Ready to ship', icon: 'shopping-cart' },
+    { key: 'shipped', label: 'Shipped', icon: 'package' },
+    { key: 'transit', label: 'In transit', icon: 'truck' },
+    { key: 'delivered', label: 'Delivered', icon: 'check-circle' },
+] as const;
+
+/** How far along an order is: the index of the last stage it has reached. */
+function reached(order: Order): number {
+    if (order.delivered_on) return 5;
+
+    if (order.dispatch) {
+        // A courier holding it is further along than one that has only been
+        // handed it, and the shipment's own state is the only thing that knows
+        // the difference.
+        return ['in_transit', 'out_for_delivery'].includes(order.dispatch.status) ? 4 : 3;
+    }
+
+    if (order.fulfilment_status === 'fulfilled') return 3;
+    if (order.status === 'processing' || order.payment_status === 'paid') return 2;
+
+    return order.status === 'pending' ? 0 : 1;
+}
+
+/**
+ * A titled box, drawn the same way every time.
+ *
+ * The overview had three of these written out by hand and they had already
+ * drifted — one with a divider under its title, one without, one with different
+ * padding.
+ */
+function Panel({
+    title,
+    action,
+    children,
+    flush,
+}: {
+    title: string;
+    action?: ReactNode;
+    children: ReactNode;
+    /** No padding on the body, for a list that draws its own row separators. */
+    flush?: boolean;
+}) {
+    return (
+        <section
+            className="overflow-hidden rounded-[var(--shell-radius)] border"
+            style={{ borderColor: 'var(--shell-border)' }}
+        >
+            <div
+                className="flex items-center justify-between gap-3 border-b px-4 py-2.5"
+                style={{ borderColor: 'var(--shell-border)' }}
+            >
+                <h4 className="text-sm font-semibold text-[var(--color-text-main)]">{title}</h4>
+                {action}
+            </div>
+
+            <div className={flush ? '' : 'px-4 py-3'}>{children}</div>
+        </section>
+    );
+}
+
+/**
+ * One row of the order summary: what it is, an aside, and the figure.
+ *
+ * The middle column is where "2 items" and "Free shipping" go — the sentence
+ * that makes a number mean something. Empty on the rows that do not need one,
+ * which keeps every figure on the same right-hand edge.
+ */
+function Line({
+    label,
+    note,
+    value,
+    strong,
+    tone,
+}: {
+    label: string;
+    note?: string;
+    value: string;
+    strong?: boolean;
+    tone?: string;
+}) {
+    return (
+        <div className="flex items-baseline gap-3 py-1">
+            <dt
+                className={cn(
+                    'w-32 shrink-0',
+                    strong
+                        ? 'font-semibold text-[var(--color-text-main)]'
+                        : 'text-[var(--color-text-muted)]',
+                )}
+            >
+                {label}
+            </dt>
+
+            <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-muted)]">
+                {note}
+            </span>
+
+            <dd
+                className={cn(
+                    'shrink-0 tabular-nums',
+                    strong
+                        ? 'text-base font-semibold text-[var(--color-text-main)]'
+                        : 'text-[var(--color-text-body)]',
+                )}
+                style={tone ? { color: tone } : undefined}
+            >
+                {value}
+            </dd>
+        </div>
+    );
+}
+
+/** One labelled fact in the customer rail. */
+function Fact({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div
+            className="border-b px-4 py-2.5 last:border-b-0"
+            style={{ borderColor: 'var(--shell-border)' }}
+        >
+            <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+            <p className="mt-0.5 text-sm break-words text-[var(--color-text-main)]">{value}</p>
+        </div>
+    );
+}
 
 /**
  * How an order is named wherever it is named in full.
@@ -2702,342 +2847,297 @@ export default function Orders() {
                     {
                         key: 'overview',
                         label: 'Overview',
-                        /*
-                          ── Two columns: what it is, and what state it is in ──
-
-                          Everything was one narrow stack, so a summary nobody
-                          needs to re-read sat above the customer, the address
-                          and the money on every visit — and on a panel this
-                          wide the stack used a third of the width and left the
-                          rest blank.
-
-                          Split the way a resource details page is split: what
-                          defines the order down the left in two thirds of the
-                          width, and the supporting facts — status, totals,
-                          which shop — in a rail beside it.
-
-                          The rail is second in the markup and first on a narrow
-                          screen, which is where a summary belongs when there is
-                          only one column to put it in.
-                        */
                         content: selectedOrder && (
-                            <div className="space-y-5">
-                                <div>
-                                {/*
-                                  What the order is, before what is in it.
+                            <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+                                <div className="space-y-4 lg:col-span-2">
+                                    {/*
+                                      ── Where it has got to ────────────────────
 
-                                  ── Why a card and not more label/value rows ──
+                                      A row of figures cannot say this. "Shipped"
+                                      is one word for a journey with six points
+                                      on it, and the question anybody opening an
+                                      order asks first is not what state it is in
+                                      but how far along it is — which is a
+                                      different question with a different shape
+                                      of answer.
+                                    */}
+                                    <Panel title="Progress">
+                                        <ol className="flex items-start">
+                                            {JOURNEY.map((stage, index) => {
+                                                const at = reached(selectedOrder);
+                                                const done = index <= at;
 
-                                  Somebody opening an order is nearly always
-                                  checking one of three things: what state it is
-                                  in, what it came to, and where it came from.
-                                  Those were three rows in a list of eight, given
-                                  no more weight at a glance than the channel.
-                                  Here they are the card, and everything else
-                                  sits under it.
-                                */}
-                                <div className="rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)] p-4">
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <StatusBadge
-                                                label={statusLabels[selectedOrder.status] ?? selectedOrder.status}
-                                                variant={statusVariants[selectedOrder.status] ?? 'neutral'}
-                                            />
-                                            <StatusBadge
-                                                label={paymentLabels[selectedOrder.payment_status] ?? selectedOrder.payment_status}
-                                                variant={paymentVariants[selectedOrder.payment_status] ?? 'neutral'}
-                                                dot
-                                            />
-                                            {selectedOrder.is_cod && (
-                                                <span className="rounded-full bg-[var(--shell-muted)] px-2 py-0.5 text-[11px] font-semibold tracking-wide text-[var(--color-text-muted)]">
-                                                    COD
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="text-right">
-                                            {/* The amount charged, in the money it was charged in. */}
-                                            <p className="text-xl font-bold tabular-nums text-[var(--color-text-main)]">
-                                                {selectedOrder.source_symbol}
-                                                {selectedOrder.total_native.toLocaleString(undefined, {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })}
-                                            </p>
-                                            {selectedOrder.is_converted && (
-                                                <p
-                                                    className="mt-0.5 text-xs tabular-nums text-[var(--color-text-muted)]"
-                                                    title={`In the books, converted to ${selectedOrder.currency}`}
-                                                >
-                                                    ≈ {formatMoney(selectedOrder.total)}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--shell-border)] pt-3 text-xs text-[var(--color-text-muted)]">
-                                        <span className="inline-flex items-center gap-1">
-                                            <Icon name="storefront" size={13} />
-                                            {selectedOrder.store?.name ?? 'Walk-in / counter'}
-                                        </span>
-                                        <span aria-hidden="true">·</span>
-                                        <span className="inline-flex items-center gap-1">
-                                            <Icon name="calendar" size={13} />
-                                            {formatDate(selectedOrder.date)}
-                                        </span>
-                                        <span aria-hidden="true">·</span>
-                                        <span className="inline-flex items-center gap-1">
-                                            <Icon name="package" size={13} />
-                                            {selectedOrder.items_count} {selectedOrder.items_count === 1 ? 'item' : 'items'}
-                                        </span>
-                                        <span aria-hidden="true">·</span>
-                                        <span>{channelLabels[selectedOrder.channel]}</span>
-                                    </div>
-                                </div>
-                                </div>
-
-                                {/* ── The primary column ────────────────────
-                                    What the order is: who it is for, where it
-                                    goes, what was paid, and anything written
-                                    about it. */}
-                                <div className="space-y-5">
-
-                                {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
-                                    <div className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm">
-                                        <p className="font-medium text-amber-900">Cash on delivery — payment pending</p>
-                                        <p className="mt-1 text-xs text-amber-700">
-                                            Mark as paid once the courier settles the cash collected on delivery.
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/*
-                                  Who and where, side by side.
-
-                                  Four facts that were four full-width rows with
-                                  a decorative icon apiece, each costing as much
-                                  vertical space as the total. Paired, they read
-                                  as what they are — the two ends of one
-                                  delivery — and the money below them gets to be
-                                  the thing you scroll to.
-                                */}
-                                {/*
-                                  In a card, like the money under it.
-
-                                  These two sat bare on the panel's background
-                                  between two bordered cards, so the tab read as
-                                  a card, some loose text, and another card —
-                                  and the loose part was the customer and the
-                                  address, which is not the part that deserves
-                                  to look like an afterthought.
-                                */}
-                                <section
-                                    className="grid gap-4 rounded-[var(--shell-radius)] border p-4 sm:grid-cols-2"
-                                    style={{ borderColor: 'var(--shell-border)' }}
-                                >
-                                    <section>
-                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
-                                            Customer
-                                        </h4>
-
-                                        {selectedOrder.customer ? (
-                                            <>
-                                                <p className="text-sm font-medium text-[var(--color-text-main)]">
-                                                    {selectedOrder.customer.name}
-                                                </p>
-                                                {selectedOrder.customer.email ? (
-                                                    <a
-                                                        href={`mailto:${selectedOrder.customer.email}`}
-                                                        className="mt-0.5 block truncate text-sm text-[var(--color-brand)] hover:underline"
-                                                        onClick={(event) => event.stopPropagation()}
+                                                return (
+                                                    <li
+                                                        key={stage.key}
+                                                        className="flex min-w-0 flex-1 flex-col items-center"
                                                     >
-                                                        {selectedOrder.customer.email}
-                                                    </a>
-                                                ) : (
-                                                    <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-                                                        No email on file
-                                                    </p>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <p className="text-sm text-[var(--color-text-muted)]">
-                                                Walk-in — sold at the counter
-                                            </p>
-                                        )}
-                                    </section>
-
-                                    <section>
-                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
-                                            Delivery
-                                        </h4>
-
-                                        {(() => {
-                                            /*
-                                             * Built from the parts that exist.
-                                             * As a fixed template this printed
-                                             * punctuation for data that was not
-                                             * there — a line holding one comma
-                                             * when the city and postcode were
-                                             * missing.
-                                             */
-                                            const at = selectedOrder.shipping_address;
-
-                                            if (!at) {
-                                                return (
-                                                    <p className="text-sm text-[var(--color-text-muted)]">
-                                                        No delivery address
-                                                    </p>
-                                                );
-                                            }
-
-                                            const locality = [
-                                                [at.city, at.state].filter(Boolean).join(', '),
-                                                at.postal_code,
-                                            ]
-                                                .filter(Boolean)
-                                                .join(' ');
-
-                                            const lines = [at.line1, at.line2, locality, at.country]
-                                                .map((part) => (part ?? '').trim())
-                                                .filter((part) => part !== '');
-
-                                            if (lines.length === 0) {
-                                                return (
-                                                    <p className="text-sm text-[var(--color-text-muted)]">
-                                                        No delivery address
-                                                    </p>
-                                                );
-                                            }
-
-                                            return (
-                                                <address className="text-sm not-italic leading-relaxed text-[var(--color-text-body)]">
-                                                    {lines.map((line, index) => (
-                                                        <span key={index} className="block">
-                                                            {line}
-                                                        </span>
-                                                    ))}
-                                                </address>
-                                            );
-                                        })()}
-                                    </section>
-                                </section>
-
-                                {/*
-                                  The money, in the money it was charged in.
-
-                                  ── Why one currency and not two ──────────────
-
-                                  Because this block was mixing them: subtotal,
-                                  tax and shipping converted into the books
-                                  currency, and the total in the shop's own. Four
-                                  correct figures that visibly did not add up,
-                                  which is the one thing a summary must never do.
-                                  Everything here is now the shop's currency, and
-                                  the converted figure sits once at the bottom
-                                  where it is a conversion rather than a
-                                  contradiction.
-                                */}
-                                {(() => {
-                                    const n = selectedOrder.native;
-
-                                    const money = (value: number): string =>
-                                        `${n.symbol}${value.toLocaleString(undefined, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        })}`;
-
-                                    const rows: Array<{ label: string; value: string; muted?: boolean }> = [
-                                        { label: 'Subtotal', value: money(n.subtotal) },
-                                        ...(n.discount > 0
-                                            ? [{ label: 'Discount', value: `−${money(n.discount)}` }]
-                                            : []),
-                                        ...(n.shipping > 0 ? [{ label: 'Shipping', value: money(n.shipping) }] : []),
-                                        ...(n.tax > 0 ? [{ label: 'Tax', value: money(n.tax) }] : []),
-                                    ];
-
-                                    // Rounded before comparing: a penny of float
-                                    // drift must not invent an outstanding balance.
-                                    const outstanding = Math.round((n.total - n.paid) * 100) / 100;
-
-                                    return (
-                                        <section className="rounded-[var(--shell-radius)] border border-[var(--shell-border)]">
-                                            <h4 className="border-b border-[var(--shell-border)] px-4 py-2.5 text-xs font-semibold text-[var(--color-text-main)]">
-                                                Payment
-                                            </h4>
-
-                                            <dl className="px-4 py-3 text-sm">
-                                                {rows.map((row) => (
-                                                    <div key={row.label} className="flex items-baseline justify-between py-1">
-                                                        <dt className="text-[var(--color-text-muted)]">{row.label}</dt>
-                                                        <dd className="tabular-nums text-[var(--color-text-body)]">
-                                                            {row.value}
-                                                        </dd>
-                                                    </div>
-                                                ))}
-
-                                                <div className="mt-2 flex items-baseline justify-between border-t border-[var(--shell-border)] pt-2.5">
-                                                    <dt className="font-semibold text-[var(--color-text-main)]">Total</dt>
-                                                    <dd className="text-right">
-                                                        <span className="text-base font-bold tabular-nums text-[var(--color-text-main)]">
-                                                            {money(n.total)}
-                                                        </span>
-                                                        {selectedOrder.is_converted && (
+                                                        <div className="flex w-full items-center">
+                                                            {/* The rails either side, so the
+                                                                circles sit on one line and the
+                                                                first and last have no stub
+                                                                hanging off the end. */}
                                                             <span
-                                                                className="mt-0.5 block text-xs font-normal tabular-nums text-[var(--color-text-muted)]"
-                                                                title={`In the books, converted to ${selectedOrder.currency}`}
+                                                                className="h-px flex-1"
+                                                                style={{
+                                                                    background:
+                                                                        index > 0 && index <= at
+                                                                            ? 'var(--color-brand)'
+                                                                            : index > 0
+                                                                              ? 'var(--shell-border)'
+                                                                              : 'transparent',
+                                                                }}
+                                                            />
+
+                                                            <span
+                                                                className="flex size-8 shrink-0 items-center justify-center rounded-full border"
+                                                                style={{
+                                                                    borderColor: done
+                                                                        ? 'var(--color-brand)'
+                                                                        : 'var(--shell-border)',
+                                                                    background: done
+                                                                        ? 'var(--color-brand)'
+                                                                        : 'var(--color-card-bg)',
+                                                                    color: done
+                                                                        ? 'var(--color-text-on-accent)'
+                                                                        : 'var(--color-text-subtle)',
+                                                                }}
                                                             >
-                                                                ≈ {formatMoney(selectedOrder.total)}
+                                                                <Icon
+                                                                    name={stage.icon}
+                                                                    size={15}
+                                                                    weight="duotone"
+                                                                />
                                                             </span>
-                                                        )}
-                                                    </dd>
+
+                                                            <span
+                                                                className="h-px flex-1"
+                                                                style={{
+                                                                    background:
+                                                                        index < JOURNEY.length - 1 &&
+                                                                        index < at
+                                                                            ? 'var(--color-brand)'
+                                                                            : index < JOURNEY.length - 1
+                                                                              ? 'var(--shell-border)'
+                                                                              : 'transparent',
+                                                                }}
+                                                            />
+                                                        </div>
+
+                                                        <span
+                                                            className={cn(
+                                                                'mt-1.5 px-1 text-center text-[11px] leading-tight',
+                                                                done
+                                                                    ? 'font-medium text-[var(--color-text-main)]'
+                                                                    : 'text-[var(--color-text-muted)]',
+                                                            )}
+                                                        >
+                                                            {stage.label}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ol>
+                                    </Panel>
+
+                                    {selectedOrder.is_cod &&
+                                        selectedOrder.payment_status === 'unpaid' && (
+                                            <div
+                                                className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm"
+                                            >
+                                                <p className="font-medium text-amber-900">
+                                                    Cash on delivery — payment pending
+                                                </p>
+                                                <p className="mt-1 text-xs text-amber-700">
+                                                    The payment is recorded when the courier settles
+                                                    the cash collected on delivery.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                    <Panel title="Order items" flush>
+                                        {selectedOrder.items.length === 0 ? (
+                                            <p className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
+                                                No line items were imported for this order.
+                                            </p>
+                                        ) : (
+                                            <ul>
+                                                {selectedOrder.items.map((line, index) => (
+                                                    <li
+                                                        key={`${line.sku ?? 'line'}-${index}`}
+                                                        className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0"
+                                                        style={{ borderColor: 'var(--shell-border)' }}
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-medium text-[var(--color-text-main)]">
+                                                                {line.description}
+                                                            </p>
+                                                            {line.sku && (
+                                                                <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
+                                                                    {line.sku}
+                                                                </p>
+                                                            )}
+                                                        </div>
+
+                                                        {/* The arithmetic, in the shop's own
+                                                            currency, so a reader can check the
+                                                            line against the total below. */}
+                                                        <span
+                                                            className="shrink-0 rounded-[var(--shell-radius-sm)] border px-2 py-1 text-xs tabular-nums text-[var(--color-text-body)]"
+                                                            style={{ borderColor: 'var(--shell-border)' }}
+                                                        >
+                                                            {line.quantity} ×{' '}
+                                                            {selectedOrder.native.symbol}
+                                                            {line.unit_price.toLocaleString(undefined, {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            })}
+                                                        </span>
+
+                                                        <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-[var(--color-text-main)]">
+                                                            {selectedOrder.native.symbol}
+                                                            {line.total.toLocaleString(undefined, {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            })}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </Panel>
+
+                                    {(() => {
+                                        const n = selectedOrder.native;
+
+                                        const money = (v: number) =>
+                                            `${n.symbol}${v.toLocaleString(undefined, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                            })}`;
+
+                                        // Rounded before comparing: a penny of float drift
+                                        // must not invent an outstanding balance.
+                                        const outstanding =
+                                            Math.round((n.total - n.paid) * 100) / 100;
+
+                                        return (
+                                            <Panel title="Order summary" flush>
+                                                <dl className="px-4 py-3 text-sm">
+                                                    <Line
+                                                        label="Subtotal"
+                                                        note={`${selectedOrder.items_count} item${
+                                                            selectedOrder.items_count === 1 ? '' : 's'
+                                                        }`}
+                                                        value={money(n.subtotal)}
+                                                    />
+                                                    {n.discount > 0 && (
+                                                        <Line
+                                                            label="Discount"
+                                                            value={`−${money(n.discount)}`}
+                                                        />
+                                                    )}
+                                                    {n.tax > 0 && (
+                                                        <Line label="Tax" value={money(n.tax)} />
+                                                    )}
+                                                    <Line
+                                                        label="Shipping"
+                                                        note={n.shipping === 0 ? 'Free shipping' : undefined}
+                                                        value={money(n.shipping)}
+                                                    />
+                                                </dl>
+
+                                                <div
+                                                    className="border-t px-4 py-3 text-sm"
+                                                    style={{ borderColor: 'var(--shell-border)' }}
+                                                >
+                                                    <Line label="Total" value={money(n.total)} strong />
+                                                    <Line label="Paid by customer" value={money(n.paid)} />
+                                                    {outstanding > 0 && (
+                                                        <Line
+                                                            label="Outstanding"
+                                                            value={money(outstanding)}
+                                                            tone="var(--color-danger-text)"
+                                                        />
+                                                    )}
                                                 </div>
+                                            </Panel>
+                                        );
+                                    })()}
+                                </div>
 
-                                                {/*
-                                                  Shown only when the order is
-                                                  genuinely unsettled.
+                                {/* ── The rail ───────────────────────────────
+                                    Who the order is for and where it goes. It
+                                    is the same set of facts on every order and
+                                    it is read rather than worked with, which is
+                                    what a rail is for. */}
+                                <div className="space-y-4">
+                                    <Panel title="Customer" flush>
+                                        <div
+                                            className="flex items-center gap-2.5 border-b px-4 py-3"
+                                            style={{ borderColor: 'var(--shell-border)' }}
+                                        >
+                                            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--shell-muted)] text-sm font-bold text-[var(--color-text-muted)]">
+                                                {(selectedOrder.customer?.name ?? 'W')
+                                                    .slice(0, 1)
+                                                    .toUpperCase()}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-[var(--color-text-main)]">
+                                                    {selectedOrder.customer?.name ?? 'Walk-in'}
+                                                </p>
+                                                <p className="truncate text-xs text-[var(--color-text-muted)]">
+                                                    {selectedOrder.store?.name ?? 'Counter sale'}
+                                                </p>
+                                            </div>
+                                        </div>
 
-                                                  payment_status is the
-                                                  authority, not the arithmetic:
-                                                  paid_minor is often zero on an
-                                                  order a shop reports as paid,
-                                                  because the amount was never
-                                                  recorded against it. Trusting
-                                                  the subtraction alone puts
-                                                  "Balance due" on orders that
-                                                  are fully paid, which is the
-                                                  kind of wrong that gets a
-                                                  customer chased for money they
-                                                  already sent.
-                                                */}
-                                                {selectedOrder.payment_status === 'unpaid' && outstanding > 0 && (
-                                                    <div className="mt-2 flex items-baseline justify-between rounded-[var(--shell-radius-sm)] bg-amber-50 px-2 py-1.5">
-                                                        <dt className="text-xs font-medium text-amber-900">
-                                                            Balance due
-                                                        </dt>
-                                                        <dd className="text-sm font-semibold tabular-nums text-amber-900">
-                                                            {money(outstanding)}
-                                                        </dd>
-                                                    </div>
-                                                )}
-                                            </dl>
-                                        </section>
-                                    );
-                                })()}
+                                        {selectedOrder.customer?.email && (
+                                            <Fact
+                                                label="Email"
+                                                value={selectedOrder.customer.email}
+                                            />
+                                        )}
 
-                                {selectedOrder.notes && (
-                                    <section>
-                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
-                                            Notes
-                                        </h4>
-                                        <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-text-body)]">
-                                            {selectedOrder.notes}
-                                        </p>
-                                    </section>
-                                )}
+                                        <Fact
+                                            label="Address"
+                                            value={
+                                                selectedOrder.shipping_address ? (
+                                                    [
+                                                        selectedOrder.shipping_address.line1,
+                                                        selectedOrder.shipping_address.line2,
+                                                        selectedOrder.shipping_address.city,
+                                                        selectedOrder.shipping_address.state,
+                                                        selectedOrder.shipping_address.postal_code,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(', ')
+                                                ) : (
+                                                    <span className="text-[var(--color-text-subtle)]">
+                                                        None recorded
+                                                    </span>
+                                                )
+                                            }
+                                        />
+
+                                        <Fact
+                                            label="Placed"
+                                            value={formatDate(selectedOrder.date)}
+                                        />
+                                    </Panel>
+
+                                    {selectedOrder.notes && (
+                                        <Panel title="Notes">
+                                            <p className="text-sm whitespace-pre-line text-[var(--color-text-body)]">
+                                                {selectedOrder.notes}
+                                            </p>
+                                        </Panel>
+                                    )}
                                 </div>
                             </div>
                         ),
                     },
+
                     {
                         key: 'items',
                         label: 'Items',
