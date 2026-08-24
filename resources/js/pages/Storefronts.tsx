@@ -27,6 +27,25 @@ import { toast } from '@/lib/toast';
 
 
 /**
+ * A count, shortened once it stops being readable in full.
+ *
+ * Money has `both()` for this; a plain tally had nothing, so twelve thousand
+ * products rendered as "12,000" and a hundred thousand pushed the card wider
+ * than its neighbours. Below a thousand there is nothing to gain — "412" is
+ * shorter than "0.4K" and says more.
+ */
+function compactCount(value: number): string {
+    if (Math.abs(value) < 1000) {
+        return value.toLocaleString();
+    }
+
+    return new Intl.NumberFormat(undefined, {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+    }).format(value);
+}
+
+/**
  * A date as the endpoint wants it, in the reader's own day.
  *
  * `toISOString` would be shorter and wrong either side of midnight: it converts
@@ -560,7 +579,7 @@ export default function Storefronts() {
     const hasFilters = search || typeFilter || statusFilter;
 
     // Money in the business currency, and inside the money scope.
-    const { format: formatMoney } = useMoney();
+    const { format: formatMoney, both: money } = useMoney();
 
 
     /*
@@ -663,14 +682,26 @@ export default function Storefronts() {
                     />
                     <KPICard
                         label="Total Products"
-                        value={summary.total_products.toLocaleString()}
+                        value={compactCount(summary.total_products)}
+                        valueTitle={summary.total_products.toLocaleString()}
                         icon="package"
                         variant="info"
                         spark={trends?.products}
                     />
+                    {/*
+                      Compacted, with the figure itself on the hover.
+
+                      A card is a glance. "৳75,815.01" is eleven characters of
+                      precision nobody reads at a glance, and by the time a
+                      business is taking millions it stops fitting the card and
+                      starts reflowing the row it sits in. The exact amount is
+                      the thing somebody occasionally needs, so it is a hover
+                      away rather than gone.
+                    */}
                     <KPICard
                         label="Total Revenue"
-                        value={formatMoney(summary.total_revenue)}
+                        value={money(summary.total_revenue).short}
+                        valueTitle={money(summary.total_revenue).exact}
                         icon="currency-dollar"
                         variant="success"
                         spark={trends?.revenue}

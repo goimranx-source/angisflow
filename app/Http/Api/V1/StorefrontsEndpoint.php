@@ -636,6 +636,17 @@ class StorefrontsEndpoint
         $rows = Order::query()
             ->where('business_id', $businessId)
             ->where('storefront_id', $shop->id)
+            /*
+             * Narrowed to the chosen period, when one is chosen.
+             *
+             * Without this the picker moved the sparklines and left the figures
+             * beside them showing all time — two numbers on one row quietly
+             * measuring different things, with nothing on screen to say which
+             * was which. Which is exactly how it shipped, and exactly how it
+             * read: a range that appeared to do nothing.
+             */
+            ->when($since !== null, fn ($q) => $q->where('ordered_on', '>=', $since))
+            ->when($until !== null, fn ($q) => $q->where('ordered_on', '<=', $until))
             ->getQuery()
             ->select('currency')
             ->selectRaw('COUNT(*) as orders')

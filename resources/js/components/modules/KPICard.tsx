@@ -24,6 +24,15 @@ type KPICardProps = {
     label: string;
     /** The figure itself, already formatted. */
     value: string | number;
+    /**
+     * The unabbreviated figure, revealed on hover.
+     *
+     * A card is a glance, so a headline is compacted — "৳75.8K" — and the exact
+     * amount is the thing somebody occasionally needs rather than the thing
+     * they read every time. StatsCard has always accepted this; it simply was
+     * not passed on, so every caller compacting a value lost the full one.
+     */
+    valueTitle?: string;
     icon: string;
     /** Change against the previous period, as a percentage. */
     delta?: number;
@@ -51,12 +60,14 @@ export function KPICard({
     info,
     onClick,
     spark,
+    valueTitle,
     variant = 'brand',
 }: KPICardProps) {
     return (
         <StatsCard
             label={label}
             value={value}
+            valueTitle={valueTitle}
             icon={icon}
             // StatsCard has no neutral accent, and a neutral tile reads as
             // disabled rather than as plain. Brand is the honest default.
