@@ -84,6 +84,7 @@ function RowActions({
     open,
     onToggle,
     onOpen,
+    onSync,
     onEdit,
     onDelete,
     isPending,
@@ -92,6 +93,7 @@ function RowActions({
     open: boolean;
     onToggle: () => void;
     onOpen: () => void;
+    onSync: (full: boolean) => void;
     onEdit: () => void;
     onDelete: () => void;
     isPending: boolean;
@@ -201,6 +203,58 @@ function RowActions({
                                 <Icon name="pencil" size={15} className="shrink-0 opacity-70" />
                                 <span>Edit</span>
                             </button>
+
+                            {/*
+                              Sync, for a shop that has something to sync with.
+
+                              Two of them, because they fetch different things:
+                              one asks the shop for what has changed, the other
+                              for everything. An arrow cannot say which, so the
+                              words do — and the difference matters when the
+                              second can take minutes on a large catalogue.
+                            */}
+                            {store.is_connected && (
+                                <>
+                                    <div
+                                        className="my-1 h-px"
+                                        style={{ background: 'var(--shell-border)' }}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        className={`${item} text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]`}
+                                        disabled={isPending}
+                                        onClick={() => {
+                                            onToggle();
+                                            onSync(false);
+                                        }}
+                                    >
+                                        <Icon
+                                            name="arrows-clockwise"
+                                            size={15}
+                                            className="shrink-0 opacity-70"
+                                        />
+                                        <span>Sync changes</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className={`${item} text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]`}
+                                        disabled={isPending}
+                                        onClick={() => {
+                                            onToggle();
+                                            onSync(true);
+                                        }}
+                                    >
+                                        <Icon
+                                            name="arrow-clockwise"
+                                            size={15}
+                                            className="shrink-0 opacity-70"
+                                        />
+                                        <span>Sync everything</span>
+                                    </button>
+                                </>
+                            )}
 
                             {/*
                               Set apart, and coloured.
@@ -982,6 +1036,9 @@ export default function Storefronts() {
                                                 )
                                             }
                                             onOpen={() => setSelectedId(store.id)}
+                                            onSync={(full) =>
+                                                syncShop.mutate({ id: store.id, full })
+                                            }
                                             onEdit={() => {
                                                 setSelectedId(store.id);
                                                 setStoreTab('details');

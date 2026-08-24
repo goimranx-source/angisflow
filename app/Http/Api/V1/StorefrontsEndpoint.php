@@ -123,6 +123,28 @@ class StorefrontsEndpoint
             $query->where('type', $type);
         }
 
+        /*
+         * ── The period narrows the list itself, not only its figures ────────
+         *
+         * A range that changed the takings but left every shop on screen
+         * answered half a question. "How much did we make in August" is
+         * useful; "which shops existed in August" is the other half, and a
+         * business opening a second storefront mid-year has a real reason to
+         * ask it.
+         *
+         * On when the shop was opened here rather than on whether it sold
+         * anything: a shop that took no orders in the period is still a shop
+         * that existed, and dropping it would make an empty month look like an
+         * empty business.
+         */
+        if ($since !== null) {
+            $query->whereDate('created_at', '>=', $since);
+        }
+
+        if ($until !== null) {
+            $query->whereDate('created_at', '<=', $until);
+        }
+
         // From an allowlist: a column name out of a query string and into an
         // ORDER BY is an injection, and "the page only sends four" is not a
         // control, since the page is not what sends the request.

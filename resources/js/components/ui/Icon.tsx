@@ -10,6 +10,7 @@ import {
     ArrowLeft,
     ArrowRight,
     ArrowsClockwise,
+    ArrowsCounterClockwise,
     ArrowsLeftRight,
     ArrowSquareOut,
     ArrowsOutSimple,
@@ -90,6 +91,8 @@ import {
     Folder,
     FolderPlus,
     Gauge,
+    FileArrowUp,
+    Funnel,
     Gear,
     GearSix,
     Gift,
@@ -194,6 +197,11 @@ import {
     X,
     XCircle,
     type Icon as PhosphorIcon,
+    BracketsCurly,
+    CloudArrowUp,
+    Play,
+    PlayCircle,
+    PlugsConnected,
 } from '@phosphor-icons/react';
 
 /**
@@ -229,6 +237,18 @@ const REGISTRY = {
     'arrow-up': ArrowUp,
     'arrow-up-right': ArrowUpRight,
     'arrows-clockwise': ArrowsClockwise,
+    'arrows-counter-clockwise': ArrowsCounterClockwise,
+    /*
+     * Phosphor has no FileCheck. This screen means "a file is chosen and
+     * ready to send", which FileArrowUp says — and it was rendering nothing
+     * at all until now.
+     */
+    'file-check': FileArrowUp,
+    'brackets-curly': BracketsCurly,
+    'cloud-arrow-up': CloudArrowUp,
+    play: Play,
+    'play-circle': PlayCircle,
+    'plugs-connected': PlugsConnected,
     'arrows-left-right': ArrowsLeftRight,
     'arrows-out-simple': ArrowsOutSimple,
     bank: Bank,
@@ -305,6 +325,7 @@ const REGISTRY = {
     folder: Folder,
     'folder-plus': FolderPlus,
     gauge: Gauge,
+    funnel: Funnel,
     gear: Gear,
     'gear-six': GearSix,
     gift: Gift,
