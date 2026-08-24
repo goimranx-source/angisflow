@@ -123,107 +123,112 @@ export function StatusMapPanel({
                 className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--shell-radius)] border"
                 style={{ borderColor: 'var(--shell-border)' }}
             >
-                <div className="shrink-0 space-y-2.5 px-3 py-2.5">
+                <div className="shrink-0 px-3 py-2.5">
+                {/*
+                  ── The filter left, the actions right ──────────────────────
+                  
+                  It was two rows: a toolbar, and a search box given the whole
+                  width beneath it. A search box on a row of its own claims as
+                  much of the screen as the table it filters, which is more
+                  weight than a thing nobody touches until they need it.
+                  
+                  One row, and it reads left to right in the order the work
+                  happens: find the status, then add or save. The same shape as
+                  the field mapping above it, with the filter on the other end
+                  because there is no entity switcher here to hold that corner.
+                */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    {/* Statuses are added to this tool, never to the shop —
-                        theirs are whatever their software sends. */}
-                    {adding ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <input
-                                className="field min-w-[12rem]"
-                                value={newStatus}
-                                onChange={(event) => setNewStatus(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter' && newStatus.trim() !== '') {
-                                        event.preventDefault();
-                                        addStatus.mutate();
-                                    }
+                    <div className="relative w-72 max-w-full">
+                        <Icon
+                            name="magnifying-glass"
+                            size={13}
+                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                        />
+                        <input
+                            className="field w-full pl-8 text-sm"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Find a status"
+                            aria-label="Filter the statuses"
+                        />
+                    </div>
 
-                                    if (event.key === 'Escape') setAdding(false);
-                                }}
-                                placeholder="Awaiting parts"
-                                aria-label="Name the new status"
-                                autoFocus
-                            />
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => addStatus.mutate()}
-                                disabled={newStatus.trim() === '' || addStatus.isPending}
-                            >
-                                Add
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => setAdding(false)}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-3">
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => setAdding(true)}
-                            >
-                                <Icon name="plus" size={13} />
-                                Add a status
-                            </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Statuses are added to this tool, never to the shop —
+                            theirs are whatever their software sends. */}
+                        {adding ? (
+                            <>
+                                <input
+                                    className="field min-w-[12rem]"
+                                    value={newStatus}
+                                    onChange={(event) => setNewStatus(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' && newStatus.trim() !== '') {
+                                            event.preventDefault();
+                                            addStatus.mutate();
+                                        }
 
-                            {/*
-                              Beside the control, not beside the search.
-
-                              A count to the right of a search box reads as a
-                              result count for a search nobody typed. These
-                              describe the mapping as a whole, so they sit with
-                              the rest of the toolbar.
-                            */}
-                            <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                                        if (event.key === 'Escape') setAdding(false);
+                                    }}
+                                    placeholder="Awaiting parts"
+                                    aria-label="Name the new status"
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => addStatus.mutate()}
+                                    disabled={newStatus.trim() === '' || addStatus.isPending}
+                                >
+                                    Add
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setAdding(false)}
+                                >
+                                    Cancel
+                                </button>
+                            </>
+                        ) : (
+                            <>
                                 {/*
-                                  The counts themselves are in the drawer's
-                                  header now, beside Sync. What stays is the one
-                                  thing that has no home up there: the statuses
-                                  this shop sends that nothing here listens for.
+                                  The one thing with no home in the drawer's
+                                  header: the statuses this shop sends that
+                                  nothing here listens for.
                                 */}
                                 {catalogue && catalogue.unclaimed.length > 0 && (
                                     <span
-                                        className="cursor-help opacity-60"
+                                        className="cursor-help px-1 text-[var(--color-text-muted)] opacity-60"
                                         title={`This shop also sends ${catalogue.unclaimed.join(', ')} — nothing happens here when it does.`}
                                         aria-label={`This shop also sends ${catalogue.unclaimed.join(', ')} — nothing happens here when it does.`}
                                     >
-                                        <Icon name="info" size={12} />
+                                        <Icon name="info" size={13} weight="duotone" />
                                     </span>
                                 )}
-                            </div>
-                        </div>
-                    )}
 
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => save.mutate()}
-                        disabled={save.isPending}
-                    >
-                        {save.isPending ? 'Saving…' : 'Save'}
-                    </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setAdding(true)}
+                                >
+                                    <Icon name="plus" size={13} />
+                                    Add a status
+                                </button>
+                            </>
+                        )}
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => save.mutate()}
+                            disabled={save.isPending}
+                        >
+                            {save.isPending ? 'Saving…' : 'Save'}
+                        </button>
+                    </div>
                 </div>
 
-                <div className="relative">
-                    <Icon
-                        name="magnifying-glass"
-                        size={13}
-                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
-                    />
-                    <input
-                        className="field w-full pl-8 text-sm"
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Find a status — by its name here or on the shop"
-                        aria-label="Filter the statuses"
-                    />
-                </div>
 
             {isLoading && (
                 <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />

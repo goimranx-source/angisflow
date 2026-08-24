@@ -506,18 +506,40 @@ export function FieldMapPanel({
      * `rows` is a new array on every keystroke in the filter, so depending on it
      * would report identical counts a hundred times while somebody types.
      */
+    /*
+     * ── A row is mapped when it lands somewhere that exists ─────────────────
+     *
+     * This counted rows. A shop offering 39 fields gives you 39 rows the moment
+     * they are added, so "39 mapped" announced the work finished before any of
+     * it was done.
+     *
+     * Counting rows with a target is closer and still wrong, because a target
+     * can name a field that was never created. `Add N shop fields` writes
+     * `custom.order_source` and the like straight into the row without defining
+     * the custom field behind it — so the value is a string nothing can resolve.
+     * The Becomes column already shows those as blank, because a <select> whose
+     * value is not among its options renders empty. The count claimed them
+     * anyway, and the screen and the badge disagreed by twenty-three.
+     *
+     * Mapped means the target is one this application offers: a built-in field,
+     * or a custom field that has actually been defined. That is the same test
+     * the dropdown applies, so the number and the column now say the same
+     * thing.
+     */
+    const reachable = new Set((sample?.targets ?? []).map((target) => target.value));
+
+    const landed = (row: MapRow): boolean =>
+        row.target.trim() !== '' && row.target !== NEW_FIELD && reachable.has(row.target);
+
     const summary = {
-        mapped: rows.length,
-        hidden: rows.filter((row) => row.visible === false).length,
-        needing: rows.filter(
-            (row) => needsOptions(row.transform) && (row.options?.length ?? 0) === 0,
-        ).length,
+        mapped: rows.filter(landed).length,
+        unmapped: rows.filter((row) => !landed(row)).length,
     };
 
     useEffect(() => {
-        onSummary?.({ mapped: summary.mapped, unmapped: summary.needing + summary.hidden });
+        onSummary?.({ mapped: summary.mapped, unmapped: summary.unmapped });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [summary.mapped, summary.needing, summary.hidden]);
+    }, [summary.mapped, summary.unmapped]);
 
     /** What the shop said about the field this row reads from. */
     const described = (row: MapRow): PathOption | undefined =>
