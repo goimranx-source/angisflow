@@ -1565,37 +1565,46 @@ export default function Orders() {
                                         render: (order) => (
                                             <div onClick={(e) => e.stopPropagation()}>
                                                 {order.dispatch ? (
-                                                    <div className="min-w-0" title={order.dispatch.tracking_number ?? order.dispatch.shipment_number}>
-                                                        <span className="block truncate text-sm font-semibold text-[var(--color-text-body)]">
+                                                    /*
+                                                      The courier's name, and a mark holding everything else.
+
+                                                      This cell was three stacked lines -- name, then the
+                                                      charge and the shipment's state, then a red "Cancel
+                                                      shipment" link -- which made every dispatched row three
+                                                      times the height of an undispatched one, in a table
+                                                      whose whole job is to be scanned. The charge and the
+                                                      state are worth having and are not worth a line each on
+                                                      every row; they are behind the mark. The cancel is an
+                                                      action, so it is with the other actions.
+                                                    */
+                                                    <span className="flex min-w-0 items-center gap-1.5">
+                                                        <span className="truncate text-sm font-medium text-[var(--color-text-body)]">
                                                             {order.dispatch.courier.label ?? 'Courier'}
                                                         </span>
-                                                        <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                                                            {order.source_symbol}{order.dispatch.amount.toLocaleString(undefined, {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 2,
-                                                            })}
-                                                            <span className="mx-1">·</span>
-                                                            {dispatchStatusLabels[order.dispatch.status] ?? order.dispatch.status}
+
+                                                        {/* The title goes on the wrapper: Icon draws an
+                                                            <svg> and takes no title of its own, and a
+                                                            title attribute React cannot place is a
+                                                            tooltip that never appears. */}
+                                                        <span
+                                                            className="inline-flex shrink-0 cursor-help text-[var(--color-text-subtle)]"
+                                                            title={[
+                                                                `${order.source_symbol}${order.dispatch.amount.toLocaleString(undefined, {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })} — ${dispatchStatusLabels[order.dispatch.status] ?? order.dispatch.status}`,
+                                                                order.dispatch.tracking_number
+                                                                    ? `Tracking ${order.dispatch.tracking_number}`
+                                                                    : `Shipment ${order.dispatch.shipment_number}`,
+                                                            ].join(String.fromCharCode(10))}
+                                                        >
+                                                            <Icon name="info" size={13} weight="duotone" />
                                                         </span>
-                                                        {tab !== 'archived' && tab !== 'trashed' && !['delivered', 'cancelled', 'returned'].includes(order.dispatch.status) && (
-                                                            <button
-                                                                type="button"
-                                                                className="mt-1 block text-xs font-medium text-[var(--color-danger)] hover:underline"
-                                                                onClick={async () => {
-                                                                    if (await confirm(`Cancel shipment for ${order.order_number}?`)) {
-                                                                        cancelDispatch.mutate(order.id);
-                                                                    }
-                                                                }}
-                                                                disabled={cancelDispatch.isPending}
-                                                            >
-                                                                Cancel shipment
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                    </span>
                                                 ) : tab !== 'archived' && tab !== 'trashed' && couriers.length > 0 ? (
                                                     <select
-                                                        className="field field-sm"
-                                                        style={{ width: '100%', minWidth: '150px' }}
+                                                        className="field text-xs"
+                                                        style={{ width: '100%', minWidth: '130px' }}
                                                         value=""
                                                         onChange={(e) => {
                                                             if (e.target.value) {
@@ -1685,6 +1694,13 @@ export default function Orders() {
                                                               ]
                                                             : [
                                                                   {
+                                                                      key: 'preview',
+                                                                      label: 'Preview',
+                                                                      icon: 'eye',
+                                                                      onSelect: () =>
+                                                                          setSelectedOrder(order),
+                                                                  },
+                                                                  {
                                                                       key: 'edit',
                                                                       label: 'Edit',
                                                                       icon: 'note-pencil',
@@ -1711,6 +1727,37 @@ export default function Orders() {
                                                                       icon: 'download-simple',
                                                                       onSelect: () => exportOrders([order]),
                                                                   },
+
+                                                                  /*
+                                                                    Only while there is a shipment to
+                                                                    call off. It used to be a red link
+                                                                    in the courier cell, which made an
+                                                                    action look like part of a reading
+                                                                    -- and gave that column a third
+                                                                    line on every dispatched row.
+                                                                  */
+                                                                  ...(order.dispatch &&
+                                                                  !['delivered', 'cancelled', 'returned'].includes(
+                                                                      order.dispatch.status,
+                                                                  )
+                                                                      ? [
+                                                                            {
+                                                                                key: 'cancel-shipment',
+                                                                                label: 'Cancel shipment',
+                                                                                icon: 'x-circle',
+                                                                                onSelect: async () => {
+                                                                                    const sure = await confirm(
+                                                                                        `Cancel the shipment for ${order.reference ?? order.order_number}?`,
+                                                                                        'The courier is told to stop. The order itself stays.',
+                                                                                    );
+
+                                                                                    if (sure) {
+                                                                                        cancelDispatch.mutate(order.id);
+                                                                                    }
+                                                                                },
+                                                                            },
+                                                                        ]
+                                                                      : []),
                                                                   {
                                                                       key: 'trash',
                                                                       label: 'Move to trash',

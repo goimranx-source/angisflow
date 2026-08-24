@@ -4104,9 +4104,19 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* 36px, the same height every control in the shell is — so a field and
        the button beside it in a row line up instead of the button sitting
        short against it. Applied to inputs only; nothing here is a textarea. */
+    /*
+     * ── A shorter control, everywhere ───────────────────────────────────────
+     *
+     * 2.25rem is a comfortable height for a form. A toolbar is not a form: it
+     * is a strip above a table, and every pixel it takes is a pixel the table
+     * does not get. The same is true of the courier picker sitting inside a
+     * row, which was setting the height of every undispatched row on the page.
+     *
+     * 2rem is still a 32px target, which is what matters for pointing at it.
+     */
     .field {
         width: 100%;
-        min-height: 2.25rem;
+        min-height: 2rem;
         border-radius: var(--shell-radius);
         border: 1px solid var(--shell-border);
         background: var(--shell-bg);
@@ -4178,8 +4188,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
            12px button next to it read as two different design languages
            sharing a row. */
         border-radius: var(--shell-radius);
-        min-height: 2.25rem;
-        padding: 0.375rem 1.125rem;
+
+        /* Matching .field, which dropped to 2rem for the same reason: a button
+           sits directly beside one in every toolbar, and two heights in a row
+           is the thing you notice without being able to name. */
+        min-height: 2rem;
+        padding: 0.3125rem 1rem;
         font-size: 0.9375rem;
         font-weight: 600;
         line-height: 1.25rem;
@@ -4556,7 +4570,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * other kind of document.
      */
     .table thead th {
-        padding: 0.625rem 1rem;
+        padding: 0.4375rem 1rem;
         border-bottom: 1px solid var(--shell-border);
         font-size: 0.8125rem;
         font-weight: 600;
@@ -4592,8 +4606,17 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* Hairlines between rows, nothing under the last one — the card's own
        bottom edge is already there and a second line beside it reads as a
        misprint. */
+    /*
+     * 8px, not 11.
+     *
+     * These rows carry one line each now -- the customer's email moved to a
+     * hover, the courier's charge and state moved behind a mark -- so the
+     * padding is the whole of a row's height, and eleven pixels of it above
+     * and below one line of text is a list that fits fourteen orders on a
+     * screen where it could fit eighteen.
+     */
     .table tbody td {
-        padding: 0.6875rem 1rem;
+        padding: 0.5rem 1rem;
         border-bottom: 1px solid var(--shell-border);
         vertical-align: middle;
     }

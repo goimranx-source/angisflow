@@ -222,7 +222,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                 onClick={() => setOpen((was) => !was)}
                 aria-expanded={open}
                 className={cn(
-                    'flex h-9 items-center gap-2 rounded-[var(--shell-radius)] border px-3 text-xs font-semibold transition-colors',
+                    'flex h-8 items-center gap-2 rounded-[var(--shell-radius)] border px-3 text-xs font-semibold transition-colors',
                     open
                         ? 'border-[var(--color-brand)] bg-[var(--color-brand-subtle)] text-[var(--color-brand-text)]'
                         : 'border-[var(--shell-border)] bg-[var(--shell-bg)] text-[var(--shell-text-strong)] hover:bg-[var(--shell-hover)]',

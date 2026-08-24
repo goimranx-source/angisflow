@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
@@ -88,6 +88,35 @@ export function RowAction({
     );
 }
 
+/**
+ * One line of a row's menu.
+ *
+ * Its own component because the menu now draws its items in two places — the
+ * part that scrolls and the part that does not — and two copies of a button
+ * are two things to keep in step.
+ */
+function MenuItem({ item, onPick }: { item: RowMenuItem; onPick: () => void }) {
+    return (
+        <button
+            type="button"
+            role="menuitem"
+            className={cn(
+                'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition',
+                item.variant === 'danger'
+                    ? 'hover:bg-[var(--color-danger-subtle)]'
+                    : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
+            )}
+            style={item.variant === 'danger' ? { color: 'var(--color-danger-text)' } : undefined}
+            onClick={onPick}
+        >
+            {item.icon && (
+                <Icon name={item.icon} size={15} weight="duotone" className="shrink-0 opacity-70" />
+            )}
+            <span className="truncate">{item.label}</span>
+        </button>
+    );
+}
+
 export type RowMenuItem = {
     key: string;
     label: string;
@@ -134,6 +163,15 @@ export function RowActionMenu({
      * re-place itself when the table scrolled under it.
      */
     const at = useFlyoutPosition({ open, trigger, panel: menu });
+
+    /*
+     * Split so the dangerous ones can sit still while the rest scroll.
+     *
+     * By variant rather than by position, because a caller listing a delete
+     * in the middle means it to be a delete, not the fourth item.
+     */
+    const dangerous = items.filter((item) => item.variant === 'danger');
+    const ordinary = items.filter((item) => item.variant !== 'danger');
 
     useEffect(() => {
         if (!open) {
@@ -230,62 +268,68 @@ export function RowActionMenu({
                             visibility: at ? 'visible' : 'hidden',
                             top: at?.top ?? 0,
                             left: at?.left ?? 0,
-                            maxHeight: at?.maxHeight,
+
+                            /*
+                             * Whichever is smaller: what the window has room
+                             * for, or the height at which the list stops being
+                             * a menu and starts being a page.
+                             *
+                             * Both are needed. The hook's figure keeps it on
+                             * screen; the fixed one keeps it the same shape
+                             * from row to row, which is what makes an item's
+                             * position learnable.
+                             */
+                            maxHeight: Math.min(at?.maxHeight ?? 320, 320),
                         }}
-                        className="fixed z-[var(--z-toast)] w-44 overflow-y-auto rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
+                        className="fixed z-[var(--z-toast)] flex w-44 flex-col overflow-hidden rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        {items.map((item, index) => (
-                            <Fragment key={item.key}>
-                                {/*
-                                  A rule above the first destructive item.
+                        {/*
+                          ── The list scrolls; the destructive item does not ──────
 
-                                  It is the one thing here that cannot be undone
-                                  from this screen, and a line that looks exactly
-                                  like the two above it is a line somebody
-                                  reaches by muscle memory.
-                                */}
-                                {item.variant === 'danger' &&
-                                    items[index - 1]?.variant !== 'danger' &&
-                                    index > 0 && (
-                                        <div
-                                            className="my-1 h-px"
-                                            style={{ background: 'var(--shell-border)' }}
-                                        />
-                                    )}
+                          A row can carry three actions or eight, depending on
+                          whether it has a shipment to call off and which tab it
+                          is on, so the menu was a different height every time —
+                          and on the longest it ran past the bottom of the
+                          window with the delete somewhere below the fold.
 
-                            <button
-                                type="button"
-                                role="menuitem"
-                                className={cn(
-                                    'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition',
-                                    item.variant === 'danger'
-                                        ? 'hover:bg-[var(--color-danger-subtle)]'
-                                        : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
-                                )}
-                                style={
-                                    item.variant === 'danger'
-                                        ? { color: 'var(--color-danger-text)' }
-                                        : undefined
-                                }
-                                onClick={() => {
-                                    setOpen(false);
-                                    item.onSelect();
-                                }}
+                          Capped and scrolled, it is the same shape every time.
+                          The one item somebody must always be able to reach and
+                          must never reach by accident is the one that stays put,
+                          so it is out of the scrolling part: never hidden, and
+                          never arriving under a finger that was scrolling.
+                        */}
+                        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                            {ordinary.map((item) => (
+                                <MenuItem
+                                    key={item.key}
+                                    item={item}
+                                    onPick={() => {
+                                        setOpen(false);
+                                        item.onSelect();
+                                    }}
+                                />
+                            ))}
+                        </div>
+
+                        {dangerous.length > 0 && (
+                            <div
+                                className="shrink-0 border-t py-1"
+                                style={{ borderColor: 'var(--shell-border)' }}
                             >
-                                {item.icon && (
-                                    <Icon
-                                        name={item.icon}
-                                        size={15}
-                                        weight="duotone"
-                                        className="shrink-0 opacity-70"
+                                {dangerous.map((item) => (
+                                    <MenuItem
+                                        key={item.key}
+                                        item={item}
+                                        onPick={() => {
+                                            setOpen(false);
+                                            item.onSelect();
+                                        }}
                                     />
-                                )}
-                                <span>{item.label}</span>
-                            </button>
-                            </Fragment>
-                        ))}
+                                ))}
+                            </div>
+                        )}
                     </div>,
                     document.body,
                 )}

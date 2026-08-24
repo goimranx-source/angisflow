@@ -111,7 +111,7 @@ export function FilterBar({
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="h-9 w-full border border-[var(--color-border-light)] bg-[var(--color-card-bg)] pl-10 pr-3 text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                className="h-8 w-full border border-[var(--color-border-light)] bg-[var(--color-card-bg)] pl-10 pr-3 text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                 style={{ borderRadius: 'var(--shell-radius)' }}
             />
         </div>
