@@ -4838,6 +4838,20 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        The mark owns its size now, in one place, for every state. */
 
     /*
+     * ── INERT for .rail-nav, and left here on purpose ───────────────────────
+     *
+     * The rail's scrollbar is out of the layout entirely (`scrollbar-width:
+     * none`, below), because a thin one still took ten pixels off the right
+     * and that was the whole of the rail's lopsided gap. Nothing under
+     * .is-scroll-visible can paint while that is true, and useScrollReveal is
+     * wired to this pane and nowhere else.
+     *
+     * Kept rather than deleted because the choice is one line: put
+     * `scrollbar-width: thin` back and all of this works again, at the cost of
+     * the ten pixels. Deleting it would make going back a rewrite.
+     *
+     * ── What it does when it is on ──────────────────────────────────────────
+     *
      * A scrollbar that fades in rather than sitting there.
      *
      * `.is-scroll-visible` is set by useScrollReveal — on hover, immediately;
@@ -4853,13 +4867,28 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * the other — so both are set together and never separately, or the two
      * engines would fall out of step with each other.
      */
+    /*
+     * ── 8px, and no scrollbar in the layout ─────────────────────────────────
+     *
+     * A thin scrollbar painted transparent looks free. It is not: it takes ten
+     * pixels of width on the right, permanently, showing or not. That is why
+     * every row in this pane sat eleven pixels from the left edge and
+     * twenty-one from the right -- a gap you can see and cannot find, because
+     * it is not in anybody's padding.
+     *
+     * It costs the reveal-on-scroll bar, which is a fair trade for a menu: the
+     * rail is a list of a dozen headings you scan, not a document you need to
+     * know your place in. Wheel and keyboard scrolling are untouched.
+     *
+     * 8 here plus 4 on each row puts a menu icon at 13px from the rail's edge,
+     * which is where the logo above it starts and where the account strip
+     * starts. One line down the left, for all three.
+     */
     .rail-nav {
-        padding: 10px;
+        padding: 8px;
         overflow-y: auto;
         flex: 1;
-        scrollbar-width: thin;
-        scrollbar-color: transparent transparent;
-        transition: scrollbar-color 0.15s ease;
+        scrollbar-width: none;
     }
 
     /* Only the class, never :hover. A :hover rule here holds the bar up for
@@ -4872,7 +4901,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 
     .rail-nav::-webkit-scrollbar {
-        width: 6px;
+        display: none;
     }
 
     .rail-nav::-webkit-scrollbar-track {
@@ -4902,16 +4931,11 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        the same hover-to-reveal bar as everywhere else, not a permanently
        invisible one. */
 
-    /*
-     * 15px, which is not arbitrary: it is where a menu icon starts.
-     *
-     * .rail-nav insets its rows by 10px and each row insets its own icon box by
-     * a further 5. The strip was at 8, so its icons sat seven pixels left of
-     * every icon below them -- close enough to look like a mistake rather than
-     * a margin. Same number on the right, where a menu row's caret also stops.
-     */
+    /* 12px, the same inset the logo above it uses, so the first icon of the
+       strip sits directly under the mark and directly over the first menu
+       icon. */
     .rail-primary {
-        padding: 6px 15px;
+        padding: 6px 12px;
     }
 
 
@@ -5011,7 +5035,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         align-items: center;
         gap: 4px;
         width: 100%;
-        padding: 6px 5px;
+        padding: 5px 4px;
         border-radius: var(--shell-radius);
         color: var(--shell-text);
         text-decoration: none;
@@ -5117,14 +5141,6 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * of eleven icons is a thing you scan, not a document you track your place
      * in.
      */
-    html.rail-collapsed:not(.rail-peek) .rail-nav {
-        scrollbar-width: none;
-    }
-
-    html.rail-collapsed:not(.rail-peek) .rail-nav::-webkit-scrollbar {
-        display: none;
-    }
-
     html.rail-collapsed:not(.rail-peek) .primary-chip {
         margin-inline: auto;
     }
@@ -5289,8 +5305,13 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         position: relative;
         min-height: 0;
         overflow: hidden;
-        margin-left: 6px;
-        padding: 8px 0 8px 18px;
+
+        /* No margin of its own. The guide line is drawn 4px inside this box,
+           so with the box flush to the rows above it the line lands 13px from
+           the rail's edge -- under the icons, where it reads as hanging off
+           them rather than off nothing. */
+        margin-left: 0;
+        padding: 6px 0 6px 16px;
     }
 
     .nav-children::before {
@@ -5308,8 +5329,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         display: flex;
         align-items: center;
         gap: 4px;
-        padding: 6px 3px;
-        margin-bottom: 3px;
+        padding: 5px 3px;
+        margin-bottom: 2px;
         border-radius: 5px;
         font-size: 0.8125rem;
         line-height: 1.35;
@@ -5344,12 +5365,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         content: '';
         position: absolute;
         /* Centred on the guide line: .nav-children indents its rows by
-           18px and draws the line 4px in from its own left edge, so 17px
+           16px and draws the line 4px in from its own left edge, so 15px
            back from a row puts this 7px dot's middle on the line's middle
            — and 1px clear of the clip, which is what the line being a
            pseudo-element rather than a border buys. Move the line and this
            moves with it. */
-        left: -17px;
+        left: -15px;
         top: 50%;
         width: 7px;
         height: 7px;
