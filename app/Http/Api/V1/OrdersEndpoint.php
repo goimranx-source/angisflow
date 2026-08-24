@@ -195,6 +195,7 @@ class OrdersEndpoint
                 $page->items(),
             ),
             'summary' => $this->summary(clone $query, $base),
+            'trends' => $this->trends(clone $query, $base),
 
             /*
              * The shops this business actually sells through, so the filter
@@ -403,6 +404,110 @@ class OrdersEndpoint
             'pending_count' => $awaiting,
             'currency' => $base,
         ];
+    }
+
+    /**
+     * A fortnight of daily figures, and how the last week compares to the one
+     * before it.
+     *
+     * ── Why the cards were flat ──────────────────────────────────────────────
+     *
+     * They can draw a series and a change, and were being given neither -- so
+     * four cards sat above a table showing a number and nothing else, on a page
+     * where the whole question is whether the number is going up.
+     *
+     * ── Framed, then filled ──────────────────────────────────────────────────
+     *
+     * Every day in the window starts at zero and is overwritten by whatever the
+     * query found. Grouping alone returns only the days that had orders, so a
+     * quiet Sunday would not shorten the series -- it would shift every day
+     * after it one place to the left, and the picture would be of a fortnight
+     * that never happened.
+     *
+     * @return array{orders: list<int>, revenue: list<float>, delta: array<string, float|null>}
+     */
+    private function trends(Builder $query, string $base): array
+    {
+        $end = now()->endOfDay();
+        $from = $end->copy()->subDays(13)->startOfDay();
+
+        $frame = [];
+
+        for ($day = $from->copy(); $day->lte($end); $day->addDay()) {
+            $frame[$day->toDateString()] = 0;
+        }
+
+        $orders = $frame;
+        $revenue = $frame;
+
+        $rows = (clone $query)
+            ->where('ordered_on', '>=', $from->toDateString())
+            ->where('ordered_on', '<=', $end->toDateString())
+            ->reorder()
+            ->select('ordered_on')
+            ->selectRaw('COUNT(*) as orders_count')
+            ->selectRaw('SUM(total_minor) as total_minor')
+            ->groupBy('ordered_on')
+            ->get();
+
+        $scale = 10 ** Currencies::scale($base);
+
+        foreach ($rows as $row) {
+            // Dates come back as datetimes on some drivers, and a row outside
+            // the frame would add a fifteenth point and stretch the picture.
+            $day = mb_substr((string) $row->ordered_on, 0, 10);
+
+            if (! array_key_exists($day, $frame)) {
+                continue;
+            }
+
+            $orders[$day] = (int) $row->orders_count;
+            $revenue[$day] = round(((int) $row->total_minor) / $scale, 2);
+        }
+
+        $orders = array_values($orders);
+        $revenue = array_values($revenue);
+
+        return [
+            'orders' => $orders,
+            'revenue' => $revenue,
+            'delta' => [
+                'orders' => $this->weekOnWeek($orders),
+                'revenue' => $this->weekOnWeek($revenue),
+            ],
+        ];
+    }
+
+    /**
+     * The last seven days against the seven before them, as a percentage.
+     *
+     * ── Why not the same day last week ───────────────────────────────────────
+     *
+     * A single day against a single day is mostly noise: one large order lands
+     * on a Tuesday and the card reports a 300% rise in the business. Seven
+     * against seven also cancels the weekly shape, which is the loudest pattern
+     * in almost every shop's figures and the one nobody wants reported as news.
+     *
+     * Null when the earlier week is empty. A rise from nothing is not a
+     * percentage, and the alternatives -- infinity, or a flat 100% -- are both
+     * a number where the honest answer is "there is nothing to compare to".
+     *
+     * @param  list<int|float>  $series
+     */
+    private function weekOnWeek(array $series): ?float
+    {
+        if (count($series) < 14) {
+            return null;
+        }
+
+        $earlier = array_sum(array_slice($series, 0, 7));
+        $later = array_sum(array_slice($series, 7, 7));
+
+        if ($earlier <= 0) {
+            return null;
+        }
+
+        return round((($later - $earlier) / $earlier) * 100, 1);
     }
 
     /**

@@ -226,10 +226,38 @@ export function StatsCard({
     className,
     onClick,
 }: StatsCardProps) {
+    /*
+     * Which way the arrow points.
+     *
+     * Taken from the number itself when the caller did not say, because they
+     * almost never do -- the default was 'flat', so every card passing a delta
+     * and nothing else drew a minus sign beside a figure that had plainly
+     * moved. An explicit `direction` still wins, for the cases where the sign
+     * of the delta is not the direction of the news.
+     */
+    const heading: 'up' | 'down' | 'flat' =
+        direction !== 'flat' || delta == null || delta === 0
+            ? direction
+            : delta > 0
+              ? 'up'
+              : 'down';
+
     // A rise in expenses is not good news, and colouring it green because the
     // arrow points up is how a dashboard teaches people to stop reading it.
     const isPositiveTrend =
-        direction === 'flat' ? null : (direction === 'up') === riseIsGood;
+        heading === 'flat' ? null : (heading === 'up') === riseIsGood;
+
+    /*
+     * Four characters, whatever happened.
+     *
+     * A real figure can be 4910.2%, and a badge that wide takes the room the
+     * value needs -- "৳75.8K" was truncating to "৳." beside one. Past a
+     * thousand percent the exact number has stopped being information anybody
+     * acts on; that it multiplied is the whole of the message, and the precise
+     * figure is on the hover.
+     */
+    const deltaShown =
+        delta == null ? null : Math.abs(delta) >= 1000 ? '>999' : String(Math.abs(delta));
 
     const Component = onClick ? 'button' : 'div';
 
@@ -266,12 +294,64 @@ export function StatsCard({
                         )}
                     </div>
 
-                    <p
-                        className="mt-0.5 truncate font-[family-name:var(--font-heading)] text-[1.5rem] leading-tight font-bold text-[var(--color-text-main)] [font-variant-numeric:tabular-nums]"
-                        title={valueTitle}
-                    >
-                        {value}
-                    </p>
+                    {/*
+                      The figure and its change on one line.
+
+                      The change used to sit in a bordered row of its own under
+                      the sparkline, which put three horizontal bands on a card
+                      whose whole job is to be read at a glance -- and separated
+                      the number from the one piece of context that makes it
+                      mean anything. "22" is a fact; "22, up a fifth" is news.
+
+                      `items-baseline`, so the small percentage sits on the
+                      figure's baseline rather than floating at the middle of a
+                      24px number.
+                    */}
+                    {/*
+                      Wrapping, so the badge never crushes the figure.
+
+                      With the change held at its natural width and the figure
+                      told to truncate, a narrow card gave the badge what it
+                      asked for and left "22" as "2…" -- the one thing on the
+                      card nobody can do without. Allowed to wrap, the change
+                      drops to its own line when the two will not fit and the
+                      figure keeps the width.
+                    */}
+                    <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <p
+                            className="truncate font-[family-name:var(--font-heading)] text-[1.5rem] leading-tight font-bold text-[var(--color-text-main)] [font-variant-numeric:tabular-nums]"
+                            title={valueTitle}
+                        >
+                            {value}
+                        </p>
+
+                        {delta !== undefined && delta !== null && (
+                            <span
+                                className={cn(
+                                    'stat-delta shrink-0',
+                                    isPositiveTrend === true && 'is-good',
+                                    isPositiveTrend === false && 'is-bad',
+                                )}
+                                title={
+                                    trendLabel ??
+                                    (delta == null ? undefined : `${delta}% against the week before`)
+                                }
+                            >
+                                <Icon
+                                    name={
+                                        heading === 'down'
+                                            ? 'arrow-down'
+                                            : heading === 'up'
+                                              ? 'arrow-up'
+                                              : 'minus'
+                                    }
+                                    size={11}
+                                    weight="bold"
+                                />
+                                {deltaShown}%
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -297,54 +377,17 @@ export function StatsCard({
             )}
 
             {/*
-                The trend row is drawn whenever the caller says this figure
-                has one — `delta={null}` still means "compared, but the
-                change cannot be expressed", which is what a period starting
-                from zero gives you. Only `undefined` (the prop left off)
-                removes the row.
+              Only when the comparison could not be made.
 
-                Rendering it unconditionally is what keeps a row of cards the
-                same height, and what stops the divider appearing on some
-                cards and not others depending on whether last month happened
-                to be a trading month.
+              `delta={null}` means "compared, and the change cannot be
+              expressed" -- a period starting from zero. That is worth a line,
+              because a card with no percentage on it otherwise looks like a
+              card nobody wired a comparison to.
             */}
-            {delta !== undefined && (
-                <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--shell-border)] pt-2.5">
-                    {delta === null ? (
-                        <span className="text-xs text-[var(--color-text-muted)]">
-                            No change to compare
-                        </span>
-                    ) : (
-                        <>
-                            <span
-                                className={cn(
-                                    'stat-delta',
-                                    isPositiveTrend === true && 'is-good',
-                                    isPositiveTrend === false && 'is-bad',
-                                )}
-                            >
-                                <Icon
-                                    name={
-                                        direction === 'down'
-                                            ? 'arrow-down'
-                                            : direction === 'up'
-                                              ? 'arrow-up'
-                                              : 'minus'
-                                    }
-                                    size={11}
-                                    weight="bold"
-                                />
-                                {Math.abs(delta)}%
-                            </span>
-
-                            {trendLabel && (
-                                <span className="truncate text-xs text-[var(--color-text-muted)]">
-                                    {trendLabel}
-                                </span>
-                            )}
-                        </>
-                    )}
-                </div>
+            {delta === null && (
+                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                    No change to compare
+                </p>
             )}
         </Component>
     );

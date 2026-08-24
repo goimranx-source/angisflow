@@ -152,6 +152,12 @@ type OrdersResponse = {
     fulfilment_statuses: Array<{ value: string; label: string }>;
     /** Connected couriers for dispatch */
     couriers: Array<{ id: string; label: string; slug: string }>;
+    /** A fortnight of daily figures, and last week against the one before. */
+    trends: {
+        orders: number[];
+        revenue: number[];
+        delta: { orders: number | null; revenue: number | null };
+    };
     summary: {
         total_orders: number;
         total_revenue: number;
@@ -300,6 +306,35 @@ export default function Orders() {
 
     const orders = data?.data ?? [];
     const summary = data?.summary;
+    const trends = data?.trends;
+
+    /*
+     * The average basket, day by day.
+     *
+     * Not sent by the endpoint, because it is not a figure the database holds:
+     * it is one series divided by another, and dividing them here costs nothing
+     * and keeps the payload to facts.
+     *
+     * A day with no orders has no average -- not an average of zero. The last
+     * known figure is carried forward, because the typical basket did not
+     * become nothing on a quiet Sunday; nobody bought anything, which is what
+     * the orders card is there to say.
+     */
+    const avgSeries = (() => {
+        if (!trends) {
+            return undefined;
+        }
+
+        let carried = 0;
+
+        return trends.orders.map((count, day) => {
+            if (count > 0) {
+                carried = (trends.revenue[day] ?? 0) / count;
+            }
+
+            return Math.round(carried * 100) / 100;
+        });
+    })();
     const stores = data?.stores ?? [];
     const availableStatuses = data?.statuses ?? [];
     const allStatuses = data?.all_statuses ?? [];
@@ -983,6 +1018,8 @@ export default function Orders() {
                         valueTitle={summary.total_orders.toLocaleString()}
                         icon="shopping-cart"
                         variant="brand"
+                        spark={trends?.orders}
+                        delta={trends?.delta.orders ?? undefined}
                     />
                     {/*
                       Compacted, with the figure itself on the hover.
@@ -998,6 +1035,8 @@ export default function Orders() {
                         valueTitle={money(summary.total_revenue).exact}
                         icon="currency-dollar"
                         variant="success"
+                        spark={trends?.revenue}
+                        delta={trends?.delta.revenue ?? undefined}
                     />
                     <KPICard
                         label="Avg Order Value"
@@ -1005,6 +1044,15 @@ export default function Orders() {
                         valueTitle={money(summary.avg_order_value).exact}
                         icon="chart-line"
                         variant="info"
+                        /*
+                          Its own series, worked out here rather than sent.
+                          
+                          The average is revenue over orders, so a day with no
+                          orders has no average -- not a zero. Carried forward
+                          from the last day that had one, because the typical
+                          basket did not become nothing on a quiet Sunday.
+                        */
+                        spark={avgSeries}
                     />
                     <KPICard
                         label="Pending Orders"
