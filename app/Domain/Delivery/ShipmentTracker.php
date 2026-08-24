@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Delivery;
 
+use App\Domain\Activity\Activity;
 use App\Domain\Delivery\Models\CourierConnection;
 use App\Domain\Delivery\Models\Shipment;
 use App\Domain\Delivery\Models\ShipmentEvent;
@@ -89,7 +90,7 @@ final class ShipmentTracker
                 return $event;
             }
 
-            $this->apply($shipment, $incoming, $occurredAt, $options);
+            $this->apply($shipment, $incoming, $occurredAt, $options, $connection);
 
             return $event;
         });
@@ -145,8 +146,16 @@ final class ShipmentTracker
         return null;
     }
 
-    private function apply(Shipment $shipment, ShipmentStatus $status, Carbon $at, array $options): void
-    {
+    private function apply(
+        Shipment $shipment,
+        ShipmentStatus $status,
+        Carbon $at,
+        array $options,
+        // Passed in rather than read off the shipment: both callers already
+        // hold it, and reading it here would be a query per event on a path
+        // that runs once per parcel per scan.
+        ?CourierConnection $connection = null,
+    ): void {
         $changes = ['status' => $status->value, 'raw_status' => $options['raw_status'] ?? $shipment->raw_status];
 
         // The timestamps a dashboard sorts and a settlement report filters on.
@@ -189,10 +198,43 @@ final class ShipmentTracker
         };
 
         if ($orderChanges !== [] && $shipment->order !== null) {
-            $shipment->order->forceFill(array_filter(
-                $orderChanges,
-                static fn (mixed $value): bool => $value !== null,
-            ))->save();
+            $order = $shipment->order;
+
+            /*
+             * ── The parcel is the news; the order's columns are what followed ─
+             *
+             * An order going to shipped, and later to completed, is the tail
+             * end of something that happened to a parcel: a rider collected
+             * it, a hub scanned it, somebody signed for it at the door. Written
+             * as bare column changes, the history says the status moved twice
+             * and never mentions that a courier was involved, where the parcel
+             * was, or who reported it.
+             *
+             * So the movement is the line, and the columns are folded into it.
+             */
+            Activity::during(
+                Activity::ORDER,
+                (int) $order->id,
+                'parcel.moved',
+                array_filter([
+                    'to' => $status->value,
+                    'courier' => $connection?->label,
+                    'tracking' => $shipment->tracking_number,
+
+                    // Whatever the courier said, where they said anything. It
+                    // is the difference between "in transit" and "in transit,
+                    // at the Dhaka sorting hub" — which is the half somebody
+                    // chasing a late parcel actually needs.
+                    'location' => $options['location'] ?? null,
+                    'note' => $options['description'] ?? null,
+                ], static fn (mixed $value): bool => $value !== null),
+                function () use ($order, $orderChanges): void {
+                    $order->forceFill(array_filter(
+                        $orderChanges,
+                        static fn (mixed $value): bool => $value !== null,
+                    ))->save();
+                },
+            );
         }
     }
 
@@ -249,7 +291,7 @@ final class ShipmentTracker
             ])->save();
 
             if ($ignored === null) {
-                $this->apply($shipment, $incoming, $event->occurred_at, []);
+                $this->apply($shipment, $incoming, $event->occurred_at, [], $connection);
                 $applied++;
             }
         }

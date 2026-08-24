@@ -12,6 +12,8 @@ type Entry = {
     automated: boolean;
     title: string;
     detail: string | null;
+    /** What followed from it — the columns the act moved on its way past. */
+    also: string | null;
     tone: 'good' | 'bad' | 'quiet' | 'plain';
 };
 
@@ -35,6 +37,13 @@ const MARKS: Record<string, string> = {
     'push.sent': 'arrow-up-right',
     'push.failed': 'warning',
     pulled: 'cloud-arrow-down',
+
+    // The acts that were previously invisible: a dispatch showed up only as the
+    // two columns it moved, and a courier's own updates as the same two again.
+    dispatched: 'truck',
+    'dispatch.cancelled': 'prohibit',
+    'parcel.moved': 'map-pin',
+    'items.changed': 'list-bullets',
 };
 
 /*
@@ -172,6 +181,27 @@ export function OrderHistory({ orderId }: { orderId: string }) {
                                     )}
 
                                     {/*
+                                      What followed, set below and quieter.
+
+                                      A dispatch is the news; that the order then
+                                      became Shipped and partly fulfilled is
+                                      true, consequent and secondary. Given the
+                                      same weight as the title it competes with
+                                      it, and the line stops saying which of the
+                                      two things a reader is being told.
+                                    */}
+                                    {entry.also && (
+                                        <p className="mt-0.5 flex gap-1.5 break-words text-xs text-[var(--color-text-subtle)]">
+                                            <Icon
+                                                name="arrow-elbow-down-right"
+                                                size={12}
+                                                className="mt-0.5 shrink-0"
+                                            />
+                                            <span>{entry.also}</span>
+                                        </p>
+                                    )}
+
+                                    {/*
                                       Who, and never nobody.
 
                                       An unattributed line invites the reader to
@@ -182,7 +212,9 @@ export function OrderHistory({ orderId }: { orderId: string }) {
                                       looking at a connection.
                                     */}
                                     <p className="mt-0.5 text-xs text-[var(--color-text-subtle)]">
-                                        {entry.automated ? 'By the sync' : (entry.by ?? 'Unknown')}
+                                        {entry.automated
+                                            ? 'By the sync'
+                                            : (entry.by ?? 'Nobody recorded')}
                                     </p>
                                 </div>
                             </li>

@@ -20,6 +20,7 @@ use App\Domain\Integrations\Support\Transform;
 use App\Domain\Money\Currencies;
 use App\Domain\Money\CurrencyService;
 use App\Domain\Sales\Models\Order;
+use App\Domain\Sales\OrderHistory;
 use App\Domain\Storefront\StoreCode;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
@@ -1149,6 +1150,8 @@ class OrdersEndpoint
 
         $money = fn (mixed $minor): string => $symbol.number_format(((int) $minor) / $scale, 2);
 
+        $shop = $model->storefront?->name;
+
         $entries = $events->map(fn ($event): array => [
             'id' => 'e'.$event->id,
             'at' => $event->occurred_at?->toIso8601String(),
@@ -1157,12 +1160,31 @@ class OrdersEndpoint
                 ? null
                 : ($actors[$event->actor_user_id] ?? 'Someone since removed'),
 
-            // Null actor means the platform did it — a webhook, a sync, a queued
-            // push. Said out loud, because "who did this" is the first question.
-            'automated' => $event->actor_user_id === null,
+            /*
+             * Null actor means the platform did it — a webhook, a sync, a
+             * queued push. Said out loud, because "who did this" is the first
+             * question anybody asks of a change they did not make.
+             *
+             * Except on a line recovered afterwards, where a missing actor
+             * means nobody recorded one rather than that nothing human was
+             * involved. Somebody dispatched that order; saying the sync did it
+             * would be inventing the one fact the recovery does not have.
+             */
+            'automated' => $event->actor_user_id === null
+                && (((array) $event->context)['recovered'] ?? false) !== true,
             'title' => $this->historyTitle($event->verb, (array) $event->context, $money),
-            'detail' => $this->historyDetail($event->verb, (array) $event->context),
-            'tone' => $this->historyTone($event->verb),
+            'detail' => $this->historyDetail($event->verb, (array) $event->context, $money, $shop),
+
+            /*
+             * What followed from it, kept apart from what it was.
+             *
+             * A dispatch is "sent to SteadFast with this tracking number"; that
+             * the order then became Shipped and Partially fulfilled is true,
+             * consequent, and secondary. Two lines say that ordering; one line
+             * with all of it runs the cause and the effect together.
+             */
+            'also' => $this->historyAlso((array) $event->context, $money),
+            'tone' => $this->historyTone($event->verb, (array) $event->context),
         ])->values()->all();
 
         return response()->json([
@@ -1233,7 +1255,39 @@ class OrdersEndpoint
             'restored' => 'Restored from the trash',
             'push.sent' => 'Sent to '.($context['shop'] ?? 'the shop'),
             'push.failed' => ($context['shop'] ?? 'The shop').' refused the change',
-            'pulled' => 'Brought in from '.($context['shop'] ?? 'the shop'),
+
+            // Only ever recorded for an order that already existed here, and
+            // only when the shop's version really differed — so "updated by"
+            // rather than "brought in from", which would be the import.
+            'pulled' => 'Updated by '.($context['shop'] ?? 'the shop'),
+
+            'dispatched' => 'Dispatched to '.($context['courier'] ?? 'a courier'),
+            'dispatch.cancelled' => 'Shipment cancelled with '.($context['courier'] ?? 'the courier'),
+
+            /*
+             * The parcel's own words, not the shipment table's.
+             *
+             * "Parcel: Out For Delivery" is a status code with a space in it.
+             * Somebody reading a history wants the sentence — and these are the
+             * nine things that can happen to a parcel, so there is no list to
+             * maintain beyond the one the courier statuses already are.
+             */
+            'parcel.moved' => match ((string) ($context['to'] ?? '')) {
+                'booked' => 'Booked with the courier',
+                'picked_up' => 'Collected by the courier',
+                'in_transit' => 'Parcel in transit',
+                'out_for_delivery' => 'Out for delivery',
+                'attempted' => 'Delivery attempted',
+                'delivered' => 'Delivered',
+                'returning' => 'On its way back',
+                'returned' => 'Returned to sender',
+                'cancelled' => 'Shipment cancelled',
+                default => 'Parcel update',
+            },
+
+            'items.changed' => isset($context['summary'])
+                ? 'Items: '.$context['summary']
+                : 'Items changed',
 
             // A verb recorded by a version of this application that has since
             // moved on. Shown as itself rather than hidden: a line nobody can
@@ -1248,8 +1302,14 @@ class OrdersEndpoint
      *
      * @param  array<string, mixed>  $context
      */
-    private function historyDetail(string $verb, array $context): ?string
+    private function historyDetail(string $verb, array $context, callable $money, ?string $shop): ?string
     {
+        /** Whichever of these there is something to say about, joined up. */
+        $some = static fn (array $parts): ?string => ($joined = implode(
+            ' · ',
+            array_filter($parts, static fn (?string $part): bool => $part !== null && $part !== ''),
+        )) === '' ? null : $joined;
+
         return match ($verb) {
             'edited' => is_array($context['fields'] ?? null) && $context['fields'] !== []
                 ? collect($context['fields'])->map(fn ($f) => Str::headline((string) $f))->join(', ', ' and ')
@@ -1259,9 +1319,147 @@ class OrdersEndpoint
                 ? 'Created there for the first time'
                 : 'Updated the one already there',
             'cancelled.reason' => is_string($context['to'] ?? null) ? $context['to'] : null,
-            'created' => isset($context['number']) ? 'Number '.$context['number'] : null,
+
+            'created' => $some([
+                isset($context['number']) ? 'Number '.$context['number'] : null,
+
+                // Where it came from, which is the first thing anybody wants to
+                // know about an order they do not recognise.
+                isset($context['storefront_id']) && $shop !== null ? 'From '.$shop : null,
+            ]),
+
+            /*
+             * The shipment is created with the order's own currency, so the
+             * order's formatter is the right one for its cash-on-delivery
+             * figure — see the dispatch endpoint, which copies it across.
+             */
+            'dispatched' => $some([
+                isset($context['tracking']) ? 'Tracking '.$context['tracking'] : null,
+                isset($context['cod_minor'])
+                    ? 'Cash on delivery '.$money($context['cod_minor'])
+                    : null,
+                ($context['bulk'] ?? false) === true ? 'Part of a bulk dispatch' : null,
+
+                /*
+                 * Said out loud, because it is not the same kind of claim.
+                 *
+                 * Every other line here is something this application watched
+                 * happen. This one was read back off the shipment afterwards,
+                 * for dispatches made before there was anything watching — and
+                 * a history that quietly presents a reconstruction as a record
+                 * is lying about the one thing a history is for.
+                 */
+                ($context['recovered'] ?? false) === true
+                    ? 'Recovered from the shipment record'
+                    : null,
+            ]),
+
+            'dispatch.cancelled' => isset($context['tracking'])
+                ? 'Tracking '.$context['tracking']
+                : null,
+
+            'parcel.moved' => $some([
+                is_string($context['location'] ?? null) ? $context['location'] : null,
+                is_string($context['note'] ?? null) ? $context['note'] : null,
+                isset($context['tracking']) ? 'Tracking '.$context['tracking'] : null,
+            ]),
+
+            /*
+             * Named, not just counted.
+             *
+             * "3 changed" tells somebody the order is not what it was and
+             * leaves them to work out which parts. A few names is usually the
+             * whole answer, and where it is not, the count in the title says
+             * how much is missing.
+             */
+            'items.changed' => $some([
+                is_array($context['added'] ?? null) ? 'Added '.implode(', ', $context['added']) : null,
+                is_array($context['changed'] ?? null) ? 'Changed '.implode(', ', $context['changed']) : null,
+                is_array($context['removed'] ?? null) ? 'Removed '.implode(', ', $context['removed']) : null,
+            ]),
+
             default => null,
         };
+    }
+
+    /**
+     * What followed from the act, in words.
+     *
+     * These are the column changes an observer would have written as lines of
+     * their own, folded into the act that caused them — see Activity::during
+     * for why a history of columns is the wrong shape for a history of an
+     * order.
+     *
+     * Written as "became", not as "from → to". The arrow is right for a change
+     * somebody made on purpose, where both ends are the point; here only the
+     * new value is news, because the reader is being told what a dispatch did,
+     * not asked to compare two states.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function historyAlso(array $context, callable $money): ?string
+    {
+        $also = $context['also'] ?? null;
+
+        if (! is_array($also) || $also === []) {
+            return null;
+        }
+
+        $said = collect($also)
+            ->map(function (mixed $one) use ($money): ?string {
+                if (! is_array($one)) {
+                    return null;
+                }
+
+                $field = (string) ($one['field'] ?? '');
+                $to = $one['to'] ?? null;
+
+                /*
+                 * Timestamps say nothing here that the line does not.
+                 *
+                 * "Delivered — signed for by the recipient" followed by "and
+                 * fulfilled at changed" is the same fact twice, the second time
+                 * in the words of the database. Every line already carries the
+                 * moment it happened, which is what these columns were set to.
+                 *
+                 * Archiving is the exception, because archived_at is not a
+                 * record of when something happened but the thing itself: the
+                 * order is in the archive or it is not, and that is worth
+                 * saying.
+                 */
+                if ($field !== 'archived_at' && (str_ends_with($field, '_at') || str_ends_with($field, '_on'))) {
+                    return null;
+                }
+
+                return match ($field) {
+                    'status' => 'status became '.Str::headline((string) $to),
+                    'payment_status' => 'payment became '.Str::headline((string) $to),
+                    'fulfilment_status' => 'fulfilment became '.Str::headline((string) $to),
+                    'total_minor' => 'the total became '.$money($to),
+                    'paid_minor' => 'paid became '.$money($to),
+                    'items' => 'items '.$to,
+
+                    // Archiving is a state with two ends and no useful middle,
+                    // so it reads as what it is rather than as a timestamp.
+                    'archived_at' => $to === null ? 'it came out of the archive' : 'it was filed away',
+
+                    /*
+                     * Named but not valued, for the same reason the summary
+                     * line names fields without them: an address and a phone
+                     * number copied into an append-only table are personal data
+                     * in the one place it can never be corrected or removed.
+                     */
+                    default => $field === '' ? null : Str::lower(Str::headline($field)).' changed',
+                };
+            })
+            ->filter()
+            ->values();
+
+        if ($said->isEmpty()) {
+            return null;
+        }
+
+        return Str::ucfirst($said->join(', ', ' and '));
     }
 
     /**
@@ -1271,12 +1469,27 @@ class OrdersEndpoint
      * a timeline where the colour says nothing — the point is that the one thing
      * that went wrong is visible without reading.
      */
-    private function historyTone(string $verb): string
+    private function historyTone(string $verb, array $context = []): string
     {
+        /*
+         * A parcel is the one thing here that can go either way on the same
+         * verb. Delivered is the good ending and returned is the bad one, and
+         * both arrive as `parcel.moved` — so this is the one place the tone has
+         * to look past the verb at what actually happened.
+         */
+        if ($verb === 'parcel.moved') {
+            return match ((string) ($context['to'] ?? '')) {
+                'delivered' => 'good',
+                'returned', 'cancelled' => 'bad',
+                'attempted', 'returning' => 'quiet',
+                default => 'plain',
+            };
+        }
+
         return match ($verb) {
-            'push.failed' => 'bad',
+            'push.failed', 'dispatch.cancelled' => 'bad',
             'trashed', 'archived', 'cancelled.reason' => 'quiet',
-            'created', 'push.sent', 'restored' => 'good',
+            'created', 'push.sent', 'restored', 'dispatched' => 'good',
             default => 'plain',
         };
     }
@@ -1815,6 +2028,18 @@ class OrdersEndpoint
         $keep = [];
         $position = 0;
 
+        /*
+         * What changed about the items, for the history.
+         *
+         * An order's items are most of what an order is, and until now editing
+         * them recorded nothing at all: a quantity halved, a line deleted, a
+         * product swapped — none of it appeared anywhere afterwards. The order
+         * columns are watched by an observer; its lines are a different table
+         * with nobody watching it.
+         */
+        $added = [];
+        $changed = [];
+
         foreach ($lines as $row) {
             $position++;
 
@@ -1840,14 +2065,33 @@ class OrdersEndpoint
                 $line->update($attributes);
                 $keep[] = (int) $line->id;
 
+                // Only when it really moved. The form posts every line back
+                // whether or not it was touched, so counting saves would report
+                // the whole order as edited every time somebody corrected one
+                // line of an address.
+                if ($line->wasChanged()) {
+                    $changed[] = (string) $line->description;
+                }
+
                 continue;
             }
 
             $keep[] = (int) $model->lines()->create($attributes)->id;
+            $added[] = (string) $attributes['description'];
         }
+
+        // Read before the delete, because afterwards there is nothing left to
+        // name and "1 item removed" is the half of the sentence nobody needs.
+        $removed = $existing
+            ->reject(fn ($line): bool => in_array((int) $line->id, $keep, true))
+            ->map(fn ($line): string => (string) $line->description)
+            ->values()
+            ->all();
 
         // Whatever the form did not send back was removed on the screen.
         $model->lines()->whereNotIn('id', $keep === [] ? [0] : $keep)->delete();
+
+        OrderHistory::itemsChanged($model, $added, $changed, $removed);
     }
 
     /**
@@ -2101,12 +2345,37 @@ class OrdersEndpoint
             ])->save();
         }
 
-        // Update order fulfillment status
-        if ($order->fulfilment_status === Order::UNFULFILLED) {
-            $order->update(['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]);
-        } else {
-            $order->update(['status' => 'shipped']);
-        }
+        /*
+         * ── The dispatch, recorded as the dispatch ───────────────────────────
+         *
+         * Not as the two columns it moves. Until this, sending an order to a
+         * courier left a history reading "Status: Processing → Shipped" and
+         * "Fulfilment: Unfulfilled → Partial" and nothing whatever about a
+         * courier — no name, no tracking number, no cash-on-delivery figure,
+         * and no indication that anybody had dispatched anything at all.
+         *
+         * Those two columns are what followed. This is what happened.
+         */
+        Activity::during(
+            Activity::ORDER,
+            (int) $order->id,
+            'dispatched',
+            array_filter([
+                'courier' => $courier->label,
+                'tracking' => $shipment->tracking_number,
+
+                // Only when there is cash to collect. A prepaid parcel has a
+                // cod_amount_minor too, and printing it would tell somebody
+                // reading the history to expect money that is not coming.
+                'cod_minor' => $shipment->is_cod ? $shipment->cod_amount_minor : null,
+                'currency' => $shipment->currency,
+            ], static fn (mixed $value): bool => $value !== null),
+            function () use ($order): void {
+                $order->update($order->fulfilment_status === Order::UNFULFILLED
+                    ? ['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]
+                    : ['status' => 'shipped']);
+            },
+        );
 
         return response()->json([
             'message' => "Order dispatched to {$courier->label}.",
@@ -2143,11 +2412,30 @@ class OrdersEndpoint
             ], 422);
         }
 
-        app(ShipmentTracker::class)->record(
-            $shipment,
-            'cancelled',
-            ['source' => 'dashboard'],
-            ['source' => 'dashboard', 'description' => 'Cancelled from the order book'],
+        /*
+         * One line, though three things move.
+         *
+         * The tracker records a parcel event, moves the shipment, and moves the
+         * order to cancelled. All of that is this one decision, so it is folded
+         * into it — see Activity::during, and note that the tracker's own
+         * `parcel.moved` line nests inside this one and stays quiet.
+         */
+        Activity::during(
+            Activity::ORDER,
+            (int) $order->id,
+            'dispatch.cancelled',
+            array_filter([
+                'courier' => $connection->label,
+                'tracking' => $shipment->tracking_number,
+            ], static fn (mixed $value): bool => $value !== null),
+            function () use ($shipment): void {
+                app(ShipmentTracker::class)->record(
+                    $shipment,
+                    'cancelled',
+                    ['source' => 'dashboard'],
+                    ['source' => 'dashboard', 'description' => 'Cancelled from the order book'],
+                );
+            },
         );
 
         return response()->json([
@@ -2234,12 +2522,26 @@ class OrdersEndpoint
                     ])->save();
                 }
 
-                // Update order fulfillment status
-                if ($order->fulfilment_status === Order::UNFULFILLED) {
-                    $order->update(['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]);
-                } else {
-                    $order->update(['status' => 'shipped']);
-                }
+                // Recorded per order, not per batch: each of these is a
+                // dispatch in its own right, and its history is read on its own
+                // page. See the single dispatch above.
+                Activity::during(
+                    Activity::ORDER,
+                    (int) $order->id,
+                    'dispatched',
+                    array_filter([
+                        'courier' => $courier->label,
+                        'tracking' => $shipment->tracking_number,
+                        'cod_minor' => $shipment->is_cod ? $shipment->cod_amount_minor : null,
+                        'currency' => $shipment->currency,
+                        'bulk' => true,
+                    ], static fn (mixed $value): bool => $value !== null),
+                    function () use ($order): void {
+                        $order->update($order->fulfilment_status === Order::UNFULFILLED
+                            ? ['status' => 'shipped', 'fulfilment_status' => Order::PARTIAL]
+                            : ['status' => 'shipped']);
+                    },
+                );
 
                 $dispatched++;
             } catch (\Throwable $e) {

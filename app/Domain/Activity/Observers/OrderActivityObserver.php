@@ -96,6 +96,27 @@ final class OrderActivityObserver
 
         foreach ($changes as $column) {
             /*
+             * Offered to the act in progress before anything else.
+             *
+             * When a dispatch or a courier update or a sync is what moved this
+             * column, the change is a consequence of that and belongs on its
+             * line rather than on one of its own. See Activity::during, which
+             * explains why a history of columns is the wrong shape.
+             *
+             * Nothing is going on most of the time, in which case this is false
+             * and the column is described exactly as it was before.
+             */
+            if (Activity::consequence(
+                Activity::ORDER,
+                (int) $order->id,
+                $column,
+                $order->getOriginal($column),
+                $order->{$column},
+            )) {
+                continue;
+            }
+
+            /*
              * Archiving reads as an act, not as a column changing.
              *
              * `archived_at` goes from null to a date and back, and "archived_at

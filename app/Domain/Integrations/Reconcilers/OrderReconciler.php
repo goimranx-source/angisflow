@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Integrations\Reconcilers;
 
+use App\Domain\Activity\Activity;
 use App\Domain\Catalogue\Models\Product;
 use App\Domain\Catalogue\Models\ProductVariant;
 use App\Domain\Integrations\Models\Integration;
@@ -11,6 +12,7 @@ use App\Domain\Integrations\Support\LineItems;
 use App\Domain\Integrations\Support\MappedRecord;
 use App\Domain\Sales\Models\Order;
 use App\Domain\Sales\Models\OrderLine;
+use App\Domain\Sales\OrderHistory;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -115,9 +117,37 @@ class OrderReconciler
                 : null;
         }
 
-        $order->fill($attributes)->save();
+        /*
+         * ── A sync that changed something says so ────────────────────────────
+         *
+         * Every change a shop makes used to arrive in this order's history as
+         * an anonymous column change with nobody's name against it, rendered as
+         * "By the sync" — true, and not enough. Which shop, and was this the
+         * shop's doing or a colleague's, are the two questions anybody asks of
+         * a change they did not make.
+         *
+         * ── And a sync that changed nothing says nothing ─────────────────────
+         *
+         * Which is nearly all of them. The pull runs on a timer across every
+         * order, and a line for each pass would be a history of the timer:
+         * thousands of rows saying the shop was asked and had nothing new,
+         * burying the handful that say what actually happened.
+         *
+         * So the line is written only when the shop's version really did
+         * differ — see the last argument.
+         */
+        Activity::during(
+            Activity::ORDER,
+            (int) $order->id,
+            'pulled',
+            ['shop' => $integration->name],
+            function () use ($order, $attributes, $integration, $payload, $currency): void {
+                $order->fill($attributes)->save();
 
-        $this->syncLines($integration, $order, $payload, $currency);
+                $this->syncLines($integration, $order, $payload, $currency);
+            },
+            onlyIfSomethingChanged: true,
+        );
 
         return $order;
     }
@@ -166,6 +196,13 @@ class OrderReconciler
         $seen = [];
         $number = 1;
 
+        // For the history. A shop changing what is in an order is one of the
+        // more important things that can happen to it, and one of the few this
+        // application could not previously say had happened.
+        $added = [];
+        $changed = [];
+        $removed = [];
+
         foreach ($incoming as $line) {
             $unit = $line['unit_price_minor']
                 ?? ($line['total_minor'] === null ? 0 : (int) round($line['total_minor'] / max($line['quantity'], 0.001)));
@@ -184,6 +221,18 @@ class OrderReconciler
                     'unit_price_minor' => $unit,
                     'total_minor' => $total,
                 ])->save();
+
+                /*
+                 * Only what really moved, and never line_no on its own.
+                 *
+                 * Every line is rewritten on every pass, so counting saves
+                 * would report every order as changed on every sync. And a
+                 * shop that reorders its own list renumbers all of them
+                 * without changing a single thing anybody ordered.
+                 */
+                if ($match->wasChanged(['description', 'quantity', 'unit_price_minor', 'total_minor'])) {
+                    $changed[] = (string) $line['name'];
+                }
 
                 continue;
             }
@@ -207,15 +256,19 @@ class OrderReconciler
             ]);
 
             $seen[] = $created->id;
+            $added[] = (string) $line['name'];
         }
 
         // Gone from the shop's list, and known to the shop — so genuinely
         // removed there rather than simply not sent yet.
         foreach ($existing as $line) {
             if (! in_array($line->id, $seen, true) && $line->external_id !== null) {
+                $removed[] = (string) $line->description;
                 $line->delete();
             }
         }
+
+        OrderHistory::itemsChanged($order, $added, $changed, $removed);
     }
 
     /**

@@ -116,6 +116,156 @@ final class Activity
     }
 
     /**
+     * The act being recorded right now, if one is in progress.
+     *
+     * @var array{type: string, id: int, also: list<array<string, mixed>>}|null
+     */
+    private static ?array $cause = null;
+
+    /**
+     * Record one act as one line, with its consequences folded into it.
+     *
+     * ── The problem this exists for ──────────────────────────────────────────
+     *
+     * Sending an order to a courier is one thing a person did. Underneath, it
+     * writes a shipment, books it, takes back a tracking number, and moves the
+     * order's status and its fulfilment state. The observer watching the order
+     * sees the last two of those and writes
+     *
+     *     Status: Processing → Shipped
+     *     Fulfilment: Unfulfilled → Partial
+     *
+     * and nothing at all about the dispatch. So the history reports that two
+     * columns moved and never says why, or to which courier, or for how much
+     * cash on delivery — and somebody reading it back is left to infer the one
+     * fact that mattered from the two that followed from it.
+     *
+     * That is the wrong shape for a history. A history of an order is a history
+     * of the things that happened to it, and a column changing is not a thing
+     * that happened; it is a consequence of one.
+     *
+     * ── What this does ───────────────────────────────────────────────────────
+     *
+     * While the work runs, any change the observer would have written as a line
+     * of its own is collected instead and folded into this one:
+     *
+     *     Dispatched to SteadFast Courier
+     *     Tracking SF-100294 · Cash on delivery ৳2,320.00
+     *     Status became Shipped, fulfilment became Partial
+     *
+     * One line, naming the act, carrying its consequences as detail — which is
+     * both shorter than what it replaces and says considerably more.
+     *
+     * ── Where it must not be used ────────────────────────────────────────────
+     *
+     * Only where one act cascades into columns nobody touched by hand. Somebody
+     * editing an order and changing its status *meant* to change the status,
+     * and that deserves its own line rather than a footnote under "Details
+     * edited". The rule is whether the reader would be surprised to find the
+     * change listed separately — surprised by "Fulfilment: Partial" appearing
+     * on its own after a dispatch, not surprised by a status change appearing
+     * on its own after somebody changed the status.
+     *
+     * @template TReturn
+     *
+     * @param  array<string, mixed>  $context
+     * @param  callable(): TReturn  $work
+     * @param  bool  $onlyIfSomethingChanged  Write no line at all when the work
+     *              turned out to change nothing. For acts that run on a timer:
+     *              a sync that visits every order every few minutes would
+     *              otherwise bury a real history under thousands of lines
+     *              saying it looked and found nothing.
+     * @return TReturn
+     */
+    public static function during(
+        string $subjectType,
+        int $subjectId,
+        string $verb,
+        array $context,
+        callable $work,
+        bool $onlyIfSomethingChanged = false,
+    ): mixed {
+        /*
+         * One level deep, and no further.
+         *
+         * A nested act is part of the outer one — cancelling a shipment moves
+         * the parcel, which moves the order — and letting both describe
+         * themselves puts the reader back where they started, reading two lines
+         * for one thing. The outer act is the one somebody asked for, so it is
+         * the one that gets to speak.
+         */
+        if (self::$cause !== null) {
+            return $work();
+        }
+
+        self::$cause = ['type' => $subjectType, 'id' => $subjectId, 'also' => []];
+
+        try {
+            $result = $work();
+        } finally {
+            $cause = self::$cause;
+            self::$cause = null;
+        }
+
+        /*
+         * Nothing is written when the work threw, because `finally` clears the
+         * cause and the exception carries past this line. An act that failed
+         * did not happen, and a history saying it did is worse than one that
+         * never mentions it.
+         */
+        if ($onlyIfSomethingChanged && $cause['also'] === []) {
+            return $result;
+        }
+
+        self::record(
+            $subjectType,
+            $subjectId,
+            $verb,
+            $cause['also'] === [] ? $context : $context + ['also' => $cause['also']],
+        );
+
+        return $result;
+    }
+
+    /**
+     * Offer a change to the act in progress, if there is one.
+     *
+     * @param  string  $what  the column, or a short name for what moved
+     * @return bool true when it was taken, and the caller should not write a
+     *              line of its own
+     */
+    public static function consequence(
+        string $subjectType,
+        int $subjectId,
+        string $what,
+        mixed $from = null,
+        mixed $to = null,
+    ): bool {
+        if (self::$cause === null) {
+            return false;
+        }
+
+        /*
+         * Scoped to the subject the act is about.
+         *
+         * A bulk dispatch runs one act per order, but a single act that happens
+         * to touch a second record must not have that record's changes
+         * described as part of this one's line — "Dispatched to SteadFast, also
+         * some other order became cancelled" is a sentence nobody can act on.
+         */
+        if (self::$cause['type'] !== $subjectType || self::$cause['id'] !== $subjectId) {
+            return false;
+        }
+
+        self::$cause['also'][] = array_filter(
+            ['field' => $what, 'from' => $from, 'to' => $to],
+            static fn (mixed $value): bool => $value !== null,
+        );
+
+        return true;
+    }
+
+    /**
      * Write everything buffered, as one insert.
      *
      * Called from a terminating callback, so it runs after the response has been

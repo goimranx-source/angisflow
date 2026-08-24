@@ -66,6 +66,23 @@ class ActivityEvent extends Model
      */
     public function scopeForSubject(mixed $query, string $type, int $id): mixed
     {
-        return $query->where('subject_type', $type)->where('subject_id', $id)->orderBy('id');
+        /*
+         * By when it happened, and by id only to break ties.
+         *
+         * Ordering by id alone worked for as long as every row was appended in
+         * the order things happened, which was true until a line could be
+         * written for something that happened before it — a dispatch recovered
+         * from the shipment that recorded it. Sorted by id, that line lands at
+         * the foot of the timeline dated three days earlier, which reads as the
+         * timeline being broken rather than as the row being late.
+         *
+         * The id still decides between two events in the same millisecond,
+         * where it is the only thing that knows which came first.
+         */
+        return $query
+            ->where('subject_type', $type)
+            ->where('subject_id', $id)
+            ->orderBy('occurred_at')
+            ->orderBy('id');
     }
 }
