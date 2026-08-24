@@ -1019,7 +1019,6 @@ export default function Orders() {
                         icon="shopping-cart"
                         variant="brand"
                         spark={trends?.orders}
-                        delta={trends?.delta.orders ?? undefined}
                     />
                     {/*
                       Compacted, with the figure itself on the hover.
@@ -1036,7 +1035,6 @@ export default function Orders() {
                         icon="currency-dollar"
                         variant="success"
                         spark={trends?.revenue}
-                        delta={trends?.delta.revenue ?? undefined}
                     />
                     <KPICard
                         label="Avg Order Value"

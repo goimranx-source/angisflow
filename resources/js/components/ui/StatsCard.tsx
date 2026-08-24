@@ -96,82 +96,123 @@ type StatsCardProps = {
  * absolute figures and useless as a picture of the month.
  */
 /**
- * The series under the figure, as bars.
+ * The series under the figure: a curve, with the ground beneath it shaded.
  *
- * ── Why bars rather than the line it was ─────────────────────────────────────
+ * ── What it is for ───────────────────────────────────────────────────────────
  *
- * A line says "this value moved from here to there", and it is the right
- * picture for something continuous. What these cards carry is not continuous:
- * it is a count per day. There is no value between Tuesday and Wednesday, and a
- * curve drawn through them invents one — smoothed, it invents a Tuesday
- * afternoon peak that never happened.
+ * A shape, not a set of readings. There is no axis, no scale and no labels, so
+ * nothing here can be measured — and nothing here should invite measuring. What
+ * it answers is "busy lately, or quiet?", at a glance, without the reader
+ * having to decide to look.
  *
- * Bars say the true thing: fourteen days, each its own height, nothing claimed
- * about the gaps. They also read at this size, where a 1.5px line across 28px
- * of card is closer to a texture than a chart.
+ * The fill is most of why it works. A bare line of this weight reads as a
+ * border or a divider; filled, it reads as a quantity, and the eye takes the
+ * silhouette in without tracing the line.
  *
- * ── The floor ────────────────────────────────────────────────────────────────
+ * ── The curve cannot overshoot ───────────────────────────────────────────────
  *
- * Bars are measured from zero, not from the smallest value in the series.
- * Starting at the minimum is what makes a sparkline flatter a quiet week into a
- * dramatic one — the shortest bar vanishes and the tallest fills the card,
- * whatever the actual difference was. A day with two orders and a day with
- * three should look nearly the same, because they are.
+ * Each segment is a cubic whose control points sit on the vertical midline
+ * between its two ends, at the height of the end it belongs to. That is what
+ * keeps the curve inside the range of the values it joins: a spline fitted
+ * through the points would bulge past them, inventing a peak above the busiest
+ * day and a dip below the quietest, on a picture with no axis to check it
+ * against.
+ *
+ * ── Measured from zero ───────────────────────────────────────────────────────
+ *
+ * Not from the smallest value in the series. Starting at the minimum is what
+ * turns a quiet month into a dramatic one — the lowest point pinned to the
+ * floor and the highest to the ceiling, whatever the real difference was. Two
+ * orders and three should look nearly the same, because they are.
  */
-function Spark({ points }: { points: number[] }) {
+function Spark({ points, accent }: { points: number[]; accent: string }) {
     // One point is not a trend, and no points is not a picture.
     if (points.length < 2) {
         return null;
     }
 
     const W = 100;
-    const H = 28;
+    const H = 32;
+
+    // Room above for the stroke's own width, so a peak is not shaved off by
+    // the edge of the box.
+    const TOP = 3;
+
+    /*
+     * And room below, for the same reason at the other end.
+     *
+     * A run of zero days sits the curve exactly on y = H, where half the
+     * stroke falls outside the viewBox and is clipped. On a month with orders
+     * in the last week and nothing before it, that read as a line that simply
+     * began two thirds of the way across -- as though the card only had a
+     * week's data rather than three weeks of nothing, which is a different
+     * and much less useful statement.
+     */
+    const FLOOR = 2;
 
     const max = Math.max(...points, 0);
 
-    /*
-     * Share the width evenly, and spend a fifth of each share on the gap.
-     *
-     * As a fraction rather than a pixel count, because the viewBox is stretched
-     * to the card's width by preserveAspectRatio="none" — a gap set in viewBox
-     * units would come out wider on a wide card and thinner on a narrow one,
-     * and a row of four cards would have four different bar spacings.
-     */
-    const slot = W / points.length;
-    const bar = slot * 0.62;
+    const at = (i: number): [number, number] => {
+        // Indexed access is checked: the loop never leaves the array, but the
+        // compiler cannot see that, and a silent NaN in a path draws nothing
+        // at all rather than complaining.
+        const value = points[i] ?? 0;
+        const height = max === 0 ? 0 : (value / max) * (H - TOP - FLOOR);
+
+        return [(i / (points.length - 1)) * W, H - FLOOR - height];
+    };
+
+    let line = '';
+
+    for (let i = 0; i < points.length; i++) {
+        const [x, y] = at(i);
+
+        if (i === 0) {
+            line += `M ${x} ${y}`;
+
+            continue;
+        }
+
+        const [px, py] = at(i - 1);
+        const mid = (px + x) / 2;
+
+        line += ` C ${mid} ${py}, ${mid} ${y}, ${x} ${y}`;
+    }
 
     return (
         <svg
             viewBox={`0 0 ${W} ${H}`}
             preserveAspectRatio="none"
-            className="mt-3 block h-7 w-full"
+            className="mt-3 block h-9 w-full"
             aria-hidden="true"
         >
-            {points.map((value, i) => {
-                /*
-                 * A floor of one unit, so a day with nothing in it is still a
-                 * mark on the axis rather than a hole in the row. A gap reads
-                 * as missing data; a stub reads as a quiet day, which is what
-                 * it is.
-                 */
-                const height = max === 0 ? 1 : Math.max(1, (value / max) * (H - 1));
+            <defs>
+                {/*
+                  Keyed by the accent so two cards of different colours do not
+                  share one gradient — SVG ids are global to the document, and
+                  the second card to mount would otherwise paint itself with
+                  the first one's colour.
+                */}
+                <linearGradient id={`spark-${accent}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+            </defs>
 
-                return (
-                    <rect
-                        key={i}
-                        x={i * slot + (slot - bar) / 2}
-                        y={H - height}
-                        width={bar}
-                        height={height}
-                        rx="0.6"
-                        fill="currentColor"
-                        /* The tallest bars carry the colour; the quiet ones
-                           recede, so the shape is legible before the values
-                           are read. */
-                        opacity={max === 0 ? 0.25 : 0.35 + (value / max) * 0.65}
-                    />
-                );
-            })}
+            <path d={`${line} L ${W} ${H} L 0 ${H} Z`} fill={`url(#spark-${accent})`} />
+
+            <path
+                d={line}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                /* Kept at 2 real pixels however far the box is stretched.
+                   Without this the stroke thins as the card widens, and four
+                   cards in a row have four different line weights. */
+                vectorEffect="non-scaling-stroke"
+            />
         </svg>
     );
 }
@@ -372,7 +413,7 @@ export function StatsCard({
                         accent === 'info' && 'text-[var(--color-info)]',
                     )}
                 >
-                    <Spark points={spark} />
+                    <Spark points={spark} accent={accent} />
                 </div>
             )}
 

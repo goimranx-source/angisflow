@@ -428,8 +428,18 @@ class OrdersEndpoint
      */
     private function trends(Builder $query, string $base): array
     {
+        /*
+         * Thirty days, not fourteen.
+         *
+         * The picture under the figure is a shape rather than a set of
+         * readings, and fourteen bars across a card's width are wide enough to
+         * be read as individual days -- which invites reading them, and there
+         * is nothing there to read. Thirty are thin enough to be a texture,
+         * which is what a sparkline is for, and a month is the period anybody
+         * means by "how are we doing".
+         */
         $end = now()->endOfDay();
-        $from = $end->copy()->subDays(13)->startOfDay();
+        $from = $end->copy()->subDays(29)->startOfDay();
 
         $frame = [];
 
@@ -500,8 +510,11 @@ class OrdersEndpoint
             return null;
         }
 
-        $earlier = array_sum(array_slice($series, 0, 7));
-        $later = array_sum(array_slice($series, 7, 7));
+        // The tail of the series, whatever its length. Slicing from the front
+        // would compare the first week of the month with the second and call
+        // it "this week against last".
+        $earlier = array_sum(array_slice($series, -14, 7));
+        $later = array_sum(array_slice($series, -7));
 
         if ($earlier <= 0) {
             return null;
