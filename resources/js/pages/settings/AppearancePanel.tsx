@@ -313,7 +313,7 @@ function PickerDialog({
 
     return (
         <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(13,27,42,0.55)] p-4"
+            className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[rgba(13,27,42,0.55)] p-4"
             onClick={onClose}
             role="dialog"
             aria-modal="true"

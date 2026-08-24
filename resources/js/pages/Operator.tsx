@@ -132,7 +132,7 @@ function AccountDetailPanel({ id, onClose }: { id: string; onClose: () => void }
     const account = data?.data;
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
+        <div className="fixed inset-0 z-[var(--z-modal)] flex justify-end bg-black/30" onClick={onClose}>
             <div
                 className="h-full w-full max-w-xl overflow-y-auto bg-[var(--color-card-bg)] shadow-xl"
                 onClick={(e) => e.stopPropagation()}

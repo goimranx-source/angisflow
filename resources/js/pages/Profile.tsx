@@ -740,7 +740,7 @@ function DangerZoneCard() {
 
             {/* Delete Confirmation Modal */}
             {showDeleteModal && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div 
                         className="flex w-full max-w-xl flex-col bg-[var(--color-card-bg)] shadow-2xl"
                         style={{ 

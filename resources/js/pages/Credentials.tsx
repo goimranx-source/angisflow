@@ -130,7 +130,7 @@ function RevealModal({ id, label, onClose }: { id: string; label: string; onClos
     });
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/40 p-4">
             <div className="card w-full max-w-md space-y-4 p-5">
                 <h3 className="font-semibold">{label}</h3>
 

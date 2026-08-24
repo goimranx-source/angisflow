@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
@@ -118,17 +119,32 @@ export function QuickCreateModal({
         lg: 'max-w-3xl',
     };
 
-    return (
+    return createPortal(
         <>
-            {/* Backdrop */}
+            {/*
+              ── Above the shell, and out of whatever contains it ─────────────
+
+              z-50 put this under the sidebar, which is 70. So a dialog asking
+              what to collect on a delivery had the navigation showing through
+              on top of it — a thing that is supposed to hold everything while
+              it is answered, sitting behind the menu.
+
+              --z-overlay and --z-modal are the tokens for exactly this and are
+              already above the shell. The numbers were never meant to be
+              written by hand; that is how 50 ended up next to 70.
+
+              Portalled as well, because a z-index is only a rank among
+              siblings: the modal is rendered deep inside a page whose cards and
+              panels create stacking contexts of their own, and inside one of
+              those no number is high enough.
+            */}
             <div
-                className="fixed inset-0 z-50 bg-black/40 transition-opacity animate-in fade-in"
+                className="fixed inset-0 z-[var(--z-overlay)] bg-black/40 transition-opacity animate-in fade-in"
                 onClick={onClose}
                 aria-hidden="true"
             />
 
-            {/* Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4">
                 <div
                     ref={modalRef}
                     className={cn(
@@ -194,7 +210,8 @@ export function QuickCreateModal({
                     </form>
                 </div>
             </div>
-        </>
+        </>,
+        document.body,
     );
 }
 
