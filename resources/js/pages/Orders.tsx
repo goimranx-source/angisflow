@@ -256,16 +256,32 @@ function Pager({
 }) {
     const [typed, setTyped] = useState('');
 
-    const jump = () => {
-        const wanted = Number(typed);
+    const wanted = Number(typed);
 
-        // Silently ignored rather than clamped: somebody typing 500 into a
-        // 12-page list has misread something, and dropping them on page 12
-        // hides that from them.
-        if (Number.isInteger(wanted) && wanted >= 1 && wanted <= pages) {
-            onGo(wanted);
-            setTyped('');
+    /*
+     * Locked until the number is one of the pages.
+     *
+     * ── Why locked rather than clamped or warned ─────────────────────────────
+     *
+     * Clamping puts somebody who typed 500 onto page 12 and lets them believe
+     * that is where 500 was. A message under the box is read after the press,
+     * which is one press too late.
+     *
+     * A button that will not go is the earliest possible answer: the refusal
+     * happens while the number is still being typed, so a wrong one is
+     * corrected before it is ever submitted. What the button cannot do is say
+     * why, so it says so on its own tooltip.
+     */
+    const reachable =
+        typed !== '' && Number.isInteger(wanted) && wanted >= 1 && wanted <= pages;
+
+    const jump = () => {
+        if (!reachable) {
+            return;
         }
+
+        onGo(wanted);
+        setTyped('');
     };
 
     return (
@@ -331,7 +347,7 @@ function Pager({
                             jump();
                         }
                     }}
-                    className="field h-7 w-14 py-0 px-2 text-center text-xs tabular-nums"
+                    className="field h-7 w-14 px-2 py-0 text-center text-xs tabular-nums"
                     placeholder="Page"
                     aria-label={`Go to a page, 1 to ${pages}`}
                     inputMode="numeric"
@@ -339,7 +355,8 @@ function Pager({
                 <button
                     type="button"
                     onClick={jump}
-                    disabled={typed === ''}
+                    disabled={!reachable}
+                    title={`Go to a page from 1 to ${pages}`}
                     className="btn btn-secondary !h-7 !px-2.5 !text-xs"
                 >
                     Go

@@ -147,8 +147,14 @@ export function BulkActionsMenu({
                             // Hidden for the single frame before it is measured,
                             // so nobody sees it land in one place and jump.
                             visibility: at === null ? 'hidden' : 'visible',
+                            borderColor: 'var(--shell-border)',
+
+                            /* The same arrival every other panel in the
+                               application has. This one appeared outright. */
+                            animation: 'context-flyout-slide-up 120ms ease-out',
+                            transformOrigin: 'bottom left',
                         }}
-                        className="fixed z-[var(--z-toast)] max-h-[70vh] w-72 overflow-y-auto rounded-[var(--shell-radius)] border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1 shadow-lg"
+                        className="fixed z-[var(--z-toast)] max-h-[60vh] w-64 overflow-y-auto rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                     >

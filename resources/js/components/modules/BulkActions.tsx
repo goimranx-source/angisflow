@@ -64,46 +64,66 @@ export function BulkActions({
     return (
         <div
             className={cn(
-                'flex items-center gap-4 border border-[var(--color-border-light)] bg-white px-4 py-3 animate-in fade-in slide-in-from-bottom-2',
+                /*
+                  The same card as everything else, at the same height as the
+                  toolbar it mirrors.
+
+                  It was `bg-white` -- which is a colour, not a surface, so in
+                  dark mode the one bar carrying destructive actions was the one
+                  thing on the screen still painted for daylight. It was also
+                  `rounded-lg` floating and --shell-radius docked, so the same
+                  component had two different corners depending on where it was
+                  put.
+                */
+                'flex items-center gap-3 rounded-[var(--shell-radius)] border px-3 py-2 animate-in fade-in slide-in-from-bottom-2',
                 positionClasses[position],
-                position === 'floating' && 'rounded-lg',
                 className,
             )}
-            style={
-                position !== 'floating'
-                    ? { borderRadius: 'var(--shell-radius)' }
-                    : undefined
-            }
+            style={{
+                borderColor: 'var(--shell-border)',
+                background: 'var(--color-card-bg)',
+                boxShadow: position === 'floating' ? 'var(--shadow-lg)' : undefined,
+            }}
         >
-            {/* Selection count */}
-            <div className="flex items-center gap-2">
-                <div
-                    className="flex size-8 items-center justify-center bg-[var(--color-brand)] text-white font-semibold text-sm"
-                    style={{ borderRadius: 'var(--shell-radius-sm)' }}
-                >
+            {/*
+               The count in the figure, the noun in the words.
+
+               A 32px brand-coloured tile for a number that is usually one digit
+               was the loudest thing in the bar, and it was competing with the
+               buttons — which are the reason the bar exists. The number carries
+               the weight; the tile is gone.
+             */}
+            <span className="whitespace-nowrap text-sm text-[var(--color-text-body)]">
+                <span className="font-semibold tabular-nums text-[var(--color-text-main)]">
                     {selectedCount}
-                </div>
-                <span className="text-sm font-medium text-[var(--color-text-main)]">
-                    {selectedCount === 1 ? '1 item selected' : `${selectedCount} items selected`}
-                </span>
-            </div>
+                </span>{' '}
+                {selectedCount === 1 ? 'selected' : 'selected'}
+            </span>
 
-            {/* Divider */}
-            <div className="h-6 w-px bg-[var(--color-border-light)]" />
+            <span
+                className="h-5 w-px shrink-0"
+                style={{ background: 'var(--shell-border)' }}
+                aria-hidden="true"
+            />
 
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-                {children}
-            </div>
+            <div className="flex flex-wrap items-center gap-2">{children}</div>
 
-            {/* Clear selection */}
+            {/*
+              Last, and set apart.
+
+              It was `ml-2` after the actions, which put a plain word at the end
+              of a row of buttons where it read as a fifth action. `ml-auto`
+              takes it to the far end instead, so the bar reads as "this many,
+              do these things" with the way out where a way out goes.
+            */}
             <button
                 type="button"
                 onClick={onClearSelection}
-                className="ml-2 flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] transition-colors"
+                title="Clear the selection"
+                aria-label="Clear the selection"
+                className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-[var(--shell-radius-sm)] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]"
             >
-                <Icon name="x" size={16} />
-                <span>Clear</span>
+                <Icon name="x" size={15} />
             </button>
         </div>
     );
