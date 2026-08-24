@@ -598,13 +598,13 @@ export function FieldMapPanel({
     };
 
     return (
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
             {/*
               The toolbar sticks, because the alternative is scrolling back to
               the top of forty rows to save the change just made at the bottom.
             */}
             <div
-                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
+                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3"
                 /*
                  * Pinned to the top of the scrolling area, plainly.
                  *
@@ -779,8 +779,26 @@ export function FieldMapPanel({
               column is worth more than headings that stay put, so the headings
               scroll away with the rows.
             */}
+            {/*
+              ── The rows scroll, not the drawer ─────────────────────────
+
+              Scrolling used to move the whole panel, carrying the column
+              headings away and leaving somebody forty rows down looking at
+              seven dropdowns with nothing to say which was which.
+
+              This box scrolls instead. `overflow: auto` on both axes makes
+              it the scrolling ancestor, which is what lets the headings
+              stick to its top — the two are the same decision, not two.
+
+              The height is whatever is left after the toolbar, taken from the
+              drawer rather than worked out from the window. `100vh` was the
+              first attempt and is wrong twice over: it measures the window
+              rather than the panel, and the difference is every pixel of the
+              drawer's head, its padding and this toolbar — a number that
+              changes with all three.
+            */}
             {sample && (
-                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
+                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--shell-radius)]">
                     {/*
                       Fixed layout, with the widths stated.
 
@@ -796,6 +814,14 @@ export function FieldMapPanel({
                     */}
                     <table
                         className="table table-framed w-full min-w-[67rem] table-fixed"
+                        /*
+                         * `.table-framed` sets overflow:hidden to clip its rows
+                         * inside its rounded corners, which makes the table its
+                         * own scroll container — and a sticky heading then
+                         * positions against a box that never scrolls. The
+                         * corners are rounded by the wrapper instead.
+                         */
+                        style={{ overflow: 'visible' }}
                     >
                         {/*
                           ── Widths the content needs, not shares of what is
@@ -866,7 +892,16 @@ export function FieldMapPanel({
                           "Becomes" and "Treated as" are not guessable from their
                           contents — both are a select full of words.
                         */}
-                        <thead>
+                        {/*
+                          Pinned to the top of the box that scrolls.
+
+                          On the cells rather than the row: a sticky <thead> is
+                          honoured by some engines and quietly ignored by others,
+                          and the failure is silent — position computes as
+                          sticky, top computes correctly, and the row scrolls away
+                          regardless.
+                        */}
+                        <thead className="[&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-[var(--color-card-bg)]">
                             <tr>
                                 {/*
                                   The field and what it currently holds share a

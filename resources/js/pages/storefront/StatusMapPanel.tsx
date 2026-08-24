@@ -111,7 +111,7 @@ export function StatusMapPanel({
     }, [mapped, unmapped]);
 
     return (
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
             {/*
               The same toolbar as the field mapping, in the same place.
 
@@ -121,7 +121,7 @@ export function StatusMapPanel({
               disagree about where their controls live.
             */}
             <div
-                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3 pt-1"
+                className="sticky z-20 -mx-1 space-y-3 px-1 pb-3"
                 /*
                  * Pinned to the top of the scrolling area, plainly.
                  *
@@ -246,15 +246,52 @@ export function StatusMapPanel({
                 <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />
             )}
 
+            {/*
+              ── The rows scroll, not the drawer ─────────────────────────
+
+              Scrolling used to move the whole panel, carrying the column
+              headings away and leaving somebody forty rows down looking at
+              seven dropdowns with nothing to say which was which.
+
+              This box scrolls instead. `overflow: auto` on both axes makes
+              it the scrolling ancestor, which is what lets the headings
+              stick to its top — the two are the same decision, not two.
+
+              The height is whatever is left after the toolbar, taken from the
+              drawer rather than worked out from the window. `100vh` was the
+              first attempt and is wrong twice over: it measures the window
+              rather than the panel, and the difference is every pixel of the
+              drawer's head, its padding and this toolbar — a number that
+              changes with all three.
+            */}
             {catalogue && (
-                <div className="overflow-x-auto rounded-[var(--shell-radius)]">
-                    <table className="table table-framed w-full min-w-[28rem] table-fixed">
+                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--shell-radius)]">
+                    <table
+                        className="table table-framed w-full min-w-[28rem] table-fixed"
+                        /*
+                         * `.table-framed` sets overflow:hidden to clip its rows
+                         * inside its rounded corners, which makes the table its
+                         * own scroll container — and a sticky heading then
+                         * positions against a box that never scrolls. The
+                         * corners are rounded by the wrapper instead.
+                         */
+                        style={{ overflow: 'visible' }}
+                    >
                         <colgroup>
                             <col style={{ width: '45%' }} />
                             <col />
                         </colgroup>
 
-                        <thead>
+                        {/*
+                          Pinned to the top of the box that scrolls.
+
+                          On the cells rather than the row: a sticky <thead> is
+                          honoured by some engines and quietly ignored by others,
+                          and the failure is silent — position computes as
+                          sticky, top computes correctly, and the row scrolls away
+                          regardless.
+                        */}
+                        <thead className="[&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-[var(--color-card-bg)]">
                             <tr>
                                 <th>This tool&rsquo;s status</th>
                                 <th>Is called this on your shop</th>

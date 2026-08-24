@@ -205,7 +205,13 @@ export function DetailDrawer({
                                 value={activeTab}
                                 onValueChange={onTabChange}
                             >
-                                <TabsList className="w-full !rounded-none !border-0 !p-0">
+                                {/*
+                                  No gap between them, so a hover fills the whole
+                                  tab rather than a rounded island inside it.
+                                  Sharing the width is only convincing if the
+                                  shares actually meet.
+                                */}
+                                <TabsList className="w-full !gap-0 !rounded-none !border-0 !p-0">
                                     {tabs.map((t) => (
                                         <TabsTrigger
                                             key={t.key}
@@ -223,7 +229,15 @@ export function DetailDrawer({
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto px-6 py-4">
+                {/*
+                  A column, so a panel inside it can ask for the height that is
+                  left rather than guess at it.
+
+                  `min-h-0` because a flex child's default minimum is its own
+                  content — for a table of forty rows that is forty rows, and the
+                  box grows to fit them and scrolls nothing.
+                */}
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
                     {tabs && tabs.length > 0 && activeTab ? (
                         tabs.find((t) => t.key === activeTab)?.content ?? children
                     ) : (

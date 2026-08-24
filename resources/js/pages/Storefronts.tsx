@@ -1029,7 +1029,7 @@ export default function Storefronts() {
                 }}
             >
                 {selectedStorefront && (
-                    <div className="space-y-4">
+                    <div className="flex min-h-0 flex-1 flex-col gap-4">
                         {/*
                           Mapping lives here, in the shop's own drawer, because
                           it is about this shop: its field names, its statuses,

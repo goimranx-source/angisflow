@@ -185,8 +185,18 @@ export function TabsTrigger({ value, children, disabled = false, className, badg
                      * difference between a tab that looks selected and one that
                      * looks like a different kind of button.
                      */
+                    /*
+                     * The mark sits on the very bottom edge, curved upward.
+                     *
+                     * Held a couple of pixels clear of the edge, it read as a
+                     * floating dash with a sliver of background beneath it —
+                     * close enough to the section's own border to look like a
+                     * mistake in the spacing rather than a deliberate marker.
+                     * Flush, and rounded only on top, it grows out of the border
+                     * it meets.
+                     */
                     isActive
-                        ? 'text-[var(--color-brand)] after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-[var(--color-brand)]'
+                        ? 'text-[var(--color-brand)] after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-t-full after:bg-[var(--color-brand)]'
                         : 'text-[var(--color-text-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--color-text-main)]',
                 ],
 
