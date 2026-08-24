@@ -2352,11 +2352,9 @@ export default function Orders() {
                                         heading below acts on and the shop's is
                                         what somebody has in another window.
                                       */
-                                      label: `#${only.reference ?? only.order_number}${
-                                          only.reference && only.store
-                                              ? ` (${only.order_number})`
-                                              : ''
-                                      }`,
+                                      /* No heading. The menu's own, at the
+                                         top, names the order and stays put
+                                         while this list scrolls. */
                                       icon: 'note-pencil',
                                       items: [
                                           {
@@ -2586,7 +2584,30 @@ export default function Orders() {
                                   },
                               ];
 
-                    return <BulkActionsMenu label="Actions" groups={groups} busy={busy} />;
+                    return (
+                        <BulkActionsMenu
+                            label="Actions"
+                            groups={groups}
+                            /*
+                              Named at the top of the menu, and held there.
+
+                              One order gets both numbers — this tool's and the
+                              shop's — because that is how it is written
+                              everywhere else. Several get the count, which is
+                              the only honest thing to say about a set.
+                            */
+                            heading={
+                                only !== null
+                                    ? `#${only.reference ?? only.order_number}${
+                                          only.reference && only.store
+                                              ? ` (${only.order_number})`
+                                              : ''
+                                      }`
+                                    : `${noun}`
+                            }
+                            busy={busy}
+                        />
+                    );
                 })()}
             </BulkActions>
 

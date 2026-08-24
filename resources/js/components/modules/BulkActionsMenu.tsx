@@ -58,12 +58,25 @@ export function BulkActionsMenu({
     label,
     icon = 'list',
     groups,
+    heading,
     disabled = false,
     busy = false,
 }: {
     label: string;
     icon?: string;
     groups: BulkActionGroup[];
+
+    /**
+     * What the menu will act on, held at the top while the list scrolls.
+     *
+     * ── Why not the first group's label ──────────────────────────────────────
+     *
+     * A heading inside the scrolling list is gone by the time somebody reaches
+     * the bottom of it — which is where the destructive actions are. The thing
+     * that says "this is what you are about to change" cannot be the thing that
+     * scrolls away.
+     */
+    heading?: string;
     disabled?: boolean;
     busy?: boolean;
 }) {
@@ -120,6 +133,25 @@ export function BulkActionsMenu({
         };
     }, [open]);
 
+    /*
+     * The destructive actions are lifted out of their groups.
+     *
+     * They are the ones somebody must always be able to reach and must never
+     * reach by accident, and in a list this long they were both: below the fold,
+     * and arriving under a finger that was already scrolling. Out of the
+     * scrolling part entirely, at the foot, where a last resort belongs.
+     */
+    const shown = groups
+        .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => item.variant !== 'danger'),
+        }))
+        .filter((group) => group.items.length > 0);
+
+    const dangerous = groups.flatMap((group) =>
+        group.items.filter((item) => item.variant === 'danger'),
+    );
+
     return (
         <>
             <button
@@ -163,11 +195,29 @@ export function BulkActionsMenu({
                             animation: 'context-flyout-slide-up 120ms ease-out',
                             transformOrigin: 'bottom left',
                         }}
-                        className="fixed z-[var(--z-toast)] max-h-[60vh] w-64 overflow-y-auto rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
+                        className="fixed z-[var(--z-toast)] flex max-h-[60vh] w-64 flex-col overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] shadow-lg"
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        {groups.map((group, index) => (
+                        {/*
+                          What the menu acts on, held while the list moves.
+
+                          This opens from a bar floating over the table, so the
+                          rows it will change are often hidden behind it — and
+                          the list is long enough that anything said inside it
+                          is gone by the time somebody reaches the bottom.
+                        */}
+                        {heading && (
+                            <p
+                                className="shrink-0 border-b px-3 py-2 text-xs font-semibold text-[var(--color-text-main)]"
+                                style={{ borderColor: 'var(--shell-border)' }}
+                            >
+                                {heading}
+                            </p>
+                        )}
+
+                        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                        {shown.map((group, index) => (
                             <div
                                 key={group.label ?? `group-${index}`}
                                 className={cn(
@@ -256,7 +306,51 @@ export function BulkActionsMenu({
                                     </button>
                                 ))}
                             </div>
-                        ))}
+                                ))}
+                        </div>
+
+                        {/*
+                          The last resorts, outside the scroll.
+
+                          A menu this long put the delete below the fold and
+                          under a finger that was already moving. Held at the
+                          foot it is always one press away and never arrives
+                          under a scroll — and the rule above it says these two
+                          are not more of the same list.
+                        */}
+                        {dangerous.length > 0 && (
+                            <div
+                                className="shrink-0 border-t py-1"
+                                style={{ borderColor: 'var(--shell-border)' }}
+                            >
+                                {dangerous.map((item) => (
+                                    <button
+                                        key={item.key}
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={item.disabled}
+                                        onClick={() => {
+                                            setOpen(false);
+                                            item.onSelect();
+                                        }}
+                                        className="flex w-full items-center gap-2 py-1.5 pl-3 pr-3 text-left text-sm transition-colors hover:bg-[var(--color-danger-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
+                                        style={{ color: 'var(--color-danger-text)' }}
+                                    >
+                                        <span className="flex w-4 shrink-0 justify-center">
+                                            {item.icon && (
+                                                <Icon
+                                                    name={item.icon}
+                                                    size={15}
+                                                    weight="duotone"
+                                                    className="opacity-70"
+                                                />
+                                            )}
+                                        </span>
+                                        <span className="min-w-0 truncate">{item.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>,
                     document.body,
                 )}
