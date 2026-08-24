@@ -113,31 +113,62 @@ export function DetailDrawer({
         lg: 'max-w-3xl',
         xl: 'max-w-5xl',
         /*
-         * Wide enough for two working columns.
+         * Wide enough for two working columns, and never the whole screen.
          *
          * An edit form for an order is not a reading panel: the fields on the
          * left need room to sit two abreast, and what the order carries —
          * pictures, attachments, the lines — needs a column of its own beside
-         * them rather than a scroll past them.
+         * them rather than a scroll past them. 92rem is what that costs.
+         *
+         * On anything narrower than 92rem that cap did nothing, and the panel
+         * ran the full width of the window. A panel with no page beside it is
+         * not a panel — there is nothing to go back to, so it reads as a screen
+         * you have navigated to rather than a layer over the one you were on.
+         *
+         * The second term keeps a hand's width of page showing whatever the
+         * window is, and only bites on the screens where the first one did not.
          */
-        '2xl': 'max-w-[92rem]',
+        '2xl': 'max-w-[min(92rem,calc(100vw-6rem))]',
     };
 
     return (
         <>
             {/* Backdrop */}
+            {/* Darker than it was, because there is now page showing on all
+                four sides of the panel rather than one strip down the left, and
+                a 30% wash over that much of it left the two competing. */}
             <div
-                className="fixed inset-0 z-[var(--z-overlay)] bg-black/30 transition-opacity"
+                className="fixed inset-0 z-[var(--z-overlay)] bg-[rgba(9,15,28,0.45)] transition-opacity"
                 onClick={onClose}
                 aria-hidden="true"
             />
 
-            {/* Drawer */}
+            {/*
+              ── A card, not a sheet welded to the edge ──────────────────────
+              
+              It ran corner to corner down the right-hand side, which makes a
+              panel read as a second page that has slid over the first: there is
+              no edge to it, so there is nothing to say where the thing you were
+              reading went.
+
+              Held off all four sides it reads as one card sitting on the page —
+              the same card the list behind it is made of, and the same
+              language: a hairline border, a soft shadow, the shell radius.
+              The page is still visible around it, dimmed, which is what says
+              this is a layer rather than a destination.
+
+              `w-[calc(100%-2rem)]` rather than `w-full`, so the gap survives on
+              a phone where the panel is as wide as it is allowed to get.
+            */}
             <div
                 className={cn(
-                    'fixed inset-y-0 right-0 z-[var(--z-modal)] flex w-full flex-col bg-[var(--color-card-bg)] shadow-2xl',
+                    'fixed inset-y-4 right-4 z-[var(--z-modal)] flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-card-bg)]',
                     sizeClasses[size],
                 )}
+                style={{
+                    borderColor: 'var(--color-border-light)',
+                    boxShadow: 'var(--shadow-lg)',
+                }}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="drawer-title"
@@ -153,7 +184,7 @@ export function DetailDrawer({
                   everything below it is the drawer's content.
                 */}
                 <div
-                    className="mx-6 mt-4 shrink-0 overflow-hidden rounded-[var(--shell-radius)] border"
+                    className="mx-4 mt-4 shrink-0 overflow-hidden rounded-[var(--shell-radius)] border"
                     style={{
                         borderColor: 'var(--shell-border)',
 
@@ -250,7 +281,7 @@ export function DetailDrawer({
                   content — for a table of forty rows that is forty rows, and the
                   box grows to fit them and scrolls nothing.
                 */}
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4 pt-[15px]">
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-[15px]">
                     {tabs && tabs.length > 0 && activeTab ? (
                         tabs.find((t) => t.key === activeTab)?.content ?? children
                     ) : (
@@ -260,7 +291,7 @@ export function DetailDrawer({
 
                 {/* Footer */}
                 {footer && (
-                    <div className="flex items-center justify-end gap-3 border-t border-[var(--color-border-light)] px-6 py-4">
+                    <div className="flex items-center justify-end gap-3 border-t border-[var(--color-border-light)] px-4 py-3">
                         {footer}
                     </div>
                 )}

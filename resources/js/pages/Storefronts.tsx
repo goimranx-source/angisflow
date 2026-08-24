@@ -1608,7 +1608,27 @@ export default function Storefronts() {
                                   common case work to read and invites edits
                                   nobody meant, so the pencil is the only way in.
                                 */}
-                                <div className="flex items-center justify-between gap-3">
+                                {/*
+                                  A card, like everything on the page behind it.
+                                  
+                                  These were bare rows on the panel's own
+                                  background with a heading floating above them
+                                  and a rule under the last one, which is a list
+                                  rather than a thing: nothing said where it
+                                  began or ended, and the buttons underneath
+                                  looked like the final two rows of it.
+                                  
+                                  Same border, same radius and the same
+                                  head-then-divider-then-body as the table on the
+                                  page -- so the panel reads as the same
+                                  application rather than a plainer one.
+                                */}
+                                <div
+                                    className="overflow-hidden rounded-[var(--shell-radius)] border"
+                                    style={{ borderColor: 'var(--shell-border)' }}
+                                >
+                                <div className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5"
+                                     style={{ borderColor: 'var(--shell-border)' }}>
                                     <h3 className="text-sm font-semibold">Details</h3>
 
                                     {!editing && (
@@ -1648,7 +1668,7 @@ export default function Storefronts() {
                                 </div>
 
                                 {editing ? (
-                                    <div className="space-y-4">
+                                    <div className="space-y-4 px-3.5 py-3.5">
                                         <div>
                                             <label htmlFor="sf-name" className="mb-1.5 block text-sm font-medium">
                                                 Name
@@ -1888,7 +1908,7 @@ export default function Storefronts() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <dl className="divide-y divide-[var(--shell-border)] text-sm">
+                                    <dl className="divide-y divide-[var(--shell-border)] px-3.5 text-sm">
                                         <Detail label="Address" value={selectedStorefront.domain} />
                                         <Detail
                                             label="Kind"
@@ -1931,8 +1951,15 @@ export default function Storefronts() {
                                         />
                                     </dl>
                                 )}
+                                </div>
 
-                                <div className="flex flex-wrap gap-2 border-t border-[var(--shell-border)] pt-4">
+                                {/* Their own card. They act on the shop rather
+                                    than describing it, and a shared border made
+                                    them read as the end of the list above. */}
+                                <div
+                                    className="mt-3 flex flex-wrap gap-2 rounded-[var(--shell-radius)] border p-3"
+                                    style={{ borderColor: 'var(--shell-border)' }}
+                                >
                                     {/* The shop's own address, from the
                                         connection behind it. */}
                                     {selectedStorefront.external_url && (
@@ -2084,11 +2111,20 @@ export default function Storefronts() {
 }
 
 /** One fact, read-only. */
+/**
+ * One fact about the shop.
+ *
+ * Weighted like a row of the table on the page: the label is the quiet half and
+ * the value is the half being read, so the eye can run down the right-hand edge
+ * without reading a single label it did not want.
+ */
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
     return (
-        <div className="flex items-center justify-between gap-4 py-2">
-            <dt className="text-[var(--color-text-muted)]">{label}</dt>
-            <dd className="text-right font-medium">{value}</dd>
+        <div className="flex items-center justify-between gap-4 py-2.5">
+            <dt className="text-[0.8125rem] text-[var(--color-text-muted)]">{label}</dt>
+            <dd className="text-right text-[0.8125rem] font-medium text-[var(--color-text-main)]">
+                {value}
+            </dd>
         </div>
     );
 }
