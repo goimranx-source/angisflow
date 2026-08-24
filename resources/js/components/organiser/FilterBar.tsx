@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ManageTagsModal } from '@/components/organiser/ManageTagsModal';
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { useOrganiser } from '@/hooks/useOrganiser';
 import { cn } from '@/lib/utils';
@@ -117,7 +117,7 @@ export function FilterBar({
                         )}
                     </button>
 
-                    {tagsOpen && <FlyoutBackdrop onClose={() => setTagsOpen(false)} dismissOnOutsidePress={false} />}
+                    {tagsOpen && <FlyoutGuard onClose={() => setTagsOpen(false)} dismissOnOutsidePress={false} />}
 
                     {tagsOpen && (
                         <div className="filter-tags" role="menu" data-flyout-panel>

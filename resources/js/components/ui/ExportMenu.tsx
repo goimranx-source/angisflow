@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -140,7 +140,7 @@ export function ExportMenu({ endpoint, params = {}, className }: ExportMenuProps
                 <Icon name="caret-down" size={12} />
             </button>
 
-            {open && <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
+            {open && <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
 
             {open && (
                 <div data-flyout-panel className="absolute right-0 z-[var(--z-flyout-panel)] mt-1.5 w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] p-1 shadow-[var(--shadow-lg)]">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 
@@ -216,7 +216,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                   The listener stays -- it is what handles a click that lands
                   outside the window entirely, and Escape.
                 */
-                <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
+                <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
             {open && (

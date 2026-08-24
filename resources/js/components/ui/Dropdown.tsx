@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { cn } from '@/lib/utils';
 
 type DropdownProps = {
@@ -102,7 +102,7 @@ export function Dropdown({
             </div>
 
             {/* Dropdown content */}
-            {isOpen && <FlyoutBackdrop onClose={() => setIsOpen(false)} dismissOnOutsidePress={false} />}
+            {isOpen && <FlyoutGuard onClose={() => setIsOpen(false)} dismissOnOutsidePress={false} />}
 
             {isOpen && (
                 <div

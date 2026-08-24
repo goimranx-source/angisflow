@@ -18,7 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
 import { StatusMapPanel } from '@/pages/storefront/StatusMapPanel';
 import { useMoney } from '@/hooks/useMoney';
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
@@ -141,9 +141,8 @@ function RowActions({
                 rect &&
                 createPortal(
                     <>
-                        <FlyoutBackdrop
+                        <FlyoutGuard
                             onClose={onToggle}
-                            layer="var(--z-modal)"
                         />
 
                         <div
@@ -869,7 +868,7 @@ export default function Storefronts() {
 
                                 {filtersOpen && (
                                     <>
-                                        <FlyoutBackdrop
+                                        <FlyoutGuard
                                             onClose={() => setFiltersOpen(false)}
                                         />
 
@@ -1424,9 +1423,8 @@ export default function Storefronts() {
                                     
                         {showSyncMenu && (
                             <>
-                                <FlyoutBackdrop
+                                <FlyoutGuard
                                     onClose={() => setShowSyncMenu(false)}
-                                    layer="calc(var(--z-modal) + 1)"
                                 />
                                 <div data-flyout-panel className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
                                     <button

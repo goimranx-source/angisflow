@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -60,7 +60,7 @@ function IntegrationSyncButton({
             
             {isOpen && buttonRect && (
                 <>
-                    <FlyoutBackdrop onClose={onToggle} />
+                    <FlyoutGuard onClose={onToggle} />
                     <div 
                         data-flyout-panel
                         className="fixed z-[var(--z-flyout-panel)] w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg"

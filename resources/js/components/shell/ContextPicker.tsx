@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 
 import { BusinessBadge, WorkspaceBadge } from '@/components/ui/Badge';
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { api } from '@/lib/api';
@@ -233,7 +233,7 @@ export function ContextPicker() {
                 sheets would mean the first click after drilling down went to
                 the wrong one. */}
             {open && (
-                <FlyoutBackdrop onClose={handleClose} dismissOnOutsidePress={false} />
+                <FlyoutGuard onClose={handleClose} dismissOnOutsidePress={false} />
             )}
 
             {/* On mobile, opening a submenu drills down full-screen rather than

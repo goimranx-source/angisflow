@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -82,7 +82,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
             {/* Dropdown */}
             {isOpen && (
                 <>
-                    <FlyoutBackdrop onClose={() => setIsOpen(false)} />
+                    <FlyoutGuard onClose={() => setIsOpen(false)} />
 
                     {/* Dropdown Panel */}
                     <div data-flyout-panel className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-2 w-80 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">

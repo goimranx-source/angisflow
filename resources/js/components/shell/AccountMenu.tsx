@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { createPortal } from 'react-dom';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { useScrollLock } from '@/hooks/useScrollLock';
 import { api } from '@/lib/api';
@@ -117,7 +117,7 @@ export function AccountMenu() {
                 )}
             </button>
 
-            {open && <FlyoutBackdrop onClose={closeMenu} dismissOnOutsidePress={false} />}
+            {open && <FlyoutGuard onClose={closeMenu} dismissOnOutsidePress={false} />}
 
             {/*
               This leaves the header, and has to.

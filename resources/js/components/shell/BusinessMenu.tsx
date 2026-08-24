@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -163,7 +163,7 @@ export function BusinessMenu() {
                 />
             </button>
 
-            {open && <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
+            {open && <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
 
             {open &&
                 createPortal(

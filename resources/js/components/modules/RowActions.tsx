@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 
@@ -209,7 +209,7 @@ export function RowActionMenu({
             </button>
 
             {open && (
-                <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
+                <FlyoutGuard onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
             {open &&
