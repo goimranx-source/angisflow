@@ -209,10 +209,7 @@ export function RowActionMenu({
             </button>
 
             {open && (
-                <FlyoutBackdrop
-                    onClose={() => setOpen(false)}
-                    layer="calc(var(--z-toast) - 1)"
-                />
+                <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
             {open &&

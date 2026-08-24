@@ -62,6 +62,7 @@ function IntegrationSyncButton({
                 <>
                     <FlyoutBackdrop onClose={onToggle} />
                     <div 
+                        data-flyout-panel
                         className="fixed z-[var(--z-flyout-panel)] w-48 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg"
                         style={{
                             top: showAbove ? undefined : `${buttonRect.bottom + 4}px`,

@@ -117,7 +117,7 @@ export function ItemMenu({
                 <Icon name="dots-three" size={18} weight="duotone" />
             </button>
 
-            {open && <FlyoutBackdrop onClose={() => setOpen(false)} layer="calc(var(--z-shell-menu) - 1)" />}
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
 
             {open &&
                 createPortal(

@@ -121,7 +121,7 @@ export function HeaderPopover({
                 <Icon name={icon} size={iconSize} weight="duotone" />
             </button>
 
-            {open && <FlyoutBackdrop onClose={() => setOpen(false)} layer="calc(var(--z-shell-menu) - 1)" />}
+            {open && <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />}
 
             {open && createPortal(
                 <div

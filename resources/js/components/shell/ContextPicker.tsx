@@ -233,10 +233,7 @@ export function ContextPicker() {
                 sheets would mean the first click after drilling down went to
                 the wrong one. */}
             {open && (
-                <FlyoutBackdrop
-                    onClose={handleClose}
-                    layer="calc(var(--z-shell-menu) - 1)"
-                />
+                <FlyoutBackdrop onClose={handleClose} dismissOnOutsidePress={false} />
             )}
 
             {/* On mobile, opening a submenu drills down full-screen rather than

@@ -216,7 +216,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                   The listener stays -- it is what handles a click that lands
                   outside the window entirely, and Escape.
                 */
-                <FlyoutBackdrop onClose={() => setOpen(false)} />
+                <FlyoutBackdrop onClose={() => setOpen(false)} dismissOnOutsidePress={false} />
             )}
 
             {open && (

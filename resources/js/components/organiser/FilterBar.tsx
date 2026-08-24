@@ -117,7 +117,7 @@ export function FilterBar({
                         )}
                     </button>
 
-                    {tagsOpen && <FlyoutBackdrop onClose={() => setTagsOpen(false)} />}
+                    {tagsOpen && <FlyoutBackdrop onClose={() => setTagsOpen(false)} dismissOnOutsidePress={false} />}
 
                     {tagsOpen && (
                         <div className="filter-tags" role="menu">

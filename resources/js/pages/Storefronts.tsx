@@ -148,6 +148,7 @@ function RowActions({
 
                         <div
                             role="menu"
+                            data-flyout-panel
                             className="fixed z-[calc(var(--z-modal)+1)] w-44 overflow-hidden rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] py-1 shadow-lg"
                             style={{
                                 borderColor: 'var(--shell-border)',
@@ -873,6 +874,7 @@ export default function Storefronts() {
                                         />
 
                                         <div
+                                            data-flyout-panel
                                             className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-1.5 w-64 space-y-3 rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
                                             style={{
                                                 borderColor: 'var(--shell-border)',
@@ -1426,7 +1428,7 @@ export default function Storefronts() {
                                     onClose={() => setShowSyncMenu(false)}
                                     layer="calc(var(--z-modal) + 1)"
                                 />
-                                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
+                                <div data-flyout-panel className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
                                     <button
                                         type="button"
                                         className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm hover:bg-[var(--shell-hover)]"

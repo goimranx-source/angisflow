@@ -4420,8 +4420,48 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * The arrow says what is true: the only things you can press are in the
      * panel itself.
      */
-    .flyout-backdrop {
+    /*
+     * ── An arrow everywhere except inside the open flyout ───────────────────
+     *
+     * The point of this was always small: while a menu is in front, the buttons
+     * behind it should not go on showing a hand as though nothing had changed.
+     *
+     * It used to be done with a sheet over the page carrying `cursor: default`.
+     * That works by being the thing under the pointer, which means it is also
+     * the thing that takes the hover and the click -- and so the page stopped
+     * responding, and three layers of forwarding grew to put that back. This is
+     * the same result expressed as what it actually is: a question about how
+     * the cursor looks, answered in the stylesheet, touching nothing else.
+     *
+     * The second rule is the more specific of the two and so wins inside a
+     * panel, where a hand is exactly right.
+     */
+    html.flyout-open :is(
+        button,
+        a[href],
+        select,
+        summary,
+        label[for],
+        [role='button'],
+        [role='menuitem'],
+        [role='tab'],
+        [role='option']
+    ) {
         cursor: default;
+    }
+
+    html.flyout-open :is([data-flyout-panel], [role='menu'], [role='listbox']) :is(
+        button,
+        a[href],
+        select,
+        summary,
+        label[for],
+        [role='button'],
+        [role='menuitem'],
+        [role='tab'],
+        [role='option']
+    ) {
+        cursor: pointer;
     }
 
     .stat-spark {

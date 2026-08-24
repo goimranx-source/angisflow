@@ -1,134 +1,116 @@
-import { createPortal } from 'react-dom';
+import { useEffect } from 'react';
 
 /**
- * Controls a click on the sheet should be handed on to, and ones it should not.
+ * Marks that a flyout is open. Draws nothing.
  *
- * Anything that does something when pressed is worth forwarding to. A flyout's
- * own trigger is not: the sheet has already closed the flyout by the time the
- * press is forwarded, so a trigger that toggles would open it straight back up
- * and the flyout would look stuck. `aria-expanded` and `aria-haspopup` are how
- * a trigger announces itself, and every one of ours carries them.
+ * ── What this used to be, and why it is not that any more ────────────────────
+ *
+ * This was a full-screen sheet: a fixed div over the page, carrying
+ * `cursor: default` so nothing underneath would go on advertising a press that
+ * could not happen while a menu was in front.
+ *
+ * It worked, and it broke everything else. A sheet is the topmost element at
+ * every point on the screen, so it is the sheet that gets hit-tested — not the
+ * button under it. Nothing hovered. Nothing took a click. Text boxes could not
+ * be typed in. Each of those got its own patch: forward the click to whatever
+ * was underneath, then focus rather than click when the thing underneath is a
+ * field, then work out which presses must not be forwarded because they belong
+ * to the flyout's own trigger. Three workarounds for one element that should
+ * not have been there.
+ *
+ * The tell was that flyouts in this app never had this problem before. They
+ * close on a document-level press and leave the page alone, and a page that is
+ * left alone behaves — hover, clicks, focus, cursors, all of it native, none of
+ * it forwarded by hand.
+ *
+ * So: no sheet. This sets a class on <html> and the cursor rule lives in CSS,
+ * which is a question about how things look and belongs there rather than in
+ * the hit-testing.
+ *
+ * ── The dismissal ────────────────────────────────────────────────────────────
+ *
+ * Eleven of the fourteen flyouts using this already close on their own
+ * document listener. The other three were relying on the sheet to catch the
+ * click, so this offers the same thing: a press outside any `data-flyout-panel`
+ * closes it. Presses on a trigger are left alone — the trigger toggles, and
+ * closing it first would leave the flyout reopening under its own press.
  */
-const FORWARDABLE =
-    'button, a[href], input, select, textarea, label, [role="button"], [role="menuitem"], [role="tab"], [tabindex]:not([tabindex="-1"])';
 
-const IS_A_TRIGGER = '[aria-expanded], [aria-haspopup]';
+let openCount = 0;
 
-/**
- * The sheet under an open flyout.
- *
- * ── Why a flyout needs one at all ────────────────────────────────────────────
- *
- * Most of these menus closed on a document-level `mousedown` listener and drew
- * nothing. That handles the closing, and nothing else: while the menu was open
- * the whole page stayed live underneath it, and every button in it still lit on
- * hover and still showed a hand as though the menu were not there.
- *
- * ── Why the click is forwarded rather than eaten ─────────────────────────────
- *
- * The obvious sheet swallows the click that closes the flyout. That is one line
- * of code and it makes the entire page cost two presses: one to dismiss, one to
- * do the thing you were reaching for. With a menu open, nothing on the screen
- * responds the first time you press it — which reads, correctly, as the page
- * being broken.
- *
- * So the sheet closes the flyout and then hands the press on to whatever was
- * underneath. One press, and the flyout still goes away. `elementFromPoint`
- * needs the sheet out of the way to see past it, and React has not unmounted it
- * yet at that point, so it is taken out of hit-testing for the one measurement.
- *
- * The cursor stays an arrow while the sheet is up. That is deliberate: it is
- * what tells you the menu is the thing in front, and that pressing anywhere
- * else dismisses it.
- *
- * ── Why it is portalled ──────────────────────────────────────────────────────
- *
- * `position: fixed` is measured against the viewport right up until an ancestor
- * has a transform, a filter, or `will-change` on it — then it is measured
- * against that ancestor instead, and a sheet meant to cover the screen covers
- * one card. Rendering into <body> means no ancestor can do that to it, and no
- * `overflow: hidden` on the way down can clip it.
- *
- * ── Why the layer is a prop ──────────────────────────────────────────────────
- *
- * The sheet has to sit directly under its own panel and above everything else,
- * and the panels are not all on one layer: a page's filter panel is above the
- * sidebar, and a row menu portalled out of a drawer is above the drawer. One
- * default covers the ordinary case; the rest say where they live.
- */
+function markOpen(): () => void {
+    openCount += 1;
+    document.documentElement.classList.add('flyout-open');
+
+    return () => {
+        openCount = Math.max(0, openCount - 1);
+
+        // Only the last one out turns the light off. Nested flyouts — a menu
+        // that opens a sub-menu — would otherwise clear the class on the way
+        // out of the inner one and leave the outer one's page live again.
+        if (openCount === 0) {
+            document.documentElement.classList.remove('flyout-open');
+        }
+    };
+}
+
 export function FlyoutBackdrop({
     onClose,
-    layer = 'var(--z-flyout)',
+    dismissOnOutsidePress = true,
 }: {
     onClose: () => void;
-    /** A CSS value for `z-index` — one less than the panel it sits under. */
+
+    /**
+     * Leave this off when the flyout already closes on its own listener.
+     * Two listeners both calling onClose is harmless, but one of them not
+     * knowing where the panel is would close it on its own contents.
+     */
+    dismissOnOutsidePress?: boolean;
+
+    /**
+     * Taken and ignored. It described which layer the sheet sat on, and there
+     * is no sheet to place any more — kept so the call sites that pass it do
+     * not have to be edited to say nothing.
+     */
     layer?: string;
 }) {
-    const dismiss = (event: React.MouseEvent<HTMLDivElement>) => {
-        const sheet = event.currentTarget;
-        const { clientX, clientY } = event;
+    useEffect(markOpen, []);
 
-        onClose();
-
-        // Look past the sheet at what the press was actually aimed at. It is
-        // still in the DOM at this point — React unmounts it on the next
-        // render — so it has to stand aside for the one measurement.
-        sheet.style.pointerEvents = 'none';
-        const under = document.elementFromPoint(clientX, clientY);
-        sheet.style.pointerEvents = '';
-
-        // Element, not HTMLElement. Almost every control here is a button with
-        // an icon in it, and an icon is an <svg> — so what comes back from
-        // elementFromPoint is usually an SVGPathElement, which is an Element
-        // and is not an HTMLElement. Testing for the narrower one bailed out
-        // before forwarding on very nearly every press.
-        if (!under) {
+    useEffect(() => {
+        if (!dismissOnOutsidePress) {
             return;
         }
 
-        const target = under.closest<HTMLElement>(FORWARDABLE);
+        const onPress = (event: PointerEvent) => {
+            const target = event.target;
 
-        // The control itself, not its surroundings. Checking ancestors too
-        // would rule out every button that happens to sit inside a toolbar
-        // with a menu somewhere in it — which is most of them.
-        if (!target || target.matches(IS_A_TRIGGER)) {
-            return;
-        }
+            if (!(target instanceof Element)) {
+                return;
+            }
 
-        /*
-         * A field is entered, not pressed.
-         *
-         * `.click()` on a text box does nothing you can see: no caret, no
-         * focus, no keyboard. So with a menu open the search box was the one
-         * thing on the page that still took two presses — one to dismiss and
-         * one to actually get into it — which is exactly what "the fields
-         * aren't clickable" describes.
-         *
-         * A select needs the click as well as the focus: focus alone will not
-         * drop its list open.
-         */
-        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-            target.focus();
+            // Inside the panel, or on the control that opened it.
+            if (
+                target.closest('[data-flyout-panel]') ||
+                target.closest('[aria-expanded], [aria-haspopup]')
+            ) {
+                return;
+            }
 
-            return;
-        }
+            onClose();
+        };
 
-        if (target instanceof HTMLSelectElement) {
-            target.focus();
-        }
+        // The next tick, so the press that opened this does not immediately
+        // close it — that press is still travelling when this effect runs.
+        const armed = window.setTimeout(
+            () => document.addEventListener('pointerdown', onPress),
+            0,
+        );
 
-        target.click();
-    };
+        return () => {
+            window.clearTimeout(armed);
+            document.removeEventListener('pointerdown', onPress);
+        };
+    }, [dismissOnOutsidePress, onClose]);
 
-    return createPortal(
-        <div
-            className="flyout-backdrop fixed inset-0"
-            style={{ zIndex: layer }}
-            onClick={dismiss}
-            /* Decorative. What it covers is still reachable by keyboard, and
-               the menu above it closes on Escape. */
-            aria-hidden
-        />,
-        document.body,
-    );
+    return null;
 }

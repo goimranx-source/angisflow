@@ -85,7 +85,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
                     <FlyoutBackdrop onClose={() => setIsOpen(false)} />
 
                     {/* Dropdown Panel */}
-                    <div className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-2 w-80 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
+                    <div data-flyout-panel className="absolute right-0 top-full z-[var(--z-flyout-panel)] mt-2 w-80 rounded-lg border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
                             <h3 className="font-semibold text-[var(--color-text-main)]">

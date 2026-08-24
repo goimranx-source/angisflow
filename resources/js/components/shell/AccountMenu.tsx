@@ -117,7 +117,7 @@ export function AccountMenu() {
                 )}
             </button>
 
-            {open && <FlyoutBackdrop onClose={closeMenu} layer="calc(var(--z-shell-menu) - 1)" />}
+            {open && <FlyoutBackdrop onClose={closeMenu} dismissOnOutsidePress={false} />}
 
             {/*
               This leaves the header, and has to.
