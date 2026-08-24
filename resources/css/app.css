@@ -4880,12 +4880,13 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * rail is a list of a dozen headings you scan, not a document you need to
      * know your place in. Wheel and keyboard scrolling are untouched.
      *
-     * 8 here plus 4 on each row puts a menu icon at 13px from the rail's edge,
-     * which is where the logo above it starts and where the account strip
-     * starts. One line down the left, for all three.
+     * 12 on the sides, the same as the header above it and the account strip
+     * above that -- so a menu row's slab starts exactly where the logo's box
+     * and the first chip start. 8 top and bottom, because the vertical gap is
+     * between blocks and there are already margins doing that work.
      */
     .rail-nav {
-        padding: 8px;
+        padding: 8px 12px;
         overflow-y: auto;
         flex: 1;
         scrollbar-width: none;
@@ -5028,6 +5029,18 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
 
     /* ── A top-level page ──────────────────────────────────────────────── */
 
+    /*
+     * ── No padding on the left, and ten on the right ────────────────────────
+     *
+     * Lopsided in the stylesheet and even on screen, which is the only place it
+     * matters. The icon box is 40px with a 20px glyph centred in it, so the
+     * glyph already sits ten pixels inside the row's left edge -- adding
+     * padding on top of that pushed the icons off the line the logo and the
+     * account strip sit on.
+     *
+     * Ten on the right is that same ten, given to the caret by hand because a
+     * caret has no box of its own to be centred in.
+     */
     .nav-flat,
     .nav-parent {
         position: relative;
@@ -5035,7 +5048,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         align-items: center;
         gap: 4px;
         width: 100%;
-        padding: 5px 4px;
+        padding: 5px 10px 5px 0;
         border-radius: var(--shell-radius);
         color: var(--shell-text);
         text-decoration: none;
@@ -5306,18 +5319,29 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         min-height: 0;
         overflow: hidden;
 
-        /* No margin of its own. The guide line is drawn 4px inside this box,
-           so with the box flush to the rows above it the line lands 13px from
-           the rail's edge -- under the icons, where it reads as hanging off
-           them rather than off nothing. */
+        /*
+         * The line hangs off the parent's icon, and the rows hang off the line.
+         *
+         * It used to be drawn 4px inside a box flush with the rows above, which
+         * put it hard against the left edge of the pill -- twenty pixels left of
+         * the icon it is supposed to be descending from, touching nothing,
+         * reading as a stray rule rather than as a branch.
+         *
+         * A menu row's icon box is 40px and starts at the row's left edge, so
+         * its glyph is centred 20px in. That is where the line goes, and the
+         * nested rows start twelve pixels past it.
+         */
         margin-left: 0;
-        padding: 6px 0 6px 16px;
+        padding: 6px 0 6px 32px;
     }
 
     .nav-children::before {
         content: '';
         position: absolute;
-        left: 4px;
+
+        /* Under the middle of the parent's icon: the 40px box starts at this
+           element's own left edge, so its glyph's centre is 20px in. */
+        left: 20px;
         top: 0;
         bottom: 0;
         width: 1px;
@@ -5365,7 +5389,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         content: '';
         position: absolute;
         /* Centred on the guide line: .nav-children indents its rows by
-           16px and draws the line 4px in from its own left edge, so 15px
+           32px and draws the line 20px in from its own left edge, so 15px
            back from a row puts this 7px dot's middle on the line's middle
            — and 1px clear of the clip, which is what the line being a
            pseudo-element rather than a border buys. Move the line and this

@@ -25,6 +25,7 @@ import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
 
 /**
@@ -186,7 +187,7 @@ function RowActions({
                                     onOpen();
                                 }}
                             >
-                                <Icon name="eye" size={15} className="shrink-0 opacity-70" />
+                                <Icon name="eye" size={15} weight="duotone" className="shrink-0 opacity-70" />
                                 <span>Preview</span>
                             </button>
 
@@ -198,7 +199,7 @@ function RowActions({
                                     onEdit();
                                 }}
                             >
-                                <Icon name="pencil" size={15} className="shrink-0 opacity-70" />
+                                <Icon name="pencil" size={15} weight="duotone" className="shrink-0 opacity-70" />
                                 <span>Edit</span>
                             </button>
 
@@ -276,7 +277,7 @@ function RowActions({
                                     onDelete();
                                 }}
                             >
-                                <Icon name="trash" size={15} className="shrink-0" />
+                                <Icon name="trash" size={15} weight="duotone" className="shrink-0" />
                                 <span>Delete</span>
                             </button>
                         </div>
@@ -827,20 +828,30 @@ export default function Storefronts() {
                                      * the hover is the cheapest way to say so
                                      * before it is pressed rather than after.
                                      */
-                                    className="btn btn-secondary hover:!border-[var(--color-brand)] hover:!bg-[var(--color-brand-hover)] hover:!text-[var(--color-text-on-accent)]"
+                                    className={cn(
+                                        'btn btn-secondary hover:!border-[var(--color-brand)] hover:!bg-[var(--color-brand-hover)] hover:!text-[var(--color-text-on-accent)]',
+
+                                        /*
+                                          Filters on: the button wears the
+                                          colour it takes on hover, and keeps
+                                          it.
+                                          
+                                          It was a small dot beside the word,
+                                          which is a footnote about the button
+                                          rather than a change to it -- and at
+                                          six pixels, one you have to already
+                                          be looking for. A filled button reads
+                                          from across the table, which is where
+                                          somebody wonders why the count is low.
+                                        */
+                                        hasFilters &&
+                                            '!border-[var(--color-brand)] !bg-[var(--color-brand-hover)] !text-[var(--color-text-on-accent)]',
+                                    )}
                                     aria-expanded={filtersOpen}
                                     aria-haspopup="dialog"
                                 >
-                                    <Icon name="funnel" size={14} />
+                                    <Icon name="funnel" size={14} weight="duotone" />
                                     <span>Filter</span>
-
-                                    {hasFilters && (
-                                        <span
-                                            className="size-1.5 rounded-full"
-                                            style={{ background: 'currentColor' }}
-                                            aria-label="Filters are applied"
-                                        />
-                                    )}
 
                                     {/*
                                       Turned when it is open, which is the one
@@ -1031,11 +1042,16 @@ export default function Storefronts() {
                                 {
                                     key: 'status',
                                     label: 'Status',
+                                    /*
+                                      No dot on the badge. It is already a
+                                      coloured pill with the word inside it, and
+                                      a coloured dot inside a coloured pill says
+                                      the same thing twice.
+                                    */
                                     render: (store) => (
                                         <StatusBadge
                                             label={statusLabels[store.status] ?? store.status}
                                             variant={statusVariants[store.status] ?? 'neutral'}
-                                            dot
                                         />
                                     ),
                                 },
@@ -1832,7 +1848,6 @@ export default function Storefronts() {
                                                         selectedStorefront.status
                                                     }
                                                     variant={statusVariants[selectedStorefront.status] ?? 'neutral'}
-                                                    dot
                                                 />
                                             }
                                         />

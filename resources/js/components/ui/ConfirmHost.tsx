@@ -107,7 +107,7 @@ export function ConfirmHost() {
                 }}
             >
                 <span className={`confirm-mark is-${request.tone}`}>
-                    <Icon name={request.icon ?? GLYPH[request.tone]} size={20} />
+                    <Icon name={request.icon ?? GLYPH[request.tone]} size={20} weight="duotone" />
                 </span>
 
                 <h2 className="confirm-title">{request.title}</h2>

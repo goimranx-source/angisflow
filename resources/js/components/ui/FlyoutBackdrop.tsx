@@ -95,6 +95,28 @@ export function FlyoutBackdrop({
             return;
         }
 
+        /*
+         * A field is entered, not pressed.
+         *
+         * `.click()` on a text box does nothing you can see: no caret, no
+         * focus, no keyboard. So with a menu open the search box was the one
+         * thing on the page that still took two presses — one to dismiss and
+         * one to actually get into it — which is exactly what "the fields
+         * aren't clickable" describes.
+         *
+         * A select needs the click as well as the focus: focus alone will not
+         * drop its list open.
+         */
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+            target.focus();
+
+            return;
+        }
+
+        if (target instanceof HTMLSelectElement) {
+            target.focus();
+        }
+
         target.click();
     };
 
