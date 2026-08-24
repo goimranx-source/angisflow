@@ -162,7 +162,22 @@ export function DetailDrawer({
             */}
             <div
                 className={cn(
-                    'fixed inset-y-4 right-4 z-[var(--z-modal)] flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-card-bg)]',
+                    /*
+                      Centred, not pinned to one side.
+
+                      A right-hand sheet is the shape of something you glance at
+                      and dismiss — a filter, a preview, a list of alerts. This
+                      one is a whole record with tabs, its own toolbar and a
+                      form: it holds the screen for as long as somebody is
+                      working in it, and a thing that holds the screen belongs
+                      in the middle of it, with the page dimmed evenly on both
+                      sides.
+
+                      `left-1/2` and a translate rather than `inset-x-0
+                      mx-auto`, so the max-width from sizeClasses still decides
+                      how wide it is.
+                    */
+                    'fixed inset-y-4 left-1/2 z-[var(--z-modal)] flex w-[calc(100%-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-card-bg)]',
                     sizeClasses[size],
                 )}
                 style={{

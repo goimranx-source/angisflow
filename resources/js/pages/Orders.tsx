@@ -2711,8 +2711,8 @@ export default function Orders() {
                           only one column to put it in.
                         */
                         content: selectedOrder && (
-                            <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
-                                <div className="lg:order-2 lg:col-span-1">
+                            <div className="space-y-5">
+                                <div>
                                 {/*
                                   What the order is, before what is in it.
 
@@ -2790,7 +2790,7 @@ export default function Orders() {
                                     What the order is: who it is for, where it
                                     goes, what was paid, and anything written
                                     about it. */}
-                                <div className="space-y-5 lg:order-1 lg:col-span-2">
+                                <div className="space-y-5">
 
                                 {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
                                     <div className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -2811,7 +2811,20 @@ export default function Orders() {
                                   delivery — and the money below them gets to be
                                   the thing you scroll to.
                                 */}
-                                <div className="grid gap-4 sm:grid-cols-2">
+                                {/*
+                                  In a card, like the money under it.
+
+                                  These two sat bare on the panel's background
+                                  between two bordered cards, so the tab read as
+                                  a card, some loose text, and another card —
+                                  and the loose part was the customer and the
+                                  address, which is not the part that deserves
+                                  to look like an afterthought.
+                                */}
+                                <section
+                                    className="grid gap-4 rounded-[var(--shell-radius)] border p-4 sm:grid-cols-2"
+                                    style={{ borderColor: 'var(--shell-border)' }}
+                                >
                                     <section>
                                         <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
                                             Customer
@@ -2897,7 +2910,7 @@ export default function Orders() {
                                             );
                                         })()}
                                     </section>
-                                </div>
+                                </section>
 
                                 {/*
                                   The money, in the money it was charged in.
