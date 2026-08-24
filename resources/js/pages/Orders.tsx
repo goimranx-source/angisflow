@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 
@@ -32,9 +33,12 @@ import {
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
+import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 import { confirm } from '@/lib/confirm';
 
 type Order = {
@@ -223,6 +227,23 @@ export default function Orders() {
     const dateFrom = range ? asDate(range.start) : '';
     const dateTo = range ? asDate(range.end) : '';
     const [view, setView] = useState<'list' | 'grid'>('list');
+
+    /*
+     * The filters, behind a button.
+     *
+     * Three selects sat on the toolbar at all times, each costing the width of
+     * its widest option for a choice made once a session — and the row read as
+     * five controls of equal weight when one of them is the search.
+     */
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const filterButton = useRef<HTMLButtonElement>(null);
+    const filterPanel = useRef<HTMLDivElement>(null);
+
+    const filterAt = useFlyoutPosition({
+        open: filtersOpen,
+        trigger: filterButton,
+        panel: filterPanel,
+    });
     const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [drawerTab, setDrawerTab] = useState('overview');
@@ -815,7 +836,7 @@ export default function Orders() {
     };
 
     // Money in the business currency, and inside the money scope.
-    const { format: formatMoney } = useMoney();
+    const { format: formatMoney, both: money } = useMoney();
 
     // Format date
     const formatDate = (date: string) => {
@@ -895,7 +916,14 @@ export default function Orders() {
             <div className="pt-6">
                 <PageHeader
                     title="Orders"
-                    description="Manage customer orders and fulfillment"
+                    /*
+                     * No description, as on every other list.
+                     *
+                     * "Manage customer orders and fulfillment" told somebody
+                     * looking at their own orders what an order is. A line read
+                     * once, by somebody who did not need it, costs every later
+                     * visit a little height.
+                     */
                     actions={
                         <>
                             <button
@@ -933,15 +961,25 @@ export default function Orders() {
                         icon="shopping-cart"
                         variant="brand"
                     />
+                    {/*
+                      Compacted, with the figure itself on the hover.
+
+                      A card is a glance, and the exact amount was not being
+                      read at one -- it was being truncated to "৳75,81…", which
+                      is not a number at all. The precise figure is a hover
+                      away rather than gone.
+                    */}
                     <KPICard
                         label="Total Revenue"
-                        value={formatMoney(summary.total_revenue)}
+                        value={money(summary.total_revenue).short}
+                        valueTitle={money(summary.total_revenue).exact}
                         icon="currency-dollar"
                         variant="success"
                     />
                     <KPICard
                         label="Avg Order Value"
-                        value={formatMoney(summary.avg_order_value)}
+                        value={money(summary.avg_order_value).short}
+                        valueTitle={money(summary.avg_order_value).exact}
                         icon="chart-line"
                         variant="info"
                     />
@@ -988,76 +1026,149 @@ export default function Orders() {
                 </TabsList>
             </Tabs>
 
-            {/* Filter Bar */}
-            <div className="mt-2">
+            {/*
+              -- The way in, and the list, as one thing ----------------------
+
+              They were two cards with a strip of page between them: a border
+              and a gap drawn between a search box and the rows it searches.
+              One card, divided rather than separated, the same as the
+              storefront list.
+            */}
+            <div className="card mt-4 flex min-h-0 flex-1 flex-col">
                 <FilterBar
-                    stacked
+                    compact
+                    className="!rounded-none !border-0 !border-b"
                     searchValue={search}
                     onSearchChange={handleSearchChange}
-                    searchPlaceholder="Search by order #, customer name, or email..."
-                    filters={
-                        <>
-                            <FilterSelect
-                                label="Status"
-                                value={statusFilter}
-                                onChange={handleStatusFilterChange}
-                                /*
-                                 * Shows all statuses this business has configured —
-                                 * the built-in ones plus any custom additions they've
-                                 * created during integration mapping. So if they
-                                 * added "Awaiting Parts" or "Follow-up", those
-                                 * appear here with their configured labels.
-                                 */
-                                options={allStatuses.map(status => ({
-                                    value: status.value,
-                                    label: status.label + (status.custom ? ' (Custom)' : ''),
-                                }))}
-                                placeholder="All statuses"
-                            />
-                            <FilterSelect
-                                label="Payment"
-                                value={paymentFilter}
-                                onChange={handlePaymentFilterChange}
-                                options={[
-                                    { value: 'paid', label: 'Paid' },
-                                    { value: 'unpaid', label: 'Unpaid' },
-                                ]}
-                                placeholder="All payments"
-                            />
-
-                            {/*
-                              Which shop, or the counter.
-                              Walk-in is always offered — every business has a
-                              counter even before it has a website — while the
-                              shops themselves come from what is actually
-                              connected.
-                            */}
-                            <FilterSelect
-                                label="Store"
-                                value={storeFilter}
-                                onChange={handleStoreFilterChange}
-                                options={[
-                                    { value: 'walk_in', label: 'Walk-in / counter' },
-                                    ...stores.map((store) => ({ value: store.id, label: store.name })),
-                                ]}
-                                placeholder="All stores"
-                            />
-
-                            <DateRangePicker value={range} onChange={handleRangeChange} />
-                            {hasFilters && (
-                                <button
-                                    type="button"
-                                    onClick={handleClearFilters}
-                                    className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
-                                >
-                                    <Icon name="x" size={14} />
-                                    <span>Clear</span>
-                                </button>
-                            )}
-                        </>
+                    searchPlaceholder="Search by order #, customer or email"
+                    trailingSearch={
+                        /* The period sits with the search: both narrow what is
+                           being looked at rather than how it is shown. */
+                        <DateRangePicker value={range} onChange={handleRangeChange} />
                     }
-                    viewControls={
+                    actions={
                         <>
+                            <div className="relative">
+                                <button
+                                    ref={filterButton}
+                                    type="button"
+                                    onClick={() => setFiltersOpen(!filtersOpen)}
+                                    className={cn(
+                                        'btn btn-secondary hover:!border-[var(--color-brand)] hover:!bg-[var(--color-brand-hover)] hover:!text-[var(--color-text-on-accent)]',
+
+                                        // Filters on: the button wears the colour
+                                        // it takes on hover and keeps it, which
+                                        // reads from across the table.
+                                        hasFilters &&
+                                            '!border-[var(--color-brand)] !bg-[var(--color-brand-hover)] !text-[var(--color-text-on-accent)]',
+                                    )}
+                                    aria-expanded={filtersOpen}
+                                    aria-haspopup="dialog"
+                                >
+                                    <Icon name="funnel" size={14} weight="duotone" />
+                                    <span>Filter</span>
+                                    <Icon
+                                        name="caret-down"
+                                        size={12}
+                                        className={cn(
+                                            'transition-transform',
+                                            filtersOpen && 'rotate-180',
+                                        )}
+                                    />
+                                </button>
+
+                                {filtersOpen &&
+                                    createPortal(
+                                        <>
+                                            <FlyoutGuard onClose={() => setFiltersOpen(false)} />
+
+                                            <div
+                                                ref={filterPanel}
+                                                data-flyout-panel
+                                                className="fixed z-[var(--z-flyout-panel)] w-64 space-y-3 overflow-y-auto rounded-[var(--shell-radius)] border bg-[var(--color-card-bg)] p-3 shadow-lg"
+                                                style={{
+                                                    borderColor: 'var(--shell-border)',
+                                                    animation:
+                                                        'context-flyout-slide-up 120ms ease-out',
+                                                    transformOrigin:
+                                                        filterAt?.side === 'above'
+                                                            ? 'bottom right'
+                                                            : 'top right',
+                                                    visibility: filterAt ? 'visible' : 'hidden',
+                                                    top: filterAt?.top ?? 0,
+                                                    left: filterAt?.left ?? 0,
+                                                    maxHeight: filterAt?.maxHeight,
+                                                }}
+                                            >
+                                                <FilterSelect
+                                                    label="Status"
+                                                    value={statusFilter}
+                                                    onChange={handleStatusFilterChange}
+                                                    /*
+                                                     * Every status this business has
+                                                     * configured -- the built-in ones and
+                                                     * anything added during mapping, so
+                                                     * "Awaiting parts" appears under the
+                                                     * name it was given.
+                                                     */
+                                                    options={allStatuses.map((status) => ({
+                                                        value: status.value,
+                                                        label:
+                                                            status.label +
+                                                            (status.custom ? ' (Custom)' : ''),
+                                                    }))}
+                                                    placeholder="All statuses"
+                                                />
+                                                <FilterSelect
+                                                    label="Payment"
+                                                    value={paymentFilter}
+                                                    onChange={handlePaymentFilterChange}
+                                                    options={[
+                                                        { value: 'paid', label: 'Paid' },
+                                                        { value: 'unpaid', label: 'Unpaid' },
+                                                    ]}
+                                                    placeholder="All payments"
+                                                />
+
+                                                {/* Which shop, or the counter. Walk-in is
+                                                    always offered -- every business has a
+                                                    counter before it has a website. */}
+                                                <FilterSelect
+                                                    label="Store"
+                                                    value={storeFilter}
+                                                    onChange={handleStoreFilterChange}
+                                                    options={[
+                                                        {
+                                                            value: 'walk_in',
+                                                            label: 'Walk-in / counter',
+                                                        },
+                                                        ...stores.map((store) => ({
+                                                            value: store.id,
+                                                            label: store.name,
+                                                        })),
+                                                    ]}
+                                                    placeholder="All stores"
+                                                />
+
+                                                {hasFilters && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            handleClearFilters();
+                                                            setFiltersOpen(false);
+                                                        }}
+                                                        className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
+                                                    >
+                                                        <Icon name="x" size={14} />
+                                                        <span>Clear filters</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </>,
+                                        document.body,
+                                    )}
+                            </div>
+
                             <ViewToggleButton
                                 icon="list"
                                 label="List"
@@ -1070,15 +1181,33 @@ export default function Orders() {
                                 active={view === 'grid'}
                                 onClick={() => setView('grid')}
                             />
+
+                            {/* Asking the application what it already knows.
+                                Kept at the end of the row, away from anything
+                                that changes an order. */}
+                            <button
+                                type="button"
+                                onClick={() => void refetch()}
+                                className="btn btn-secondary px-2"
+                                title="Refresh this list"
+                                aria-label="Refresh this list"
+                                disabled={isLoading}
+                            >
+                                <Icon
+                                    name="arrow-clockwise"
+                                    size={14}
+                                    className={isLoading ? 'animate-spin' : undefined}
+                                />
+                            </button>
                         </>
                     }
                 />
-            </div>
+
 
             {/* Content */}
-            <div className="flex-1 overflow-auto pb-6">
+            <div className="flex min-h-0 flex-1 flex-col">
                 {isError ? (
-                    <div className="card mt-6 p-6 text-center">
+                    <div className="p-6 text-center">
                         <p className="text-sm text-[var(--color-text-body)]">
                             Failed to load orders.
                         </p>
@@ -1091,7 +1220,7 @@ export default function Orders() {
                         </button>
                     </div>
                 ) : (
-                    <div className="card mt-6 overflow-hidden">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {view === 'list' ? (
                             <Table
                                 data={orders}
@@ -1749,6 +1878,7 @@ export default function Orders() {
                         )}
                     </div>
                 )}
+            </div>
             </div>
 
             {/* Bulk Actions */}
