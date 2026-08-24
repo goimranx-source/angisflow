@@ -272,7 +272,10 @@ export function FilterSelect({
     block?: boolean;
 }) {
     return (
-        <div className={cn('flex items-center gap-2', block && 'w-full')}>
+        /* gap-1.5, the same distance the select-all checkbox keeps from its
+           own words. A label and the control it names are one thing, and eight
+           pixels between them reads as two. */
+        <div className={cn('flex items-center gap-1.5', block && 'w-full')}>
             {label && (
                 <label className="text-xs font-medium text-[var(--color-text-muted)] whitespace-nowrap">
                     {label}:
@@ -288,7 +291,7 @@ export function FilterSelect({
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     className={cn(
-                        'appearance-none border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1.5 pl-3 pr-8 text-sm text-[var(--color-text-main)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer',
+                        'appearance-none border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1.5 pl-2.5 pr-7 text-sm text-[var(--color-text-main)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer',
                         block && 'w-full truncate',
                     )}
                     style={{ borderRadius: 'var(--shell-radius-sm)' }}
@@ -303,7 +306,7 @@ export function FilterSelect({
                 <Icon
                     name="caret-down"
                     size={12}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none"
+                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]"
                 />
             </div>
         </div>

@@ -2215,13 +2215,35 @@ export default function Orders() {
 
                                     {meta && (
                                         <>
-                                            <span className="whitespace-nowrap">Page size:</span>
+                                            {/*
+                                              The label and its control as one
+                                              thing, at the gap the checkbox
+                                              beside them already uses.
 
-                                            <select
+                                              The row's own gap was between all
+                                              of them equally, so "Page size:"
+                                              stood as far from its select as
+                                              the select stood from the count —
+                                              three items of equal weight, where
+                                              there are two things and one of
+                                              them is a pair.
+                                            */}
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="whitespace-nowrap">
+                                                    Page size:
+                                                </span>
+
+                                                <select
                                                 /* w-auto against .field's width:100%. Inside a
                                                    sentence a control has to be the width of its
                                                    own text, or it takes the line. */
-                                                className="field h-7 w-auto py-0 pr-7 pl-2 text-xs"
+                                                    /* pr-6, not pr-7: .field's
+                                                       right padding is sized for
+                                                       a full-height control, and
+                                                       on a 28px one it left the
+                                                       caret adrift from the
+                                                       number it belongs to. */
+                                                    className="field h-7 w-auto py-0 pl-2 pr-6 text-xs"
                                                 value={perPage}
                                                 onChange={(event) => {
                                                     setPerPage(Number(event.target.value));
@@ -2230,14 +2252,15 @@ export default function Orders() {
                                                     // past the end of a 100-row one.
                                                     setPage(1);
                                                 }}
-                                                aria-label="Rows per page"
-                                            >
-                                                {[10, 20, 25, 50, 100].map((size) => (
-                                                    <option key={size} value={size}>
-                                                        {size}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                    aria-label="Rows per page"
+                                                >
+                                                    {[10, 20, 25, 50, 100].map((size) => (
+                                                        <option key={size} value={size}>
+                                                            {size}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </span>
 
                                             <span className="whitespace-nowrap">
                                                 <span className="font-medium text-[var(--color-text-main)]">
