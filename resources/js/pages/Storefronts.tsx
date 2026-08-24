@@ -140,7 +140,7 @@ function RowActions({
                 createPortal(
                     <>
                         <div
-                            className="fixed inset-0 z-[var(--z-modal)]"
+                            className="flyout-backdrop fixed inset-0 z-[var(--z-modal)]"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 onToggle();
@@ -863,7 +863,7 @@ export default function Storefronts() {
                                             is what people expect of something
                                             that opened over the page. */}
                                         <div
-                                            className="fixed inset-0 z-[var(--z-dropdown,40)]"
+                                            className="flyout-backdrop fixed inset-0 z-[var(--z-dropdown,40)]"
                                             onClick={() => setFiltersOpen(false)}
                                         />
 

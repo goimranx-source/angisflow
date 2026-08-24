@@ -143,7 +143,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
                         aria-label={collapsed ? 'Keep sidebar open' : 'Collapse sidebar'}
                         title={collapsed ? 'Keep open' : 'Collapse'}
                     >
-                        <Icon name={collapsed ? 'caret-right' : 'caret-left'} size={16} weight="bold" />
+                        <Icon name={collapsed ? 'caret-right' : 'caret-left'} size={13} weight="bold" />
                     </button>}
                 </div>
                 {/* ── The account's own menu ────────────────────────────────

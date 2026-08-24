@@ -102,8 +102,18 @@
        now the row you are actually on. */
     --shell-text: #4b5563;
     --shell-text-strong: #0d1b2a;
-    --shell-hover: #f1f7fc;
-    --shell-active-soft: #eaf5fb;
+    /*
+     * Neutral, like the page behind them.
+     *
+     * These were tinted blue to match a blue page background. The background is
+     * a near-neutral grey now, and a blue hover on a grey rail reads as a
+     * selection somebody made rather than as a pointer passing over.
+     *
+     * Definite rather than faint, which is what makes the dark rail work: a
+     * hover you have to look for is a hover that is not doing its job.
+     */
+    --shell-hover: #eceef2;
+    --shell-active-soft: #e4e7ec;
     /* One corner for the whole frame — the rail, and every panel that floats
        out of it. Three of them had picked their own (5px, 12px, 16px), so a
        flyout never looked like it came from the sidebar it was attached to. */
@@ -160,7 +170,14 @@
     /* How wide the rail is when it is open — as the page's gutter normally,
        and as the width a collapsed rail grows to while peeked. Named, because
        those two now need to agree and one of them is not --sidebar-width. */
-    --sidebar-open: 16rem;
+    /*
+     * A little wider, so long labels stop truncating.
+     *
+     * "Fulfillment & Logistics" and "Inventory & Products" were both cut at
+     * 16rem, and a menu that abbreviates its own sections is a menu somebody
+     * has to hover to read.
+     */
+    --sidebar-open: 17rem;
     --sidebar-width: var(--sidebar-open);
     /* Wide enough to actually hold what goes in it. Every collapsed row is a
        40px square, the rail sits inside 12px of page padding either side, and
@@ -168,8 +185,16 @@
        40px icon into a 16px box and letting it spill over both edges. */
     --sidebar-rail: 5.25rem;
     --sidebar-padding: 12px;
-    --sidebar-header-height: 4rem;
-    --topbar-height: 4rem;
+    /*
+     * Both shorter.
+     *
+     * Two four-rem bars stacked across the top of every screen is eight rems
+     * of chrome before anything the reader came for. Neither holds enough to
+     * justify the height — a name and a few icons in one, a logo and a
+     * collapse control in the other.
+     */
+    --sidebar-header-height: 3.25rem;
+    --topbar-height: 3.25rem;
     --focus-ring: 0 0 0 3px rgba(0, 212, 232, 0.35);
 
     /*
@@ -2751,12 +2776,19 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 
 
+    /*
+     * Smaller than a nav row, because it is not one.
+     *
+     * At 2.5rem it matched the rows beside it and read as another place to go
+     * rather than as the control that changes the rail's shape. Two-thirds the
+     * size settles it into the header it lives in.
+     */
     .rail-action-footer {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 1.75rem;
+        height: 1.75rem;
         border-radius: var(--radius-md);
         border: 1px solid var(--shell-border);
         background: transparent;
@@ -4310,6 +4342,20 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
      * figure touching the edge would look like a mistake where a chart touching
      * it looks finished.
      */
+    /*
+     * ── The sheet behind an open flyout ─────────────────────────────────────
+     *
+     * It covers the page to catch the click that closes the panel, which means
+     * every button under it is unreachable — and every one of them was still
+     * showing a pointer, promising something that could not happen.
+     *
+     * The arrow says what is true: the only things you can press are in the
+     * panel itself.
+     */
+    .flyout-backdrop {
+        cursor: default;
+    }
+
     .stat-spark {
         margin-left: -1rem;
         margin-right: -1rem;
@@ -4821,18 +4867,31 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     }
 
     /* Footer action button - for collapse/expand */
+    /*
+     * ── Small, and always there ─────────────────────────────────────────────
+     *
+     * It was a 36px box matching the nav rows beside it, which made the control
+     * that changes the rail's shape look like another place to go. Smaller
+     * settles it into the header it lives in.
+     *
+     * And it was invisible until the header was hovered. A control nobody can
+     * see is a control nobody knows about — the rail could be collapsed and
+     * reopened only by somebody who had already discovered how. Revealing on
+     * hover suits a thing that would be clutter otherwise; this is the only way
+     * to do the one thing it does.
+     */
     .rail-action-footer {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
+        width: 28px;
+        height: 28px;
         border-radius: 5px;
         border: 1px solid var(--shell-border);
         color: var(--shell-text);
         background: transparent;
         cursor: pointer;
-        opacity: 0;
+        opacity: 0.65;
         transition:
             opacity 0.15s ease,
             background-color 0.15s ease,
@@ -4840,6 +4899,7 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
             color 0.15s ease;
     }
 
+    /* Fully lit on approach, rather than appearing from nothing. */
     .rail-head:hover .rail-action-footer,
     .rail-action-footer:focus-visible {
         opacity: 1;
@@ -4868,8 +4928,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         align-items: center;
         gap: 4px;
         width: 100%;
-        padding: 7px 5px;
-        border-radius: 5px;
+        padding: 6px 5px;
+        border-radius: var(--shell-radius);
         color: var(--shell-text);
         text-decoration: none;
         text-align: left;
@@ -4885,19 +4945,27 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         margin-bottom: 0;
     }
 
+    /*
+     * A fill you can see, and a shade deeper for the row you are on.
+     *
+     * Hover was a six-percent wash that had to be looked for, and the active
+     * row was eight percent cyan — which on a rail beside a page full of the
+     * same cyan read as a third state nobody asked for. The difference between
+     * "pointing at" and "on" is worth a shade, not a colour.
+     */
     .nav-flat:hover,
     .nav-parent:hover {
-        background: var(--shell-tint);
+        background: var(--shell-hover);
         color: var(--shell-text-strong);
     }
 
     .nav-flat.active {
-        background: rgba(0, 212, 232, 0.08);
+        background: var(--shell-active-soft);
         color: var(--shell-text-strong);
     }
     
     .nav-flat.active:hover {
-        background: var(--shell-tint);
+        background: var(--shell-active-soft);
     }
 
     .nav-icon {
@@ -4910,9 +4978,28 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         border-radius: 5px;
     }
 
-    /* Only set height when collapsed */
+    /*
+     * ── Collapsed, every row is a square ────────────────────────────────────
+     *
+     * The icon box was already 40px wide and only 40 tall when collapsed, but
+     * the row around it kept its own padding — so the thing that lit up on
+     * hover was a wide short rectangle with an icon adrift in it rather than a
+     * square around the icon.
+     *
+     * The row becomes the square: no padding of its own, centred, and the
+     * spacing between rows carries the rhythm instead.
+     */
     html.rail-collapsed:not(.rail-peek) .rail .nav-icon {
         height: 40px;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail .nav-flat,
+    html.rail-collapsed:not(.rail-peek) .rail .nav-parent {
+        width: 40px;
+        padding: 0;
+        margin-inline: auto;
+        margin-bottom: 6px;
+        justify-content: center;
     }
 
     .nav-flat.active .nav-icon {
@@ -5142,8 +5229,16 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* Colour and weight, matching the dot and the icon. Three marks saying the
        same thing in the same colour is one signal; a filled row underneath a
        filled department heading is two competing ones. */
+    /*
+     * The deeper brand, not the base one.
+     *
+     * --color-brand is the fill on buttons and the cyan the page is full of;
+     * as text on a pale rail it is bright enough to read as a link somebody is
+     * hovering rather than as the page they are on. The hover shade is darker
+     * and settles.
+     */
     .nav-child.active {
-        color: var(--color-brand);
+        color: var(--color-brand-hover);
         font-weight: 500;
     }
 
@@ -5155,11 +5250,11 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* Hovering the page you are already on should not make it look like
        somewhere else. */
     .nav-child.active:hover {
-        color: var(--color-brand);
+        color: var(--color-brand-hover);
     }
 
     .nav-child.active .nav-child-icon {
-        color: var(--color-brand);
+        color: var(--color-brand-hover);
         opacity: 1;
     }
 
