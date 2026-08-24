@@ -246,25 +246,51 @@ export function FilterSelect({
     onChange,
     options,
     placeholder = 'All',
+    block = false,
 }: {
     label?: string;
     value: string;
     onChange: (value: string) => void;
     options: { value: string; label: string }[];
     placeholder?: string;
+    /**
+     * Fill the width instead of sizing to the longest option.
+     *
+     * ── Why it is a choice and not the default ───────────────────────────────
+     *
+     * Stacked in a panel, three of these sizing themselves to "All statuses",
+     * "All payments" and "All stores" gave three different widths down one
+     * narrow column, which reads as three unrelated controls rather than one
+     * set of filters. Filling is obviously right there.
+     *
+     * On a toolbar it is obviously wrong: `flex-1` on a row of selects makes
+     * each one grow to a share of whatever is left, so a two-option filter
+     * ends up as wide as the search box beside it.
+     *
+     * The container knows which of those it is; this component cannot.
+     */
+    block?: boolean;
 }) {
     return (
-        <div className="flex items-center gap-2">
+        <div className={cn('flex items-center gap-2', block && 'w-full')}>
             {label && (
                 <label className="text-xs font-medium text-[var(--color-text-muted)] whitespace-nowrap">
                     {label}:
                 </label>
             )}
-            <div className="relative">
+            {/* min-w-0 as well as flex-1: a flex item's floor is its content,
+                and a long option name would push the box past the panel's edge
+                rather than truncating inside it. The dropdown itself is drawn
+                by the browser and shows every label in full whatever width the
+                closed control is. */}
+            <div className={cn('relative', block && 'min-w-0 flex-1')}>
                 <select
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    className="appearance-none border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1.5 pl-3 pr-8 text-sm text-[var(--color-text-main)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
+                    className={cn(
+                        'appearance-none border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1.5 pl-3 pr-8 text-sm text-[var(--color-text-main)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer',
+                        block && 'w-full truncate',
+                    )}
                     style={{ borderRadius: 'var(--shell-radius-sm)' }}
                 >
                     <option value="">{placeholder}</option>

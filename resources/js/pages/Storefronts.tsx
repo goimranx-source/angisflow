@@ -924,6 +924,7 @@ export default function Storefronts() {
                                             }}
                                         >
                                             <FilterSelect
+                                                block
                                                 label="Type"
                                                 value={typeFilter}
                                                 onChange={setTypeFilter}
@@ -931,6 +932,7 @@ export default function Storefronts() {
                                                 placeholder="All types"
                                             />
                                             <FilterSelect
+                                                block
                                                 label="Status"
                                                 value={statusFilter}
                                                 onChange={setStatusFilter}

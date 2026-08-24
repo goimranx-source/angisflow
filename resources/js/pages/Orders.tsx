@@ -1182,6 +1182,7 @@ export default function Orders() {
                                                 }}
                                             >
                                                 <FilterSelect
+                                                    block
                                                     label="Status"
                                                     value={statusFilter}
                                                     onChange={handleStatusFilterChange}
@@ -1201,6 +1202,7 @@ export default function Orders() {
                                                     placeholder="All statuses"
                                                 />
                                                 <FilterSelect
+                                                    block
                                                     label="Payment"
                                                     value={paymentFilter}
                                                     onChange={handlePaymentFilterChange}
@@ -1215,6 +1217,7 @@ export default function Orders() {
                                                     always offered -- every business has a
                                                     counter before it has a website. */}
                                                 <FilterSelect
+                                                    block
                                                     label="Store"
                                                     value={storeFilter}
                                                     onChange={handleStoreFilterChange}
@@ -1491,23 +1494,6 @@ export default function Orders() {
                                         ),
                                     },
                                     {
-                                        // Whether it has gone out is its own
-                                        // fact, not a point on the status line —
-                                        // a paid order can sit undispatched for
-                                        // a week, and that is what a sales
-                                        // screen needs to show.
-                                        key: 'fulfilment_status',
-                                        label: 'Dispatch',
-                                        width: 'w-36',
-                                        render: (order) => (
-                                            <StatusBadge
-                                                label={fulfilmentLabels[order.fulfilment_status] ?? order.fulfilment_status}
-                                                variant={order.fulfilment_status === 'fulfilled' ? 'success' : 'neutral'}
-                                                dot
-                                            />
-                                        ),
-                                    },
-                                    {
                                         key: 'items_count',
                                         label: 'Items',
                                         width: 'w-20',
@@ -1634,96 +1620,121 @@ export default function Orders() {
                                     },
                                     {
                                         key: 'actions',
-                                        label: 'Actions',
-                                        width: 'w-32',
-                                        render: (order) =>
-                                            tab === 'trashed' ? (
-                                                <RowActions>
-                                                    <RowAction
-                                                        icon="note-pencil"
-                                                        label="Edit order"
-                                                        onClick={() => setEditingId(order.id)}
-                                                    />
-                                                    <RowAction
-                                                        icon="arrow-counter-clockwise"
-                                                        label="Restore from trash"
-                                                        onClick={() =>
-                                                            bulkUpdate.mutate({
-                                                                order_ids: [order.id],
-                                                                action: 'restore',
-                                                            })
-                                                        }
-                                                    />
-                                                    <RowAction
-                                                        icon="trash"
-                                                        label="Delete permanently"
-                                                        variant="danger"
-                                                        onClick={async () => {
-                                                            if (
-                                                                await confirm(
-                                                                    `Permanently delete order ${order.order_number}? This cannot be undone.`,
-                                                                )
-                                                            ) {
-                                                                bulkUpdate.mutate({
-                                                                    order_ids: [order.id],
-                                                                    action: 'delete_permanently',
-                                                                });
-                                                            }
-                                                        }}
-                                                    />
-                                                </RowActions>
-                                            ) : (
-                                                <RowActions>
-                                                    <RowAction
-                                                        icon="note-pencil"
-                                                        label="Edit order"
-                                                        onClick={() => setEditingId(order.id)}
-                                                    />
+                                        label: 'Action',
+                                        width: 'w-20',
+                                        /*
+                                          ── One mark, not five ─────────────────
 
-                                                    <RowAction
-                                                        icon="download-simple"
-                                                        label="Export as an import-ready CSV"
-                                                        onClick={() => exportOrders([order])}
-                                                    />
+                                          Five icon buttons cost the width of
+                                          five buttons on every row, in the
+                                          column a scrolling table pushes off
+                                          the edge first -- and none of them
+                                          said what it did until it was
+                                          hovered, so the row ended in a
+                                          puzzle.
 
-                                                    <RowActionMenu
-                                                        icon="printer"
-                                                        label="Print"
-                                                        items={[
-                                                            {
-                                                                key: 'invoice',
-                                                                label: 'Invoice',
-                                                                icon: 'receipt',
-                                                                onSelect: () => printDocuments([order], 'invoice'),
-                                                            },
-                                                            {
-                                                                key: 'receipt',
-                                                                label: 'Receipt',
-                                                                icon: 'ticket',
-                                                                onSelect: () => printDocuments([order], 'receipt'),
-                                                            },
-                                                        ]}
-                                                    />
+                                          Behind one mark they are words. It is
+                                          the same menu the storefront list
+                                          uses, so a row ends the same way
+                                          wherever somebody is.
+                                        */
+                                        render: (order) => (
+                                            <RowActions>
+                                                <RowActionMenu
+                                                    icon="dots-three-vertical"
+                                                    label={`Actions for ${order.reference ?? order.order_number}`}
+                                                    items={
+                                                        tab === 'trashed'
+                                                            ? [
+                                                                  {
+                                                                      key: 'edit',
+                                                                      label: 'Edit',
+                                                                      icon: 'note-pencil',
+                                                                      onSelect: () =>
+                                                                          setEditingId(order.id),
+                                                                  },
+                                                                  {
+                                                                      key: 'restore',
+                                                                      label: 'Restore',
+                                                                      icon: 'arrow-counter-clockwise',
+                                                                      onSelect: () =>
+                                                                          bulkUpdate.mutate({
+                                                                              order_ids: [order.id],
+                                                                              action: 'restore',
+                                                                          }),
+                                                                  },
+                                                                  {
+                                                                      key: 'destroy',
+                                                                      label: 'Delete for good',
+                                                                      icon: 'trash',
+                                                                      variant: 'danger' as const,
+                                                                      onSelect: async () => {
+                                                                          const sure = await confirm(
+                                                                              `Permanently delete ${order.reference ?? order.order_number}?`,
+                                                                              'It is removed from the database. This cannot be undone.',
+                                                                          );
 
-                                                    <RowAction
-                                                        icon="trash"
-                                                        label="Move to trash"
-                                                        variant="danger"
-                                                        onClick={async () => {
-                                                            if (
-                                                                await confirm(
-                                                                    `Move order ${order.order_number} to trash?`,
-                                                                )
-                                                            ) {
-                                                                bulkUpdate.mutate({
-                                                                    order_ids: [order.id],
-                                                                    action: 'trash',
-                                                                });
-                                                            }
-                                                        }}
-                                                    />
-                                                </RowActions>
-                                            ),
+                                                                          if (sure) {
+                                                                              bulkUpdate.mutate({
+                                                                                  order_ids: [order.id],
+                                                                                  action: 'delete_permanently',
+                                                                              });
+                                                                          }
+                                                                      },
+                                                                  },
+                                                              ]
+                                                            : [
+                                                                  {
+                                                                      key: 'edit',
+                                                                      label: 'Edit',
+                                                                      icon: 'note-pencil',
+                                                                      onSelect: () =>
+                                                                          setEditingId(order.id),
+                                                                  },
+                                                                  {
+                                                                      key: 'invoice',
+                                                                      label: 'Print invoice',
+                                                                      icon: 'receipt',
+                                                                      onSelect: () =>
+                                                                          printDocuments([order], 'invoice'),
+                                                                  },
+                                                                  {
+                                                                      key: 'receipt',
+                                                                      label: 'Print receipt',
+                                                                      icon: 'ticket',
+                                                                      onSelect: () =>
+                                                                          printDocuments([order], 'receipt'),
+                                                                  },
+                                                                  {
+                                                                      key: 'export',
+                                                                      label: 'Export as CSV',
+                                                                      icon: 'download-simple',
+                                                                      onSelect: () => exportOrders([order]),
+                                                                  },
+                                                                  {
+                                                                      key: 'trash',
+                                                                      label: 'Move to trash',
+                                                                      icon: 'trash',
+                                                                      variant: 'danger' as const,
+                                                                      onSelect: async () => {
+                                                                          const sure = await confirm(
+                                                                              `Move ${order.reference ?? order.order_number} to trash?`,
+                                                                              'It leaves the list and can be brought back from Trash.',
+                                                                          );
+
+                                                                          if (sure) {
+                                                                              bulkUpdate.mutate({
+                                                                                  order_ids: [order.id],
+                                                                                  action: 'trash',
+                                                                              });
+                                                                          }
+                                                                      },
+                                                                  },
+                                                              ]
+                                                    }
+                                                />
+                                            </RowActions>
+                                        ),
                                     },
                                 ]}
                                 sortBy={sortBy}
