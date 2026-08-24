@@ -2340,7 +2340,23 @@ export default function Orders() {
                         only !== null
                             ? [
                                   {
-                                      label: 'This order',
+                                      /*
+                                        The order, named.
+
+                                        "This order" is true of whichever row is
+                                        selected and says nothing about which
+                                        one — and a menu opened from a bar that
+                                        floats over the table is a menu whose
+                                        row is often scrolled out of sight. Both
+                                        numbers, because this tool's is what the
+                                        heading below acts on and the shop's is
+                                        what somebody has in another window.
+                                      */
+                                      label: `#${only.reference ?? only.order_number}${
+                                          only.reference && only.store
+                                              ? ` (${only.order_number})`
+                                              : ''
+                                      }`,
                                       icon: 'note-pencil',
                                       items: [
                                           {
@@ -2598,14 +2614,48 @@ export default function Orders() {
             <DetailDrawer
                 open={!!selectedOrder}
                 onClose={() => setSelectedOrder(null)}
-                title={selectedOrder?.order_number ?? ''}
+                /*
+                  This tool's reference, with the shop's beside it.
+
+                  The panel led with the shop's number, so the one screen that
+                  is entirely about one order was the one place not calling it
+                  what the rest of the application calls it.
+                */
+                title={
+                    selectedOrder
+                        ? `#${selectedOrder.reference ?? selectedOrder.order_number}${
+                              selectedOrder.reference && selectedOrder.store
+                                  ? ` (${selectedOrder.order_number})`
+                                  : ''
+                          }`
+                        : ''
+                }
                 subtitle={selectedOrder ? `${selectedOrder.customer?.name ?? 'Walk-in'} · ${formatDate(selectedOrder.date)}` : ''}
                 tabs={[
                     {
                         key: 'overview',
                         label: 'Overview',
+                        /*
+                          ── Two columns: what it is, and what state it is in ──
+
+                          Everything was one narrow stack, so a summary nobody
+                          needs to re-read sat above the customer, the address
+                          and the money on every visit — and on a panel this
+                          wide the stack used a third of the width and left the
+                          rest blank.
+
+                          Split the way a resource details page is split: what
+                          defines the order down the left in two thirds of the
+                          width, and the supporting facts — status, totals,
+                          which shop — in a rail beside it.
+
+                          The rail is second in the markup and first on a narrow
+                          screen, which is where a summary belongs when there is
+                          only one column to put it in.
+                        */
                         content: selectedOrder && (
-                            <div className="space-y-6">
+                            <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+                                <div className="lg:order-2 lg:col-span-1">
                                 {/*
                                   What the order is, before what is in it.
 
@@ -2677,6 +2727,13 @@ export default function Orders() {
                                         <span>{channelLabels[selectedOrder.channel]}</span>
                                     </div>
                                 </div>
+                                </div>
+
+                                {/* ── The primary column ────────────────────
+                                    What the order is: who it is for, where it
+                                    goes, what was paid, and anything written
+                                    about it. */}
+                                <div className="space-y-5 lg:order-1 lg:col-span-2">
 
                                 {selectedOrder.is_cod && selectedOrder.payment_status === 'unpaid' && (
                                     <div className="rounded-[var(--shell-radius)] border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -2699,7 +2756,7 @@ export default function Orders() {
                                 */}
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <section>
-                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
                                             Customer
                                         </h4>
 
@@ -2730,7 +2787,7 @@ export default function Orders() {
                                     </section>
 
                                     <section>
-                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
                                             Delivery
                                         </h4>
 
@@ -2824,7 +2881,7 @@ export default function Orders() {
 
                                     return (
                                         <section className="rounded-[var(--shell-radius)] border border-[var(--shell-border)]">
-                                            <h4 className="border-b border-[var(--shell-border)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                            <h4 className="border-b border-[var(--shell-border)] px-4 py-2.5 text-xs font-semibold text-[var(--color-text-main)]">
                                                 Payment
                                             </h4>
 
@@ -2889,7 +2946,7 @@ export default function Orders() {
 
                                 {selectedOrder.notes && (
                                     <section>
-                                        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                        <h4 className="mb-2 text-xs font-semibold text-[var(--color-text-main)]">
                                             Notes
                                         </h4>
                                         <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-text-body)]">
@@ -2897,6 +2954,7 @@ export default function Orders() {
                                         </p>
                                     </section>
                                 )}
+                                </div>
                             </div>
                         ),
                     },
