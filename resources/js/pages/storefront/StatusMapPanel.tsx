@@ -161,10 +161,48 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
                             </button>
                         </div>
                     ) : (
-                        <button type="button" className="btn btn-secondary" onClick={() => setAdding(true)}>
-                            <Icon name="plus" size={13} />
-                            Add a status
-                        </button>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setAdding(true)}
+                            >
+                                <Icon name="plus" size={13} />
+                                Add a status
+                            </button>
+
+                            {/*
+                              Beside the control, not beside the search.
+
+                              A count to the right of a search box reads as a
+                              result count for a search nobody typed. These
+                              describe the mapping as a whole, so they sit with
+                              the rest of the toolbar.
+                            */}
+                            <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                                <span>{mapped} matched</span>
+
+                                {unmapped > 0 && (
+                                    <span
+                                        className="flex items-center gap-1"
+                                        style={{ color: 'var(--color-warning-text)' }}
+                                    >
+                                        <Icon name="warning" size={11} />
+                                        {unmapped} not matched
+                                    </span>
+                                )}
+
+                                {catalogue && catalogue.unclaimed.length > 0 && (
+                                    <span
+                                        className="cursor-help opacity-60"
+                                        title={`This shop also sends ${catalogue.unclaimed.join(', ')} — nothing happens here when it does.`}
+                                        aria-label={`This shop also sends ${catalogue.unclaimed.join(', ')} — nothing happens here when it does.`}
+                                    >
+                                        <Icon name="info" size={12} />
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                     )}
 
                     <button
@@ -177,52 +215,21 @@ export function StatusMapPanel({ connectionId }: { connectionId: string }) {
                     </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative min-w-[14rem] flex-1">
-                        <Icon
-                            name="magnifying-glass"
-                            size={13}
-                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
-                        />
-                        <input
-                            className="field w-full pl-8 text-sm"
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Find a status — by its name here or on the shop"
-                            aria-label="Filter the statuses"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
-                        <span>{mapped} matched</span>
-
-                        {/*
-                          The count that matters. An unmatched status is one this
-                          shop will never be told about, and it is invisible
-                          otherwise — a dash in a dropdown among thirty rows.
-                        */}
-                        {unmapped > 0 && (
-                            <span
-                                className="flex items-center gap-1"
-                                style={{ color: 'var(--color-warning-text)' }}
-                            >
-                                <Icon name="warning" size={11} />
-                                {unmapped} not matched
-                            </span>
-                        )}
-                    </div>
+                <div className="relative">
+                    <Icon
+                        name="magnifying-glass"
+                        size={13}
+                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                    />
+                    <input
+                        className="field w-full pl-8 text-sm"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Find a status — by its name here or on the shop"
+                        aria-label="Filter the statuses"
+                    />
                 </div>
             </div>
-
-            {catalogue && catalogue.unclaimed.length > 0 && (
-                <p className="flex items-start gap-1.5 text-xs text-[var(--color-text-muted)]">
-                    <Icon name="warning" size={12} className="mt-0.5 shrink-0" />
-                    <span>
-                        This shop also sends {catalogue.unclaimed.join(', ')} — nothing happens here
-                        when it does.
-                    </span>
-                </p>
-            )}
 
             {isLoading && (
                 <div className="h-56 animate-pulse rounded-[var(--shell-radius)] bg-[var(--shell-muted)]" />

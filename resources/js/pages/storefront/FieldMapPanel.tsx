@@ -610,6 +610,14 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
             >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     {/*
+                      Which records, and how many of them — one group.
+
+                      Three things spread by justify-between put the counts in
+                      the middle of the row, adrift between the choice they
+                      describe and the buttons they have nothing to do with.
+                    */}
+                    <div className="flex flex-wrap items-center gap-3">
+                    {/*
                       The second level: which record this mapping is for.
 
                       Segmented rather than underlined, because this sits inside
@@ -631,6 +639,56 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                             ))}
                         </TabsList>
                     </Tabs>
+
+                    {/*
+                      What is on screen, said beside the thing that decides it.
+
+                      These sat to the right of the search box, where they read
+                      as a result count for a search nobody had typed. They
+                      describe the mapping for whichever of Orders and Products
+                      is selected, so they belong next to that choice.
+                    */}
+                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                        <span>{summary.mapped} mapped</span>
+
+                        {summary.hidden > 0 && (
+                            <span className="flex items-center gap-1">
+                                <Icon name="eye" size={11} />
+                                {summary.hidden} hidden
+                            </span>
+                        )}
+
+                        {summary.needing > 0 && (
+                            <span
+                                className="flex items-center gap-1"
+                                style={{ color: 'var(--color-warning-text)' }}
+                            >
+                                <Icon name="warning" size={11} />
+                                {summary.needing} need choices
+                            </span>
+                        )}
+
+                        {/*
+                          The sentence that used to run the width of the panel,
+                          on a mark instead.
+
+                          It said something worth knowing once — that this shop
+                          describes its own fields, so the list includes ones no
+                          record has used — and then went on saying it above
+                          every visit thereafter. A line read once and skipped
+                          for ever is a line that has become furniture.
+                        */}
+                        {sample?.described && (
+                            <span
+                                className="cursor-help opacity-60"
+                                title="This shop describes its own fields, so everything it has is listed below — including fields no order or product has used yet."
+                                aria-label="This shop describes its own fields, so everything it has is listed below — including fields no order or product has used yet."
+                            >
+                                <Icon name="info" size={12} />
+                            </span>
+                        )}
+                    </div>
+                    </div>
 
                     <div className="flex items-center gap-2">
                         {/* Only offered when there is something to offer — a
@@ -659,50 +717,19 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative min-w-[14rem] flex-1">
-                        <Icon
-                            name="magnifying-glass"
-                            size={13}
-                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
-                        />
-                        <input
-                            className="field w-full pl-8 text-sm"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Find a field — by its name here, its name there, or its value"
-                            aria-label="Filter the mapping"
-                        />
-                    </div>
-
-                    {/*
-                      Three counts, stated before anybody scrolls.
-
-                      The third is the one that matters: a dropdown with no
-                      choices behind it looks configured and behaves as a text
-                      box, and this is the only place that difference is visible
-                      without opening every row.
-                    */}
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
-                        <span>{summary.mapped} mapped</span>
-
-                        {summary.hidden > 0 && (
-                            <span className="flex items-center gap-1">
-                                <Icon name="eye" size={11} />
-                                {summary.hidden} hidden when editing
-                            </span>
-                        )}
-
-                        {summary.needing > 0 && (
-                            <span
-                                className="flex items-center gap-1"
-                                style={{ color: 'var(--color-warning-text)' }}
-                            >
-                                <Icon name="warning" size={11} />
-                                {summary.needing} need choices
-                            </span>
-                        )}
-                    </div>
+                <div className="relative">
+                    <Icon
+                        name="magnifying-glass"
+                        size={13}
+                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50"
+                    />
+                    <input
+                        className="field w-full pl-8 text-sm"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Find a field — by its name here, its name there, or its value"
+                        aria-label="Filter the mapping"
+                    />
                 </div>
             </div>
 
@@ -710,14 +737,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
               Where the paths came from. A mapping built against the platform's
               documented sample rather than a real record deserves a second look
               once orders start arriving, so the screen says which it is.
-            */}
-            {/*
-              What this shop was able to say for itself.
-
-              Worth stating plainly, because the difference is large and
-              otherwise invisible: a shop that describes its own fields offers
-              every one it has, including the ones no record has used, while a
-              shop that cannot offers only what has actually been through it.
             */}
             {/*
               The offer, with the count, so it is clear what would change.
@@ -739,14 +758,6 @@ export function FieldMapPanel({ connectionId }: { connectionId: string }) {
                         Show names — then Save
                     </button>
                 </div>
-            )}
-
-            {sample?.described && (
-                <p className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
-                    <Icon name="check" size={12} />
-                    This shop describes its own fields, so everything it has is listed below —
-                    including fields no order or product has used yet.
-                </p>
             )}
 
             {sample && sample.source !== 'live' && (

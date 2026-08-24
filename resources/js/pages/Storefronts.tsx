@@ -833,6 +833,87 @@ export default function Storefronts() {
                 title={selectedStorefront?.name ?? ''}
                 subtitle={selectedStorefront?.domain ?? ''}
                 /*
+                 * Sync belongs beside the shop's name, not among the tabs.
+                 *
+                 * It acts on the whole connection, where the tabs only choose
+                 * which part of it to look at — so sitting in the tab row made
+                 * an action look like a fourth place to go, and left one row
+                 * doing two unrelated jobs. In the header it reads as what it
+                 * is: something done to this shop, next to the shop's name.
+                 */
+                actions={
+                    selectedStorefront?.is_connected && selectedStorefront?.connection_id ? (
+                    <div className="relative">
+                        <div className="flex gap-0">
+                            <button
+                                type="button"
+                                className="btn btn-secondary rounded-r-none border-r-0"
+                                onClick={() => syncShop.mutate({ full: false })}
+                                disabled={syncShop.isPending}
+                            >
+                                <Icon
+                                    name={syncShop.isPending ? 'spinner' : 'arrows-clockwise'}
+                                    size={14}
+                                    className={syncShop.isPending ? 'animate-spin' : undefined}
+                                />
+                                <span>{syncShop.isPending ? 'Syncing…' : 'Sync'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary rounded-l-none px-2"
+                                onClick={() => setShowSyncMenu(!showSyncMenu)}
+                                disabled={syncShop.isPending}
+                            >
+                                <Icon name="caret-down" size={12} />
+                            </button>
+                        </div>
+                                    
+                        {showSyncMenu && (
+                            <>
+                                <div
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setShowSyncMenu(false)}
+                                />
+                                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm hover:bg-[var(--shell-hover)]"
+                                        onClick={() => {
+                                            setShowSyncMenu(false);
+                                            syncShop.mutate({ full: false });
+                                        }}
+                                    >
+                                        <Icon name="arrows-clockwise" size={16} className="mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <div className="font-medium text-[var(--color-text-main)]">Incremental Sync</div>
+                                            <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                                                Only new or modified records
+                                            </div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-start gap-3 border-t border-[var(--shell-border)] px-4 py-3 text-left text-sm hover:bg-[var(--shell-hover)]"
+                                        onClick={() => {
+                                            setShowSyncMenu(false);
+                                            syncShop.mutate({ full: true });
+                                        }}
+                                    >
+                                        <Icon name="arrow-clockwise" size={16} className="mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <div className="font-medium text-[var(--color-text-main)]">Full Sync</div>
+                                            <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                                                All records from the beginning
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    ) : undefined
+                }
+                /*
                  * Wider for the two tabs that are grids rather than summaries.
                  *
                  * Details is a dozen labelled values and reads well narrow.
@@ -954,87 +1035,6 @@ export default function Storefronts() {
                                     </TabsList>
                                 </Tabs>
 
-                                {/*
-                                  Sync sits with the tabs, not in the details
-                                  pane, because it is what the other two tabs
-                                  are for: field mapping reads its paths from a
-                                  real record, and the status list is learned
-                                  from real orders. Buried under Details, the
-                                  one button that fetches them was unreachable
-                                  from the screens that need them.
-                                  
-                                  Dropdown provides Incremental and Full sync:
-                                  - Incremental: Only new/modified since last sync
-                                  - Full: All records from beginning (for recovery)
-                                */}
-                                <div className="relative">
-                                    <div className="flex gap-0">
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary rounded-r-none border-r-0"
-                                            onClick={() => syncShop.mutate({ full: false })}
-                                            disabled={syncShop.isPending}
-                                        >
-                                            <Icon
-                                                name={syncShop.isPending ? 'spinner' : 'arrows-clockwise'}
-                                                size={14}
-                                                className={syncShop.isPending ? 'animate-spin' : undefined}
-                                            />
-                                            <span>{syncShop.isPending ? 'Syncing…' : 'Sync'}</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary rounded-l-none px-2"
-                                            onClick={() => setShowSyncMenu(!showSyncMenu)}
-                                            disabled={syncShop.isPending}
-                                        >
-                                            <Icon name="caret-down" size={12} />
-                                        </button>
-                                    </div>
-                                    
-                                    {showSyncMenu && (
-                                        <>
-                                            <div
-                                                className="fixed inset-0 z-10"
-                                                onClick={() => setShowSyncMenu(false)}
-                                            />
-                                            <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
-                                                <button
-                                                    type="button"
-                                                    className="flex w-full items-start gap-3 px-4 py-3 text-left text-sm hover:bg-[var(--shell-hover)]"
-                                                    onClick={() => {
-                                                        setShowSyncMenu(false);
-                                                        syncShop.mutate({ full: false });
-                                                    }}
-                                                >
-                                                    <Icon name="arrows-clockwise" size={16} className="mt-0.5 flex-shrink-0" />
-                                                    <div>
-                                                        <div className="font-medium text-[var(--color-text-main)]">Incremental Sync</div>
-                                                        <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                                                            Only new or modified records
-                                                        </div>
-                                                    </div>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="flex w-full items-start gap-3 border-t border-[var(--shell-border)] px-4 py-3 text-left text-sm hover:bg-[var(--shell-hover)]"
-                                                    onClick={() => {
-                                                        setShowSyncMenu(false);
-                                                        syncShop.mutate({ full: true });
-                                                    }}
-                                                >
-                                                    <Icon name="arrow-clockwise" size={16} className="mt-0.5 flex-shrink-0" />
-                                                    <div>
-                                                        <div className="font-medium text-[var(--color-text-main)]">Full Sync</div>
-                                                        <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                                                            All records from the beginning
-                                                        </div>
-                                                    </div>
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
                             </div>
                         )}
 
