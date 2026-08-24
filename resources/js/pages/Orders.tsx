@@ -2506,24 +2506,20 @@ export default function Orders() {
                                     somebody actually meant to do.
                                   */
 
-                                  ...(availableFulfilmentStatuses.length > 0
-                                      ? [
-                                            {
-                                                label: 'Fulfilment',
-                                                icon: 'package',
-                                                items: availableFulfilmentStatuses.map((status) => ({
-                                                    key: `fulfilment-${status.value}`,
-                                                    label: status.label,
-                                                    onSelect: () =>
-                                                        bulkUpdate.mutate({
-                                                            order_ids: selectedOrders,
-                                                            action: 'update_status',
-                                                            fulfilment_status: status.value,
-                                                        }),
-                                                })),
-                                            },
-                                        ]
-                                      : []),
+                                  /*
+                                    ── Nor fulfilment ──────────────────────────
+
+                                    The same argument as the payment status
+                                    above it. Whether an order has gone out is a
+                                    fact about a shipment, and there is one of
+                                    those in the row already -- so setting it by
+                                    hand states that ten orders shipped while
+                                    the courier column beside them still says
+                                    nothing was dispatched.
+
+                                    It follows the dispatch, and dispatching is
+                                    in this menu a few lines down.
+                                  */
 
                                   ...(tab !== 'archived' && couriers.length > 0
                                       ? [

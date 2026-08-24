@@ -275,20 +275,28 @@ export function BulkActionsMenu({
                                           has two left margins and reads as two
                                           menus stacked.
 
-                                          Indented past the heading, and the
-                                          icon indented with it.
+                                          Indented under a heading, and only
+                                          under a heading.
 
-                                          Aligning the text alone was not
-                                          enough: an item's icon then shared its
-                                          left edge with the heading's, so a
-                                          group whose items have icons -- the
-                                          documents, the couriers -- read as
-                                          un-indented beside a group whose
-                                          items have none. The row moves, not
-                                          just the words in it.
+                                          The whole row moves, icon included --
+                                          aligning the words alone left an
+                                          item's icon sharing a left edge with
+                                          its heading's, so a group whose items
+                                          have icons read as un-indented beside
+                                          one whose items have none.
+
+                                          A group with no heading is not
+                                          indented at all. There is nothing
+                                          above those items for them to belong
+                                          to, and pushing them in anyway invents
+                                          a hierarchy with the parent missing.
+                                          They sit on the headings' own line, as
+                                          peers of the sections rather than
+                                          members of one.
                                         */
                                         className={cn(
-                                            'flex w-full items-center gap-2 py-1.5 pl-6 pr-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                            'flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                                            group.label ? 'pl-6' : 'pl-3',
                                             item.variant === 'danger'
                                                 ? 'hover:bg-[var(--color-danger-subtle)]'
                                                 : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
@@ -340,7 +348,10 @@ export function BulkActionsMenu({
                                             setOpen(false);
                                             item.onSelect();
                                         }}
-                                        className="flex w-full items-center gap-2 py-1.5 pl-6 pr-3 text-left text-sm transition-colors hover:bg-[var(--color-danger-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
+                                        /* pl-3: these have no heading either,
+                                           so they line up with the section
+                                           titles rather than under one. */
+                                        className="flex w-full items-center gap-2 py-1.5 pl-3 pr-3 text-left text-sm transition-colors hover:bg-[var(--color-danger-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
                                         style={{ color: 'var(--color-danger-text)' }}
                                     >
                                         <span className="flex w-4 shrink-0 justify-center">
