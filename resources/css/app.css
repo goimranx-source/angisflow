@@ -2988,12 +2988,19 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        across it reads as a row of equals rather than a huddle in one corner.
        min-width is what stops that becoming a squeeze: past the point where
        they would shrink below a hittable size, the strip scrolls instead. */
+    /*
+     * 40px, the same square a menu row's icon box is.
+     *
+     * At 32 it was a smaller mark than everything under it and its highlight
+     * was a smaller slab, so the strip read as a different kind of thing rather
+     * than the same thing at the top of the list.
+     */
     .primary-chip {
         display: grid;
         flex: none;
         place-items: center;
-        width: 2rem;
-        height: 2rem;
+        width: 40px;
+        height: 40px;
         border-radius: 5px;
         color: var(--shell-text);
         transition:
@@ -3004,8 +3011,8 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
     /* Collapsed there is one column, so they stack at a fixed size instead. */
     html.rail-collapsed:not(.rail-peek) .primary-chip {
         flex: none;
-        width: 2rem;
-        height: 2rem;
+        width: 40px;
+        height: 40px;
     }
 
     .primary-chip:hover {
@@ -3013,13 +3020,16 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         color: var(--nav-highlight-text);
     }
 
+    /* Left behind when hover went dark: the chip you were on stayed a pale
+       grey, so the strip had a light "here" and a dark "pointing at" and the
+       two read as unrelated states. */
     .primary-chip.is-active {
-        background: var(--shell-hover);
-        color: var(--shell-text-strong);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
     
     .primary-chip.is-active:hover {
-        background: var(--shell-active-soft);
+        background: var(--nav-highlight);
     }
 
     /* ── The workspace and business selects ─────────────────────────────── */
@@ -4892,9 +4902,16 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
        the same hover-to-reveal bar as everywhere else, not a permanently
        invisible one. */
 
-    /* Tight. It is a strip of four icons, not a section. */
+    /*
+     * 15px, which is not arbitrary: it is where a menu icon starts.
+     *
+     * .rail-nav insets its rows by 10px and each row insets its own icon box by
+     * a further 5. The strip was at 8, so its icons sat seven pixels left of
+     * every icon below them -- close enough to look like a mistake rather than
+     * a margin. Same number on the right, where a menu row's caret also stops.
+     */
     .rail-primary {
-        padding: 6px 8px;
+        padding: 6px 15px;
     }
 
 
@@ -5067,6 +5084,49 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         margin-inline: auto;
         margin-bottom: 6px;
         justify-content: center;
+    }
+
+    /*
+     * ── Collapsed, the two blocks are the same column ───────────────────────
+     *
+     * A 40px square cannot be centred inside a 38px content box, and that is
+     * what 10px of side padding leaves in a 58px rail: `margin-inline: auto`
+     * gives up and the square overflows to one side. Both blocks drop their
+     * side padding when there is nothing but icons in them, and the squares
+     * centre in the full width -- the same 9px either side, in both.
+     */
+    html.rail-collapsed:not(.rail-peek) .rail-nav,
+    html.rail-collapsed:not(.rail-peek) .rail-primary {
+        padding-inline: 0;
+    }
+
+    /*
+     * And no scrollbar, which was the other half of it.
+     *
+     * The rail's scrollbar is thin and painted transparent until you scroll,
+     * so it looks like it costs nothing. It does not look like anything and it
+     * still takes ten pixels of width, permanently, off the right-hand side.
+     *
+     * Expanded that is ten pixels off a 248px rail, taken from the right where
+     * labels have room to spare -- invisible, and it leaves the left edge where
+     * the strip above expects to find it. Collapsed it is ten pixels off
+     * fifty-eight, and it is the entire reason the squares sat five from the
+     * left edge and fifteen from the right.
+     *
+     * Gone here, and the rail still scrolls by wheel and by keyboard. A column
+     * of eleven icons is a thing you scan, not a document you track your place
+     * in.
+     */
+    html.rail-collapsed:not(.rail-peek) .rail-nav {
+        scrollbar-width: none;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .rail-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    html.rail-collapsed:not(.rail-peek) .primary-chip {
+        margin-inline: auto;
     }
 
     .nav-flat.active .nav-icon {
@@ -5555,10 +5615,12 @@ html.rail-peek/* Whatever a viewer has told their system about motion wins. The 
         background: transparent;
     }
 
-    /* Active states for collapsed rail icons */
+    /* Active states for collapsed rail icons — the same fill the expanded rail
+       uses, which this rule was still undoing with the old pale grey. */
     html.rail-collapsed:not(.rail-peek) .rail .nav-flat.active,
     html.rail-collapsed:not(.rail-peek) .rail .nav-parent.holds-active {
-        background: var(--shell-active-soft);
+        background: var(--nav-highlight);
+        color: var(--nav-highlight-text);
     }
 
     html.rail-collapsed:not(.rail-peek) .rail .nav-flat.active .nav-icon,

@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { FieldMapPanel } from '@/pages/storefront/FieldMapPanel';
 import { StatusMapPanel } from '@/pages/storefront/StatusMapPanel';
 import { useMoney } from '@/hooks/useMoney';
+import { FlyoutBackdrop } from '@/components/ui/FlyoutBackdrop';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
@@ -139,12 +140,9 @@ function RowActions({
                 rect &&
                 createPortal(
                     <>
-                        <div
-                            className="flyout-backdrop fixed inset-0 z-[var(--z-modal)]"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onToggle();
-                            }}
+                        <FlyoutBackdrop
+                            onClose={onToggle}
+                            layer="var(--z-modal)"
                         />
 
                         <div
@@ -859,12 +857,8 @@ export default function Storefronts() {
 
                                 {filtersOpen && (
                                     <>
-                                        {/* A click anywhere else closes it, which
-                                            is what people expect of something
-                                            that opened over the page. */}
-                                        <div
-                                            className="flyout-backdrop fixed inset-0 z-[var(--z-flyout)]"
-                                            onClick={() => setFiltersOpen(false)}
+                                        <FlyoutBackdrop
+                                            onClose={() => setFiltersOpen(false)}
                                         />
 
                                         <div
@@ -1412,9 +1406,9 @@ export default function Storefronts() {
                                     
                         {showSyncMenu && (
                             <>
-                                <div
-                                    className="flyout-backdrop fixed inset-0 z-10"
-                                    onClick={() => setShowSyncMenu(false)}
+                                <FlyoutBackdrop
+                                    onClose={() => setShowSyncMenu(false)}
+                                    layer="calc(var(--z-modal) + 1)"
                                 />
                                 <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--shell-bg)] shadow-lg">
                                     <button
