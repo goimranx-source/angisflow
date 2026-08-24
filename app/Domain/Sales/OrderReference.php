@@ -19,14 +19,19 @@ use Illuminate\Support\Facades\DB;
  * shops will eventually both send an order 1001 and there is nowhere to put the
  * second.
  *
- * ── SO-YYYY-NNNN ─────────────────────────────────────────────────────────────
+ * ── SO26-0001 ────────────────────────────────────────────────────────────────
  *
- * The shape OrderService has minted for counter sales since long before this
- * class, kept rather than replaced: a second format for the same idea is how an
- * application ends up with two names for one thing.
+ * Any format putting a four-digit year between two separators reads as a date,
+ * whichever separator is used -- SO-2026-0001 is a long word with two stumbles
+ * in it, and SO/2026/0001 is worse, because that is how a date is written.
  *
- * Restarting each year is what accountants expect and what makes a reference
- * legible on its own — SO-2026-0004 says when as well as which.
+ * Two digits of year, fused to the prefix, and one separator. "SO26" becomes a
+ * single token that reads as a label rather than as a number in its own right,
+ * and what is left is plainly a label and a counter. Short enough to read back
+ * over the phone in one go, and impossible to mistake for a date.
+ *
+ * Restarting each year is what accountants expect and what keeps the counter
+ * short; the year in the label is what stops two years colliding.
  */
 final class OrderReference
 {
@@ -43,14 +48,15 @@ final class OrderReference
      */
     public static function next(int $businessId, ?string $orderedOn = null): string
     {
-        $year = substr($orderedOn ?: now()->toDateString(), 0, 4);
-        $prefix = 'SO-'.$year.'-';
+        // The last two digits of the year the order was placed in.
+        $year = substr($orderedOn ?: now()->toDateString(), 2, 2);
+        $prefix = 'SO'.$year.'-';
 
         /*
          * Ordered by length first.
          *
-         * These are strings, and a string sort puts SO-2026-10000 before
-         * SO-2026-9999 — so at the ten-thousandth order of a year the sequence
+         * These are strings, and a string sort puts SO26-10000 before
+         * SO26-9999 — so at the ten-thousandth order of a year the sequence
          * would quietly start again at 10000 and collide with itself until
          * somebody noticed. Shorter strings first, then alphabetically, is
          * numeric order for a zero-padded sequence of any width.

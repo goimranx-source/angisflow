@@ -184,9 +184,9 @@ type OrdersResponse = {
  * what every invoice and every order system in the world already does:
  *
  * The hash says "this is a number for this thing", so nobody has to work out
- * whether SO is a customer or a status. It is set quieter than the rest,
- * because it is punctuation and not information — the eye should land on what
- * follows it.
+ * whether SO is a customer or a status. Same weight and colour as the rest of
+ * it: a greyed hash beside a black reference reads as two things sharing a
+ * cell rather than one identifier, which is the opposite of what it is for.
  *
  * Tabular figures, so the digits sit in fixed columns and a list of references
  * lines up down the page instead of ragging like ordinary text.
@@ -196,10 +196,156 @@ type OrdersResponse = {
  */
 function OrderRef({ value }: { value: string }) {
     return (
-        <span className="inline-flex items-baseline whitespace-nowrap font-semibold tabular-nums text-[var(--color-text-main)]">
-            <span className="text-[var(--color-text-subtle)]">#</span>
-            {value}
+        <span className="whitespace-nowrap font-semibold tabular-nums text-[var(--color-text-main)]">
+            #{value}
         </span>
+    );
+}
+
+/**
+ * Which page numbers to draw, with gaps where there are too many.
+ *
+ * ── Why not all of them ──────────────────────────────────────────────────────
+ *
+ * Forty pages is forty targets in a row nobody can aim at, and it pushes the
+ * first and last off the end of the bar — which are the two anybody actually
+ * wants. Kept: the first, the last, the current, and one either side of it. The
+ * stretches between become a gap.
+ *
+ * Below eight pages nothing is hidden, because a gap standing in for one number
+ * is worse than the number.
+ */
+function pageWindow(page: number, pages: number): Array<number | 'gap'> {
+    if (pages <= 7) {
+        return Array.from({ length: pages }, (_, i) => i + 1);
+    }
+
+    const around = [page - 1, page, page + 1].filter((n) => n > 1 && n < pages);
+    const shown = [1, ...around, pages];
+
+    const out: Array<number | 'gap'> = [];
+
+    for (const n of shown) {
+        const last = out[out.length - 1];
+
+        // A gap only where something is actually missing. Between 3 and 5 the
+        // gap would be standing in for a single page, so 4 is drawn instead.
+        if (typeof last === 'number' && n - last === 2) {
+            out.push(last + 1);
+        } else if (typeof last === 'number' && n - last > 2) {
+            out.push('gap');
+        }
+
+        out.push(n);
+    }
+
+    return out;
+}
+
+/**
+ * The pages, and a way to jump to one that is not on the bar.
+ */
+function Pager({
+    page,
+    pages,
+    onGo,
+}: {
+    page: number;
+    pages: number;
+    onGo: (page: number) => void;
+}) {
+    const [typed, setTyped] = useState('');
+
+    const jump = () => {
+        const wanted = Number(typed);
+
+        // Silently ignored rather than clamped: somebody typing 500 into a
+        // 12-page list has misread something, and dropping them on page 12
+        // hides that from them.
+        if (Number.isInteger(wanted) && wanted >= 1 && wanted <= pages) {
+            onGo(wanted);
+            setTyped('');
+        }
+    };
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            <PageStep
+                icon="caret-left"
+                label="Previous page"
+                disabled={page === 1}
+                onClick={() => onGo(Math.max(1, page - 1))}
+            />
+
+            {pageWindow(page, pages).map((slot, i) =>
+                slot === 'gap' ? (
+                    <span
+                        key={`gap-${i}`}
+                        className="px-1 text-[var(--color-text-subtle)]"
+                        aria-hidden="true"
+                    >
+                        …
+                    </span>
+                ) : (
+                    <button
+                        key={slot}
+                        type="button"
+                        onClick={() => onGo(slot)}
+                        aria-current={slot === page ? 'page' : undefined}
+                        className={cn(
+                            'h-7 min-w-7 rounded-[var(--shell-radius-sm)] border px-2 text-sm tabular-nums transition-colors',
+                            slot === page
+                                ? 'border-transparent bg-[var(--color-brand)] font-semibold text-[var(--color-text-on-accent)]'
+                                : 'text-[var(--color-text-body)] hover:bg-[var(--shell-hover)]',
+                        )}
+                        style={
+                            slot === page ? undefined : { borderColor: 'var(--shell-border)' }
+                        }
+                    >
+                        {slot}
+                    </button>
+                ),
+            )}
+
+            <PageStep
+                icon="caret-right"
+                label="Next page"
+                disabled={page === pages}
+                onClick={() => onGo(Math.min(pages, page + 1))}
+            />
+
+            {/*
+              For the page that is not on the bar.
+
+              With the middle collapsed, most pages are not reachable by
+              pressing a number — and stepping to page 30 one press at a time is
+              not a way to get anywhere.
+            */}
+            <span className="ml-1 flex items-center gap-1.5">
+                <input
+                    value={typed}
+                    onChange={(event) => setTyped(event.target.value.replace(/\D/g, ''))}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            jump();
+                        }
+                    }}
+                    className="field h-7 w-14 py-0 px-2 text-center text-xs tabular-nums"
+                    placeholder="Page"
+                    aria-label={`Go to a page, 1 to ${pages}`}
+                    inputMode="numeric"
+                />
+                <button
+                    type="button"
+                    onClick={jump}
+                    disabled={typed === ''}
+                    className="btn btn-secondary !h-7 !px-2.5 !text-xs"
+                >
+                    Go
+                </button>
+            </span>
+        </div>
     );
 }
 
@@ -1413,10 +1559,28 @@ export default function Orders() {
                                           will both have a 1043 eventually. The date
                                           has a column.
                                         */
+                                        /*
+                                          The reference opens the order, not the
+                                          row.
+
+                                          A whole row that answers a click makes
+                                          every pixel of it a target, including
+                                          the cells somebody is reading a figure
+                                          out of, the gaps between controls, and
+                                          the courier picker. The reference is
+                                          the thing that looks like a way in, so
+                                          it is the thing that is one.
+                                        */
                                         render: (order) => (
-                                            <OrderRef
-                                                value={order.reference ?? order.order_number}
-                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedOrder(order)}
+                                                className="text-left transition hover:text-[var(--color-brand)]"
+                                            >
+                                                <OrderRef
+                                                    value={order.reference ?? order.order_number}
+                                                />
+                                            </button>
                                         ),
                                     },
                                     {
@@ -1866,8 +2030,6 @@ export default function Orders() {
                                 sortBy={sortBy}
                                 sortDirection={sortDirection}
                                 onSort={handleSort}
-                                onRowClick={(order) => setSelectedOrder(order)}
-                                clickable
                                 getRowKey={(order) => order.id}
                                 emptyState={
                                     <EmptyState
@@ -2006,130 +2168,86 @@ export default function Orders() {
                         */}
                         {!isLoading && orders.length > 0 && (
                             <div
-                                className="flex flex-col gap-3 border-t px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                                className="flex flex-col gap-3 border-t px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between"
                                 style={{ borderColor: 'var(--shell-border)' }}
                             >
-                                {view === 'list' ? (
-                                    <SelectCheckbox
-                                        checked={isAllSelected}
-                                        indeterminate={isSomeSelected}
-                                        onChange={handleSelectAll}
-                                        /*
-                                          The box stays; the words beside it
-                                          change to a count once anything is
-                                          picked, because at that point the
-                                          useful fact is how many rather than
-                                          the offer to pick more.
-                                        */
-                                        label={
-                                            selectedOrders.length > 0
-                                                ? `${selectedOrders.length} selected`
-                                                : `Select all ${orders.length}`
-                                        }
-                                    />
-                                ) : (
-                                    <span />
-                                )}
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--color-text-muted)]">
+                                    {/*
+                                      The box, and no words beside it.
 
-                                {meta && (
-                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--color-text-muted)]">
-                                        <span className="whitespace-nowrap">
-                                            Showing{' '}
-                                            <span className="font-medium text-[var(--color-text-main)]">
-                                                {(meta.current_page - 1) * meta.per_page + 1}
-                                                –
-                                                {Math.min(
-                                                    meta.current_page * meta.per_page,
-                                                    meta.total,
-                                                )}
-                                            </span>
-                                        </span>
+                                      "Select all 21" spelled out what a
+                                      checkbox at the foot of a table already
+                                      means, in the one place on the row where
+                                      there is something else to say. The count
+                                      still appears — but only once something is
+                                      picked, when it is a fact rather than an
+                                      instruction.
+                                    */}
+                                    {view === 'list' && (
+                                        <SelectCheckbox
+                                            checked={isAllSelected}
+                                            indeterminate={isSomeSelected}
+                                            onChange={handleSelectAll}
+                                            label={
+                                                selectedOrders.length > 0
+                                                    ? `${selectedOrders.length} selected`
+                                                    : undefined
+                                            }
+                                        />
+                                    )}
 
-                                        {/*
-                                          The page size sits inside the sentence
-                                          rather than in a corner of its own. It
-                                          is the number the sentence is about,
-                                          and somebody who wants more rows looks
-                                          where the row count already is.
-                                        */}
-                                        <select
-                                            /*
-                                              w-auto against .field's width:100%.
-                                              
-                                              .field is written for a form, where
-                                              a control fills its column. Inside a
-                                              sentence it has to be the width of
-                                              its own text, or it takes the line
-                                              and the sentence breaks into three.
-                                            */
-                                            className="field h-7 w-auto py-0 pr-7 pl-2 text-xs"
-                                            value={perPage}
-                                            onChange={(event) => {
-                                                setPerPage(Number(event.target.value));
+                                    {meta && (
+                                        <>
+                                            <span className="whitespace-nowrap">Page size:</span>
 
-                                                // Page 7 of a 25-row list is
-                                                // past the end of a 100-row one.
-                                                setPage(1);
-                                            }}
-                                            aria-label="Rows per page"
-                                        >
-                                            {[20, 25, 50, 100].map((size) => (
-                                                <option key={size} value={size}>
-                                                    {size} per page
-                                                </option>
-                                            ))}
-                                        </select>
+                                            <select
+                                                /* w-auto against .field's width:100%. Inside a
+                                                   sentence a control has to be the width of its
+                                                   own text, or it takes the line. */
+                                                className="field h-7 w-auto py-0 pr-7 pl-2 text-xs"
+                                                value={perPage}
+                                                onChange={(event) => {
+                                                    setPerPage(Number(event.target.value));
 
-                                        <span className="whitespace-nowrap">
-                                            of{' '}
-                                            <span className="font-medium text-[var(--color-text-main)]">
-                                                {meta.total.toLocaleString()}
-                                            </span>
-                                        </span>
+                                                    // Page 7 of a 25-row list is
+                                                    // past the end of a 100-row one.
+                                                    setPage(1);
+                                                }}
+                                                aria-label="Rows per page"
+                                            >
+                                                {[10, 20, 25, 50, 100].map((size) => (
+                                                    <option key={size} value={size}>
+                                                        {size}
+                                                    </option>
+                                                ))}
+                                            </select>
 
-                                        {meta.last_page > 1 && (
-                                            <div className="flex items-center gap-1">
-                                                <PageStep
-                                                    icon="caret-double-left"
-                                                    label="First page"
-                                                    disabled={meta.current_page === 1}
-                                                    onClick={() => setPage(1)}
-                                                />
-                                                <PageStep
-                                                    icon="caret-left"
-                                                    label="Previous page"
-                                                    disabled={meta.current_page === 1}
-                                                    onClick={() =>
-                                                        setPage(Math.max(1, meta.current_page - 1))
-                                                    }
-                                                />
-
-                                                <span className="px-2 whitespace-nowrap tabular-nums">
-                                                    {meta.current_page} / {meta.last_page}
+                                            <span className="whitespace-nowrap">
+                                                <span className="font-medium text-[var(--color-text-main)]">
+                                                    {(meta.current_page - 1) * meta.per_page + 1}
+                                                </span>{' '}
+                                                to{' '}
+                                                <span className="font-medium text-[var(--color-text-main)]">
+                                                    {Math.min(
+                                                        meta.current_page * meta.per_page,
+                                                        meta.total,
+                                                    )}
+                                                </span>{' '}
+                                                of{' '}
+                                                <span className="font-medium text-[var(--color-text-main)]">
+                                                    {meta.total.toLocaleString()}
                                                 </span>
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
 
-                                                <PageStep
-                                                    icon="caret-right"
-                                                    label="Next page"
-                                                    disabled={meta.current_page === meta.last_page}
-                                                    onClick={() =>
-                                                        setPage(
-                                                            Math.min(
-                                                                meta.last_page,
-                                                                meta.current_page + 1,
-                                                            ),
-                                                        )
-                                                    }
-                                                />
-                                                <PageStep
-                                                    icon="caret-double-right"
-                                                    label="Last page"
-                                                    disabled={meta.current_page === meta.last_page}
-                                                    onClick={() => setPage(meta.last_page)}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
+                                {meta && meta.last_page > 1 && (
+                                    <Pager
+                                        page={meta.current_page}
+                                        pages={meta.last_page}
+                                        onGo={setPage}
+                                    />
                                 )}
                             </div>
                         )}
