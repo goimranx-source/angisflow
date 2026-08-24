@@ -7,6 +7,7 @@ import { toast } from '@/lib/toast';
 
 import { CustomField, type CustomFieldDef } from './CustomField';
 import { LineItems, type OrderLine } from './LineItems';
+import { placementFor, type Placement } from '@/pages/orders/fieldPlacement';
 import { isMedia, isWide } from './fieldTypes';
 
 type Editor = {
@@ -297,8 +298,58 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
     const grid = (children: ReactNode) => <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
 
-    const mediaFields = editor.custom_fields.filter((f) => isMedia(f.type));
-    const plainFields = editor.custom_fields.filter((f) => !isMedia(f.type));
+    /*
+     * ── A shop's own fields, sorted into the form's own sections ────────────
+     *
+     * Every one of them used to land in a box at the foot of the form called
+     * "Additional fields" — a delivery instruction three sections below the
+     * delivery address, a second phone nowhere near the first, a payment
+     * reference under the notes. The form has sections for exactly these things
+     * and was not using them.
+     *
+     * `placementFor` reads the field's type first and its name second, and
+     * returns which section it belongs in. It is a guess and is allowed to be
+     * wrong; the cost of wrong is a field one section from where somebody
+     * looked, which is what the old behaviour cost on every field every time.
+     *
+     * Anything it cannot place stays at the bottom, which is the honest answer
+     * rather than a confident wrong one.
+     */
+    const placed = editor.custom_fields.reduce<Record<Placement, CustomFieldDef[]>>(
+        (into, field) => {
+            const where = isMedia(field.type)
+                ? 'media'
+                : placementFor(field.key, field.type, field.label);
+
+            into[where].push(field);
+
+            return into;
+        },
+        { customer: [], delivery: [], payment: [], dates: [], media: [], other: [] },
+    );
+
+    const mediaFields = placed.media;
+
+    /**
+     * The extra fields belonging to one section, or nothing.
+     *
+     * Rendered inside the section's own grid, after its built-in fields, so a
+     * shop's delivery slot sits with the delivery address rather than in a
+     * different box with a different heading.
+     */
+    const extras = (where: Placement) =>
+        placed[where].map((f) => (
+            <div key={f.key} className={isWide(f.type) ? 'sm:col-span-2' : undefined}>
+                <CustomField
+                    field={f}
+                    value={custom[f.key]}
+                    onChange={(next) => {
+                        setCustom((current) => ({ ...current, [f.key]: next }));
+                        setDirty(true);
+                    }}
+                />
+            </div>
+        ));
 
     const statusOptions = editor.statuses.map((s) => ({
         value: s.value,
@@ -345,6 +396,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 />
                                 <Text name="ordered_on" label="Order date" type="date" />
                                 <Text name="external_ref" label="External reference" />
+                                {extras('dates')}
 
                                 <label className="flex items-center gap-2.5 sm:col-span-2">
                                     <input
@@ -388,6 +440,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                     label="Tax number"
                                     mapKey="customer.tax_number"
                                 />
+                                {extras('customer')}
                             </>,
                         )}
                     </Card>
@@ -432,6 +485,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 <Text name="shipping_city" label="City" />
                                 <Text name="shipping_postcode" label="Postcode" />
                                 <Text name="shipping_country" label="Country" />
+                                {extras('delivery')}
                             </>,
                         )}
                     </Card>
@@ -463,6 +517,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                             <Money name="tax" label="Tax" />
                             <Money name="total" label="Total" />
                             <Money name="paid" label="Paid" />
+                            {extras('payment')}
                         </div>
                         <p className="mt-3 border-t border-[var(--shell-border)] pt-3 text-xs text-[var(--color-text-subtle)]">
                             Most shops derive these from the order&rsquo;s lines and will recalculate them
@@ -477,22 +532,18 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                         </div>
                     </Card>
 
-                    {plainFields.length > 0 && (
-                        <Card title="Additional fields" hint="Defined by this business">
-                            {grid(
-                                plainFields.map((f) => (
-                                    <div key={f.key} className={isWide(f.type) ? 'sm:col-span-2' : undefined}>
-                                        <CustomField
-                                            field={f}
-                                            value={custom[f.key]}
-                                            onChange={(next) => {
-                                                setCustom((current) => ({ ...current, [f.key]: next }));
-                                                setDirty(true);
-                                            }}
-                                        />
-                                    </div>
-                                )),
-                            )}
+                    {/*
+                      What is left, and only what is left.
+
+                      A field whose name says nothing this form recognises —
+                      `order_source`, `_ga_tracked` — has no section it belongs
+                      to, and putting it in one on a weak match would be a
+                      confident lie. At the bottom, under a heading that says
+                      where it came from, it is at least obviously extra.
+                    */}
+                    {placed.other.length > 0 && (
+                        <Card title="Other details" hint="From this shop">
+                            {grid(extras('other'))}
                         </Card>
                     )}
                 </div>
