@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -19,7 +19,7 @@ import { toast } from '@/lib/toast';
 import { CustomField, type CustomFieldDef } from './CustomField';
 import { LineItems, type OrderLine } from './LineItems';
 import { placementFor, type Placement } from '@/pages/orders/fieldPlacement';
-import { isMedia, isWide } from './fieldTypes';
+import { controlFor, isMedia, isWide } from './fieldTypes';
 
 type Editor = {
     data: {
@@ -30,6 +30,24 @@ type Editor = {
         custom_fields: CustomFieldDef[];
         lines: OrderLine[];
         mapped: string[];
+
+        /**
+         * What each box actually is, from the mapping this shop uses.
+         *
+         * The form used to decide for itself and got it wrong — see
+         * OrderFormFields on the server. A country arrives here as `country`
+         * with 250 answers attached, and this shop's billing city as `area`
+         * with 581.
+         */
+        fields: Record<
+            string,
+            {
+                label: string;
+                type: string;
+                mapped: boolean;
+                options: Array<{ value: string; label: string; note?: string }> | null;
+            }
+        >;
         shop: string | null;
         symbol: string;
         statuses: Array<{ value: string; label: string; custom?: boolean }>;
@@ -37,25 +55,6 @@ type Editor = {
         couriers: Array<{ id: string; label: string | null }>;
         dispatch: { courier: string | null; status: string | null } | null;
     };
-};
-
-/**
- * A shop's name for a field is not always this form's name for it.
- *
- * The mapping screen offers `customer.first_name` and `customer.last_name`
- * where this form has one Name box, so a shop that syncs the name looked as
- * though it did not. The marks beside a label are only worth having if they are
- * right, and a mark that is missing is worse than no marks at all — it says the
- * field does not travel, which is a thing somebody will act on.
- */
-const ALIASES: Record<string, string[]> = {
-    'customer.name': ['customer.first_name', 'customer.last_name'],
-    subtotal: ['subtotal_minor'],
-    discount: ['discount_minor'],
-    shipping: ['shipping_minor'],
-    tax: ['tax_minor'],
-    total: ['total_minor'],
-    paid: ['paid_minor'],
 };
 
 /** Money, the way this order's currency writes it. */
@@ -252,9 +251,14 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
         return raw === null || raw === undefined ? '' : String(raw);
     };
 
-    /** Whether this shop sends a field, allowing for its own name for it. */
-    const syncs = (key: string): boolean =>
-        editor.mapped.includes(key) || (ALIASES[key] ?? []).some((alias) => editor.mapped.includes(alias));
+    /**
+     * Whether this shop sends a field.
+     *
+     * Answered by the server, which knows both names for it: this form has one
+     * Name box where the mapping offers first and last separately, and matching
+     * on the form's own name reported that a shop syncing the name did not.
+     */
+    const syncs = (key: string): boolean => editor.fields[key]?.mapped === true;
 
     /**
      * The marks beside a label: whether it travels, and whether you moved it.
@@ -263,9 +267,9 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
      * form where the badges are wallpaper — these are worth noticing precisely
      * because most labels have none.
      */
-    const marks = (key: string, mapKey = key) => (
+    const marks = (key: string) => (
         <>
-            {syncs(mapKey) && (
+            {syncs(key) && (
                 <span
                     className="inline-flex text-[var(--color-brand)]"
                     title="This shop sends this field, so your change travels back to it when you save"
@@ -283,6 +287,121 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
             )}
         </>
     );
+
+
+    /**
+     * One box, drawn as whatever the mapping says it is.
+     *
+     * ── Why the form no longer chooses ───────────────────────────────────────
+     *
+     * It used to. Somebody wrote a text box for the country because a country
+     * is words, and one for the billing city because a city is words — and this
+     * shop's billing city arrives as `BD-58-05`, a code with 581 legal answers,
+     * displayed raw in a box you could type anything into. The mapping screen
+     * two clicks away had been rendering it as "Satkhira Sadar" the whole time,
+     * because it read the type instead of the name.
+     *
+     * So the type decides, and it comes from the same place everything else in
+     * this application reads it from. A field whose mapping this shop has
+     * overridden takes the shop's type; everything else takes the declared
+     * default. Adding a field, or re-typing one on the mapping screen, changes
+     * this form without anybody editing it.
+     */
+    const Field = ({
+        name,
+        label,
+        info,
+        hint,
+        wide,
+        rows,
+    }: {
+        name: string;
+        /** Overrides the mapping's own wording, which is written for that screen. */
+        label?: string;
+        info?: ReactNode;
+        hint?: ReactNode;
+        wide?: boolean;
+        rows?: number;
+    }) => {
+        const meta = editor.fields[name];
+        const control = controlFor(meta?.type);
+        const shared = {
+            label: label ?? meta?.label ?? name,
+            badge: marks(name),
+            info,
+            hint,
+            wide: wide ?? isWide(meta?.type),
+        };
+
+        if (control === 'options') {
+            return (
+                <SelectField
+                    {...shared}
+                    value={val(name)}
+                    onChange={set(name)}
+                    placeholder="Not set"
+                    options={[
+                        // A way back to no answer. Without it a country picked
+                        // by mistake can be changed but never cleared.
+                        { value: '', label: 'Not set' },
+                        ...(meta?.options ?? []),
+                    ]}
+                />
+            );
+        }
+
+        if (control === 'switch') {
+            return (
+                <SwitchField {...shared} value={form[name] === true} onChange={set(name)} />
+            );
+        }
+
+        if (control === 'money') {
+            return (
+                <MoneyField
+                    {...shared}
+                    symbol={editor.symbol}
+                    value={val(name)}
+                    onChange={set(name)}
+                />
+            );
+        }
+
+        if (control === 'textarea' || control === 'code' || control === 'lines') {
+            return (
+                <TextAreaField
+                    {...shared}
+                    rows={rows ?? (control === 'code' ? 6 : 3)}
+                    mono={control === 'code'}
+                    value={val(name)}
+                    onChange={set(name)}
+                />
+            );
+        }
+
+        return (
+            <TextField
+                {...shared}
+                type={
+                    control === 'email'
+                        ? 'email'
+                        : control === 'tel'
+                          ? 'tel'
+                          : control === 'url'
+                            ? 'url'
+                            : control === 'date'
+                              ? 'date'
+                              : control === 'datetime'
+                                ? 'datetime-local'
+                                : control === 'number'
+                                  ? 'number'
+                                  : 'text'
+                }
+                value={val(name)}
+                onChange={set(name)}
+            />
+        );
+    };
 
     /*
      * ── A shop's own fields, sorted into the form's own sections ────────────
@@ -455,30 +574,20 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 info="Which shop this sale belongs to. It decides the tag on the order number, the currency, and where a change travels when it is pushed back."
                             />
 
-                            <TextField
-                                label="Order date"
-                                type="date"
-                                badge={marks('ordered_on')}
-                                value={val('ordered_on')}
-                                onChange={set('ordered_on')}
-                            />
+                            <Field name="ordered_on" label="Order date" />
 
-                            <TextField
+                            <Field
+                                name="external_ref"
                                 label="External reference"
-                                badge={marks('external_ref')}
-                                value={val('external_ref')}
-                                onChange={set('external_ref')}
                                 info="Your own reference for this order, if you use one. Not the shop's number."
                             />
 
                             {extras('dates')}
 
-                            <SwitchField
+                            <Field
+                                name="is_cod"
                                 label="Cash on delivery"
                                 wide
-                                badge={marks('is_cod')}
-                                value={form.is_cod === true}
-                                onChange={set('is_cod')}
                                 hint="The courier collects the money when the parcel is handed over."
                             />
                         </FieldGrid>
@@ -486,38 +595,11 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
                     <FieldGroup title="Customer" icon="user">
                         <FieldGrid>
-                            <TextField
-                                label="Name"
-                                badge={marks('customer_name', 'customer.name')}
-                                value={val('customer_name')}
-                                onChange={set('customer_name')}
-                            />
-                            <TextField
-                                label="Email"
-                                type="email"
-                                badge={marks('customer_email', 'customer.email')}
-                                value={val('customer_email')}
-                                onChange={set('customer_email')}
-                            />
-                            <TextField
-                                label="Phone"
-                                type="tel"
-                                badge={marks('customer_phone', 'customer.phone')}
-                                value={val('customer_phone')}
-                                onChange={set('customer_phone')}
-                            />
-                            <TextField
-                                label="Company"
-                                badge={marks('customer_company', 'customer.company')}
-                                value={val('customer_company')}
-                                onChange={set('customer_company')}
-                            />
-                            <TextField
-                                label="Tax number"
-                                badge={marks('customer_tax_number', 'customer.tax_number')}
-                                value={val('customer_tax_number')}
-                                onChange={set('customer_tax_number')}
-                            />
+                            <Field name="customer_name" label="Name" />
+                            <Field name="customer_email" label="Email" />
+                            <Field name="customer_phone" label="Phone" />
+                            <Field name="customer_company" label="Company" />
+                            <Field name="customer_tax_number" label="Tax number" />
                             {extras('customer')}
                         </FieldGrid>
                     </FieldGroup>
@@ -528,31 +610,20 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                         info="Held on the customer, not on this order — so a change here shows on their other orders too."
                     >
                         <FieldGrid>
-                            <TextField
-                                label="Address"
-                                wide
-                                badge={marks('customer_billing_address', 'customer.billing_address')}
-                                value={val('customer_billing_address')}
-                                onChange={set('customer_billing_address')}
-                            />
-                            <TextField
-                                label="City"
-                                badge={marks('customer_billing_city', 'customer.billing_city')}
-                                value={val('customer_billing_city')}
-                                onChange={set('customer_billing_city')}
-                            />
-                            <TextField
-                                label="Postcode"
-                                badge={marks('customer_billing_postcode', 'customer.billing_postcode')}
-                                value={val('customer_billing_postcode')}
-                                onChange={set('customer_billing_postcode')}
-                            />
-                            <TextField
-                                label="Country"
-                                badge={marks('customer_billing_country', 'customer.billing_country')}
-                                value={val('customer_billing_country')}
-                                onChange={set('customer_billing_country')}
-                            />
+                            <Field name="customer_billing_address" label="Address" wide />
+
+                            {/*
+                              Labelled City, typed by the mapping.
+
+                              On this shop it arrives from `_shipping_thana` as
+                              `BD-58-05` and is drawn as a picker of 581 thanas
+                              showing "Satkhira Sadar"; on a shop that sends a
+                              plain city name it is a text box. The label stays
+                              the same because the question is the same.
+                            */}
+                            <Field name="customer_billing_city" label="City" />
+                            <Field name="customer_billing_postcode" label="Postcode" />
+                            <Field name="customer_billing_country" label="Country" />
                         </FieldGrid>
                     </FieldGroup>
 
@@ -562,44 +633,12 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                         info="Held on this order, so it can differ from the customer's usual address without changing it."
                     >
                         <FieldGrid>
-                            <TextField
-                                label="Recipient"
-                                badge={marks('shipping_name')}
-                                value={val('shipping_name')}
-                                onChange={set('shipping_name')}
-                            />
-                            <TextField
-                                label="Phone"
-                                type="tel"
-                                badge={marks('shipping_phone')}
-                                value={val('shipping_phone')}
-                                onChange={set('shipping_phone')}
-                            />
-                            <TextField
-                                label="Address"
-                                wide
-                                badge={marks('shipping_address')}
-                                value={val('shipping_address')}
-                                onChange={set('shipping_address')}
-                            />
-                            <TextField
-                                label="City"
-                                badge={marks('shipping_city')}
-                                value={val('shipping_city')}
-                                onChange={set('shipping_city')}
-                            />
-                            <TextField
-                                label="Postcode"
-                                badge={marks('shipping_postcode')}
-                                value={val('shipping_postcode')}
-                                onChange={set('shipping_postcode')}
-                            />
-                            <TextField
-                                label="Country"
-                                badge={marks('shipping_country')}
-                                value={val('shipping_country')}
-                                onChange={set('shipping_country')}
-                            />
+                            <Field name="shipping_name" label="Recipient" />
+                            <Field name="shipping_phone" label="Phone" />
+                            <Field name="shipping_address" label="Address" wide />
+                            <Field name="shipping_city" label="City" />
+                            <Field name="shipping_postcode" label="Postcode" />
+                            <Field name="shipping_country" label="Country" />
                             {extras('delivery')}
                         </FieldGrid>
                     </FieldGroup>
@@ -630,21 +669,12 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                         hint={String(editor.values.currency ?? '')}
                     >
                         <FieldGrid>
-                            <MoneyField
+                            <Field
+                                name="shipping"
                                 label="Shipping"
-                                symbol={editor.symbol}
-                                badge={marks('shipping')}
-                                value={val('shipping')}
-                                onChange={set('shipping')}
                                 info="What you charged the customer for delivery — not what the courier charges you."
                             />
-                            <MoneyField
-                                label="Tax"
-                                symbol={editor.symbol}
-                                badge={marks('tax')}
-                                value={val('tax')}
-                                onChange={set('tax')}
-                            />
+                            <Field name="tax" label="Tax" />
                             {extras('payment')}
                         </FieldGrid>
 
@@ -662,7 +692,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 <ReadOnlyField
                                     label="Subtotal"
                                     value={money(editor.symbol, totals.subtotal)}
-                                    badge={marks('__subtotal', 'subtotal')}
+                                    badge={marks('subtotal')}
                                     info="What these items normally sell for, before any discount."
                                 />
                                 <ReadOnlyField
@@ -672,20 +702,20 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                             ? `−${money(editor.symbol, totals.discount)}`
                                             : money(editor.symbol, 0)
                                     }
-                                    badge={marks('__discount', 'discount')}
+                                    badge={marks('discount')}
                                     info="How much less than the usual price was charged, added up across the lines. Change a line's price to change it."
                                 />
                                 <ReadOnlyField
                                     label="Paid"
                                     value={money(editor.symbol, totals.paid)}
-                                    badge={marks('__paid', 'paid')}
+                                    badge={marks('paid')}
                                     info="The payments recorded against this order. Record a payment to change it."
                                 />
                                 <ReadOnlyField
                                     label="Total"
                                     strong
                                     value={money(editor.symbol, totals.total)}
-                                    badge={marks('__total', 'total')}
+                                    badge={marks('total')}
                                     hint={
                                         totals.outstanding > 0
                                             ? `${money(editor.symbol, totals.outstanding)} outstanding`
@@ -698,19 +728,16 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
                     <FieldGroup title="Notes" icon="note">
                         <div className="space-y-4">
-                            <TextAreaField
+                            <Field
+                                name="notes"
                                 label="Order notes"
-                                badge={marks('notes')}
-                                value={val('notes')}
-                                onChange={set('notes')}
+                                rows={3}
                                 info="About this order. Kept here, and sent to the shop if it maps the field."
                             />
-                            <TextAreaField
+                            <Field
+                                name="customer_notes"
                                 label="Customer notes"
                                 rows={2}
-                                badge={marks('customer_notes', 'customer.notes')}
-                                value={val('customer_notes')}
-                                onChange={set('customer_notes')}
                                 info="About the customer, on their record — so it shows on every order they place."
                             />
                         </div>

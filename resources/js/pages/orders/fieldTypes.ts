@@ -30,6 +30,9 @@ export type FieldType =
     | 'email' | 'digits' | 'url'
     | 'date' | 'datetime'
     | 'boolean'
+    | 'select' | 'radio' | 'checkbox'
+    | 'country' | 'state' | 'area'
+    | 'textarea'
     | 'image' | 'image_list' | 'file' | 'video'
     | 'rich_text' | 'list' | 'colour' | 'json';
 
@@ -44,6 +47,8 @@ export type Control =
     | 'date'
     | 'datetime'
     | 'switch'
+    /** A fixed set of legal answers, drawn as the searchable picker. */
+    | 'options'
     | 'colour'
     | 'textarea'
     | 'lines'
@@ -77,6 +82,28 @@ const CONTROLS: Record<string, Control> = {
     datetime: 'datetime',
 
     boolean: 'switch',
+
+    /*
+     * ── Everything with a fixed set of answers ───────────────────────────────
+     *
+     * A country is not text that happens to be upper-case, and a thana is not a
+     * city somebody types. Each has a list — 250 and 581 of them respectively —
+     * and the list is what makes the difference between a field somebody can
+     * fill in correctly and one they can only guess at. All of them get the
+     * same searchable picker; where the answers come from is the caller's
+     * business, not this map's.
+     */
+    select: 'options',
+    radio: 'options',
+    country: 'options',
+    state: 'options',
+    area: 'options',
+
+    // No multi-select control yet, so the honest fallback is one per line
+    // rather than a picker that can only hold one of several answers.
+    checkbox: 'lines',
+
+    textarea: 'textarea',
     colour: 'colour',
 
     rich_text: 'textarea',

@@ -15,6 +15,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Integrations\Models\IntegrationLink;
 use App\Domain\Integrations\PushDispatcher;
 use App\Domain\Integrations\Support\FieldMapSet;
+use App\Domain\Integrations\Support\OrderFormFields;
 use App\Domain\Integrations\Support\OrderStatuses;
 use App\Domain\Integrations\Support\Transform;
 use App\Domain\Money\Currencies;
@@ -1686,6 +1687,21 @@ class OrdersEndpoint
 
                 // What this shop actually sends, so the form can lead with it.
                 'mapped' => array_values(array_filter(array_unique($mapped))),
+
+                /*
+                 * What each box on the form is, rather than what its name looks
+                 * like it should be.
+                 *
+                 * The form used to decide its own controls and got two of them
+                 * badly wrong — see OrderFormFields, which reads the type from
+                 * the mapping this shop actually uses and falls back to the
+                 * field's declared default. Countries, districts and thanas
+                 * arrive with their legal answers attached.
+                 */
+                'fields' => OrderFormFields::describe(
+                    $model,
+                    $link?->integration,
+                ),
 
                 'shop' => $model->storefront?->name,
                 'symbol' => Currencies::symbol((string) $model->currency),

@@ -73,7 +73,18 @@ final class EntityFields
                 'shipping_address' => ['Ship to address', 'trim'],
                 'shipping_city' => ['Ship to city', 'trim'],
                 'shipping_postcode' => ['Ship to postcode', 'trim'],
-                'shipping_country' => ['Ship to country', 'upper'],
+                /*
+                 * A country, not a word in capitals.
+                 *
+                 * `upper` is what you reach for when you are thinking about the
+                 * string — it is stored as a code, so make sure it is
+                 * upper-case. But the type is what every screen downstream uses
+                 * to decide how to show the field, and "text in capitals" told
+                 * the edit form to draw a free-text box for a value with 250
+                 * legal answers. Declared as what it is, that form draws a
+                 * picker without being told to.
+                 */
+                'shipping_country' => ['Ship to country', 'country'],
                 'notes' => ['Notes', 'trim'],
 
                 /*
@@ -98,7 +109,7 @@ final class EntityFields
                 'customer.billing_address' => ['Customer — Billing address', 'trim'],
                 'customer.billing_city' => ['Customer — Billing city', 'trim'],
                 'customer.billing_postcode' => ['Customer — Billing postcode', 'trim'],
-                'customer.billing_country' => ['Customer — Billing country', 'upper'],
+                'customer.billing_country' => ['Customer — Billing country', 'country'],
                 'customer.notes' => ['Customer — Notes', 'trim'],
             ],
 
