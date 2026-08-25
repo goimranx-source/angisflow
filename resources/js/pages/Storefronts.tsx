@@ -1376,6 +1376,134 @@ export default function Storefronts() {
                 title={selectedStorefront?.name ?? ''}
                 subtitle={selectedStorefront?.domain ?? ''}
                 /*
+                 * ── The shop's own mark, at the top and only at the top ──────
+                 *
+                 * It used to be visible nowhere except halfway down the edit
+                 * form, which is the one place somebody is not looking for it:
+                 * a shop's logo answers "which shop is this?", and that is asked
+                 * once, on arrival.
+                 *
+                 * Reads the edited logo while editing, so choosing a new one
+                 * shows up where the logo actually lives rather than only in the
+                 * form's own preview.
+                 *
+                 * Contained rather than cropped, because these are wordmarks
+                 * more often than faces, and a circle that crops one cuts the
+                 * name in half.
+                 */
+                media={
+                    selectedStorefront && (
+                        <ShopMark
+                            url={editing ? edit.logo_url : selectedStorefront.logo_url}
+                            code={selectedStorefront.code_display}
+                        />
+                    )
+                }
+                /*
+                 * ── One bar, pinned, whichever mode it is in ─────────────────
+                 *
+                 * These were a bordered box at the foot of the scrolling body,
+                 * so on a form this tall they were below the fold — somebody
+                 * looking for Save had to scroll past every field to find it,
+                 * and Remove and Deactivate were equally out of reach.
+                 *
+                 * The drawer already has a footer that sits outside the scroll,
+                 * which is where a bar of actions belongs.
+                 *
+                 * Only on Details: the other two tabs have Save in their own
+                 * headers, beside the thing being saved.
+                 */
+                footer={
+                    selectedStorefront && storeTab === 'details' ? (
+                        <div className="flex w-full flex-wrap items-center gap-2">
+                            {/* The shop's own address, from the connection
+                                behind it. Leftmost and on its own, because it
+                                leaves the application rather than doing
+                                anything to the shop. */}
+                            {selectedStorefront.external_url && (
+                                <a
+                                    href={selectedStorefront.external_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-secondary"
+                                >
+                                    <Icon name="arrow-square-out" size={15} />
+                                    <span>Visit shop</span>
+                                </a>
+                            )}
+
+                            <span className="flex-1" />
+
+                            {/*
+                              Not while editing. Switching a shop off is a
+                              decision about the shop, not about the form, and
+                              offering it beside Save invites somebody to press
+                              it thinking it applies to what they have typed.
+                            */}
+                            {!editing && (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setActive.mutate(selectedStorefront.status !== 'active')}
+                                >
+                                    {selectedStorefront.status === 'active' ? 'Deactivate' : 'Activate'}
+                                </button>
+                            )}
+
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => removeShop.mutate(selectedStorefront?.id)}
+                            >
+                                <Icon name="trash" size={14} />
+                                <span>Remove</span>
+                            </button>
+
+                            {/*
+                              Last, and the only filled button in the row: in
+                              either mode this is the thing somebody came to do.
+                            */}
+                            {editing ? (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => saveShop.mutate()}
+                                    disabled={saveShop.isPending || edit.name.trim() === ''}
+                                >
+                                    {saveShop.isPending ? 'Saving…' : 'Save'}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => {
+                                        // Seeded from the row as it is now — not
+                                        // from whatever was current when the
+                                        // drawer was opened.
+                                        setEdit({
+                                            name: selectedStorefront.name,
+                                            code: selectedStorefront.code ?? '',
+                                            custom_domain: selectedStorefront.domain,
+                                            currency: selectedStorefront.currency,
+                                            type: selectedStorefront.type,
+                                            status: selectedStorefront.status,
+                                            // undefined, not null: an untouched
+                                            // logo must never be sent as a
+                                            // removal.
+                                            logo: undefined,
+                                            logo_url: selectedStorefront.logo_url ?? null,
+                                        });
+                                        setEditing(true);
+                                    }}
+                                >
+                                    <Icon name="pencil-simple" size={14} />
+                                    <span>Edit</span>
+                                </button>
+                            )}
+                        </div>
+                    ) : undefined
+                }
+                /*
                  * Sync belongs beside the shop's name, not among the tabs.
                  *
                  * It acts on the whole connection, where the tabs only choose
@@ -1630,7 +1758,31 @@ export default function Storefronts() {
                                      style={{ borderColor: 'var(--shell-border)' }}>
                                     <h3 className="text-sm font-semibold">Details</h3>
 
-                                    {!editing && (
+                                    {/*
+                                      ── The way back ────────────────────────
+                                      This used to appear only in view mode, so
+                                      once somebody was editing there was no way
+                                      out of it but closing the whole drawer and
+                                      opening it again. A toggle is the obvious
+                                      answer: the control that turned editing on
+                                      is where anybody looks to turn it off.
+
+                                      Leaving this way keeps nothing, which is
+                                      what Cancel did — so Cancel is gone and
+                                      this says so on hover instead of spending
+                                      a button on it.
+                                    */}
+                                    {editing ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditing(false)}
+                                            className="text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]"
+                                            aria-label="Stop editing and go back to the details"
+                                            title="Back to details — changes are not kept"
+                                        >
+                                            <Icon name="x" size={15} />
+                                        </button>
+                                    ) : (
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -1668,6 +1820,91 @@ export default function Storefronts() {
 
                                 {editing ? (
                                     <div className="space-y-4 px-3.5 py-3.5">
+                                        {/*
+                                          The mark that goes on this shop's
+                                          paperwork.
+
+                                          ── Why it is offered per shop ────────
+
+                                          An invoice is issued by the shop the
+                                          order was placed in, and a business
+                                          here can run several. One logo on the
+                                          business would put the wrong brand on
+                                          every order from the second shop —
+                                          confidently wrong, in front of a
+                                          customer, which is worse than none.
+
+                                          Left blank the business logo is used,
+                                          because most people run one shop and
+                                          think of the brand as theirs.
+                                        */}
+                                        <div>
+                                            <span className="mb-1.5 block text-sm font-medium">Logo</span>
+
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--shell-border)] bg-[var(--color-site-bg)] p-1.5">
+                                                    {edit.logo_url ? (
+                                                        <img
+                                                            src={edit.logo_url}
+                                                            alt=""
+                                                            className="h-full w-full rounded-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <Icon
+                                                            name="image"
+                                                            size={20}
+                                                            className="text-[var(--color-text-subtle)]"
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <label className="btn btn-secondary cursor-pointer text-sm">
+                                                            {logoUploading ? 'Uploading…' : 'Choose image'}
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                className="hidden"
+                                                                disabled={logoUploading}
+                                                                onChange={(event) => {
+                                                                    const file = event.target.files?.[0];
+                                                                    // Cleared so choosing the same file twice still
+                                                                    // fires a change event.
+                                                                    event.target.value = '';
+
+                                                                    if (file) {
+                                                                        void uploadLogo(file);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </label>
+
+                                                        {edit.logo_url && (
+                                                            <button
+                                                                type="button"
+                                                                className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+                                                                onClick={() =>
+                                                                    setEdit((c) => ({
+                                                                        ...c,
+                                                                        logo: null,
+                                                                        logo_url: null,
+                                                                    }))
+                                                                }
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
+                                                        Shown on invoices for this shop&rsquo;s orders. Leave it empty
+                                                        to use the business logo.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div>
                                             <label htmlFor="sf-name" className="mb-1.5 block text-sm font-medium">
                                                 Name
@@ -1725,91 +1962,6 @@ export default function Storefronts() {
                                                     <> Currently showing {selectedStorefront.code_display}, from the name.</>
                                                 )}
                                             </p>
-                                        </div>
-
-                                        {/*
-                                          The mark that goes on this shop's
-                                          paperwork.
-
-                                          ── Why it is offered per shop ────────
-
-                                          An invoice is issued by the shop the
-                                          order was placed in, and a business
-                                          here can run several. One logo on the
-                                          business would put the wrong brand on
-                                          every order from the second shop —
-                                          confidently wrong, in front of a
-                                          customer, which is worse than none.
-
-                                          Left blank the business logo is used,
-                                          because most people run one shop and
-                                          think of the brand as theirs.
-                                        */}
-                                        <div>
-                                            <span className="mb-1.5 block text-sm font-medium">Logo</span>
-
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[var(--shell-radius)] border border-[var(--shell-border)] bg-[var(--color-site-bg)]">
-                                                    {edit.logo_url ? (
-                                                        <img
-                                                            src={edit.logo_url}
-                                                            alt=""
-                                                            className="max-h-full max-w-full object-contain"
-                                                        />
-                                                    ) : (
-                                                        <Icon
-                                                            name="image"
-                                                            size={20}
-                                                            className="text-[var(--color-text-subtle)]"
-                                                        />
-                                                    )}
-                                                </div>
-
-                                                <div className="min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <label className="btn btn-secondary cursor-pointer text-sm">
-                                                            {logoUploading ? 'Uploading…' : 'Choose image'}
-                                                            <input
-                                                                type="file"
-                                                                accept="image/*"
-                                                                className="hidden"
-                                                                disabled={logoUploading}
-                                                                onChange={(event) => {
-                                                                    const file = event.target.files?.[0];
-                                                                    // Cleared so choosing the same file twice still
-                                                                    // fires a change event.
-                                                                    event.target.value = '';
-
-                                                                    if (file) {
-                                                                        void uploadLogo(file);
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </label>
-
-                                                        {edit.logo_url && (
-                                                            <button
-                                                                type="button"
-                                                                className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
-                                                                onClick={() =>
-                                                                    setEdit((c) => ({
-                                                                        ...c,
-                                                                        logo: null,
-                                                                        logo_url: null,
-                                                                    }))
-                                                                }
-                                                            >
-                                                                Remove
-                                                            </button>
-                                                        )}
-                                                    </div>
-
-                                                    <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
-                                                        Shown on invoices for this shop&rsquo;s orders. Leave it empty
-                                                        to use the business logo.
-                                                    </p>
-                                                </div>
-                                            </div>
                                         </div>
 
                                         <div className="grid gap-4 sm:grid-cols-2">
@@ -1903,23 +2055,6 @@ export default function Storefronts() {
                                             </p>
                                         </div>
 
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                className="btn btn-primary"
-                                                onClick={() => saveShop.mutate()}
-                                                disabled={saveShop.isPending || edit.name.trim() === ''}
-                                            >
-                                                Save
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                onClick={() => setEditing(false)}
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
                                     </div>
                                 ) : (
                                     <dl className="divide-y divide-[var(--shell-border)] px-3.5 text-sm">
@@ -1967,47 +2102,6 @@ export default function Storefronts() {
                                 )}
                                 </div>
 
-                                {/* Their own card. They act on the shop rather
-                                    than describing it, and a shared border made
-                                    them read as the end of the list above. */}
-                                <div
-                                    // shrink-0 for the same reason as the card
-                                    // above: it is content to be read, not a
-                                    // pane to be fitted.
-                                    className="mt-3 flex shrink-0 flex-wrap gap-2 rounded-[var(--shell-radius)] border p-3"
-                                    style={{ borderColor: 'var(--shell-border)' }}
-                                >
-                                    {/* The shop's own address, from the
-                                        connection behind it. */}
-                                    {selectedStorefront.external_url && (
-                                        <a
-                                            href={selectedStorefront.external_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="btn btn-secondary"
-                                        >
-                                            <Icon name="arrow-square-out" size={15} />
-                                            <span>Visit shop</span>
-                                        </a>
-                                    )}
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        onClick={() => setActive.mutate(selectedStorefront.status !== 'active')}
-                                    >
-                                        {selectedStorefront.status === 'active' ? 'Deactivate' : 'Activate'}
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        onClick={() => removeShop.mutate(selectedStorefront?.id)}
-                                    >
-                                        <Icon name="trash" size={14} />
-                                        <span>Remove</span>
-                                    </button>
-                                </div>
                             </>
                         )}
                     </div>
@@ -2135,6 +2229,57 @@ export default function Storefronts() {
  * the value is the half being read, so the eye can run down the right-hand edge
  * without reading a single label it did not want.
  */
+/**
+ * The shop, as a picture.
+ *
+ * ── Why it falls back to letters rather than an icon ─────────────────────────
+ *
+ * A generic picture-frame glyph on every shop without a logo says the same
+ * nothing about all of them, and a business running four shops gets four
+ * identical marks — which is worse than no mark, because the eye stops using it
+ * to tell them apart. The short code is already how this shop is named
+ * everywhere else in the application: beside its order numbers, in the store
+ * column. Here it is the same tag in the same place a logo would be.
+ *
+ * ── Contained, not cropped ───────────────────────────────────────────────────
+ *
+ * The usual advice for a circular avatar is to cover it, and the usual avatar
+ * is a face, which survives being cropped to a circle. A shop's logo is a
+ * wordmark more often than not, and cropping one cuts the name in half. So it
+ * is fitted inside with a little room, and the circle is the frame rather than
+ * the mask.
+ */
+function ShopMark({
+    url,
+    code,
+    size = 40,
+}: {
+    url?: string | null;
+    code?: string | null;
+    size?: number;
+}) {
+    return (
+        <span
+            className="flex shrink-0 items-center justify-center overflow-hidden rounded-full border bg-[var(--color-site-bg)] font-semibold text-[var(--color-text-muted)]"
+            style={{
+                width: size,
+                height: size,
+                borderColor: 'var(--shell-border)',
+                // Scaled with the circle, so the same component works at 40px
+                // in a header and larger anywhere else without a second size
+                // written down somewhere.
+                fontSize: Math.round(size * 0.34),
+            }}
+        >
+            {url ? (
+                <img src={url} alt="" className="h-full w-full object-contain p-1" />
+            ) : (
+                (code ?? '—')
+            )}
+        </span>
+    );
+}
+
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
     return (
         <div className="flex items-center justify-between gap-4 py-2.5">

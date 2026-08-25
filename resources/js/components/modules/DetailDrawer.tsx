@@ -13,6 +13,15 @@ type DetailDrawerProps = {
     title: string;
     /** Subtitle or metadata line */
     subtitle?: ReactNode;
+    /**
+     * A mark for the thing being looked at — a shop's logo, a person's face.
+     *
+     * Beside the title rather than in the body, because it is the answer to
+     * "which one is this?" and that question is asked once, at the top. Put in
+     * the content it becomes a field about the record instead of a picture of
+     * it, and it has to be repeated on every tab to stay visible.
+     */
+    media?: ReactNode;
     /** Drawer content */
     children: ReactNode;
     /** Tab configuration if using tabs */
@@ -70,6 +79,7 @@ export function DetailDrawer({
     onClose,
     title,
     subtitle,
+    media,
     children,
     tabs,
     activeTab,
@@ -216,6 +226,12 @@ export function DetailDrawer({
                     }}
                 >
                     <div className="flex items-start justify-between gap-3 px-3.5 py-2.5">
+                        {/* Centred against the title block rather than aligned to
+                            the top of the row, which is where the close button
+                            and the actions want to be. A mark beside a name and
+                            a subtitle reads as belonging to both. */}
+                        {media && <div className="shrink-0 self-center">{media}</div>}
+
                         <div className="min-w-0 flex-1">
                             <h2
                                 id="drawer-title"
