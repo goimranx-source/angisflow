@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -311,28 +312,38 @@ export function StatusMapPanel({
                                     </td>
 
                                     <td>
-                                        <select
-                                            className="field w-full"
+                                        <SearchSelect
                                             value={rules[ours.value] ?? ''}
-                                            onChange={(event) => choose(ours.value, event.target.value)}
-                                            aria-label={`What this shop calls ${ours.label}`}
-                                        >
-                                            <option value="">— not matched</option>
-                                            {catalogue.theirs.map((theirs) => (
-                                                <option key={theirs.value} value={theirs.value}>
-                                                    {/*
-                                                      The shop's own wording, with
-                                                      the raw value beside it: one is
-                                                      what somebody recognises, the
-                                                      other is what actually arrives
-                                                      on an order, and a mapping
+                                            onChange={(theirs) => choose(ours.value, theirs)}
+                                            ariaLabel={`What this shop calls ${ours.label}`}
+                                            placeholder="— not matched"
+                                            searchPlaceholder="Search this shop's statuses…"
+                                            options={[
+                                                { value: '', label: '— not matched' },
+                                                ...catalogue.theirs.map((theirs) => ({
+                                                    value: theirs.value,
+                                                    label: theirs.label,
+
+                                                    /*
+                                                      The shop's own wording, with the raw
+                                                      value beside it: one is what somebody
+                                                      recognises, the other is what actually
+                                                      arrives on an order, and a mapping
                                                       screen is where both matter.
-                                                    */}
-                                                    {theirs.label}
-                                                    {theirs.label !== theirs.value && ` (${theirs.value})`}
-                                                </option>
-                                            ))}
-                                        </select>
+
+                                                      Held apart rather than glued into one
+                                                      string, so the raw value stays quiet
+                                                      next to the name — and is still found
+                                                      by typing it, because the filter reads
+                                                      both.
+                                                    */
+                                                    note:
+                                                        theirs.label !== theirs.value
+                                                            ? theirs.value
+                                                            : undefined,
+                                                })),
+                                            ]}
+                                        />
                                     </td>
                                 </tr>
                             ))}

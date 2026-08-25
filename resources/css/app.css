@@ -183,6 +183,19 @@
     --z-flyout-panel: 141; /* the panel itself */
     --z-overlay: 200; /* the dimmed backdrop behind a dialog */
     --z-modal: 210; /* the dialog or drawer itself */
+    /*
+     * A dropdown that belongs to a control, above the dialog rather than below.
+     *
+     * The rule above — a dialog covers a flyout — is right for a flyout that is
+     * a peer of the dialog, and wrong for one that is part of it. Half the
+     * pickers in this application are opened from inside a modal: the shop
+     * editor, the field map, the order form. At flyout height they render
+     * behind the dialog that contains their own trigger, so pressing the
+     * control appears to do nothing at all.
+     *
+     * Still below a toast, which has to be readable over everything.
+     */
+    --z-picker: 220;
     --z-toast: 300; /* above everything, always */
     /* For anything small enough that 5px reads as a circle rather than a
        rounded corner — the 24px marks in a list, a badge, a chip. */

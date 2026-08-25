@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { cn } from '@/lib/utils';
 
 type FilterBarProps = {
@@ -287,26 +288,39 @@ export function FilterSelect({
                 by the browser and shows every label in full whatever width the
                 closed control is. */}
             <div className={cn('relative', block && 'min-w-0 flex-1')}>
-                <select
+                {/*
+                  ── Why a filter is a picker and not a <select> ──────────────
+                  A store filter on a business with forty shops, or a status
+                  filter on a shop that has invented a dozen of its own, is a
+                  list somebody has to read down. It is the same problem the
+                  mapping screens had, so it has the same answer — and doing it
+                  here rather than at each of the fifty-odd call sites is what
+                  keeps every page's filters behaving the same way.
+
+                  Under eight options this looks and behaves exactly as it did:
+                  SearchSelect only grows a search box once a list is long
+                  enough that typing beats looking.
+                */}
+                <SearchSelect
                     value={value}
-                    onChange={(e) => onChange(e.target.value)}
+                    onChange={onChange}
+                    placeholder={placeholder}
+                    ariaLabel={label}
+                    options={[{ value: '', label: placeholder }, ...options]}
+                    /*
+                     * The filter's own shape, kept.
+                     *
+                     * `.field` underneath, so it is exactly as tall as the
+                     * search box and the buttons it sits beside — that part is
+                     * wanted. Its full width is not, on a toolbar where a
+                     * two-option filter growing to a share of the row is the
+                     * bug `block` exists to avoid. And the tighter radius is
+                     * what a filter chip has always used.
+                     */
                     className={cn(
-                        'appearance-none border border-[var(--color-border-light)] bg-[var(--color-card-bg)] py-1.5 pl-2.5 pr-7 text-sm text-[var(--color-text-main)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer',
-                        block && 'w-full truncate',
+                        'rounded-[var(--shell-radius-sm)]',
+                        block ? 'w-full' : 'w-auto',
                     )}
-                    style={{ borderRadius: 'var(--shell-radius-sm)' }}
-                >
-                    <option value="">{placeholder}</option>
-                    {options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                        </option>
-                    ))}
-                </select>
-                <Icon
-                    name="caret-down"
-                    size={12}
-                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]"
                 />
             </div>
         </div>

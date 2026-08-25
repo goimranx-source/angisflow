@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from 'react';
 
 import { Icon } from '@/components/ui/Icon';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { FieldOptions, type FieldOption } from '@/pages/storefront/FieldOptions';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -517,8 +518,8 @@ export function FieldMapPanel({
      * can name a field that was never created. `Add N shop fields` writes
      * `custom.order_source` and the like straight into the row without defining
      * the custom field behind it — so the value is a string nothing can resolve.
-     * The Becomes column already shows those as blank, because a <select> whose
-     * value is not among its options renders empty. The count claimed them
+     * The Becomes column already shows those as blank, because a picker whose
+     * value is not among its options has nothing to display. The count claimed them
      * anyway, and the screen and the badge disagreed by twenty-three.
      *
      * Mapped means the target is one this application offers: a built-in field,
@@ -1025,11 +1026,9 @@ export function FieldMapPanel({
                                                     <Icon name="x" size={13} />
                                                 </button>
 
-                                            <select
-                                                className="field w-full"
+                                            <SearchSelect
                                                 value={row.source}
-                                                onChange={(e) => {
-                                                    const source = e.target.value;
+                                                onChange={(source) => {
                                                     const option = sample.paths.find(
                                                         (p) => p.path === source,
                                                     );
@@ -1039,28 +1038,36 @@ export function FieldMapPanel({
                                                         ...applyDescription(row, option),
                                                     });
                                                 }}
-                                            >
-                                                <option value="">—</option>
-                                                {/* A path already mapped but no
-                                                    longer present in the sample
-                                                    still shows, or the row would
-                                                    silently blank itself. */}
-                                                {!sample.paths.some((p) => p.path === row.source) &&
-                                                    row.source !== '' && (
-                                                        <option value={row.source}>{row.source}</option>
-                                                    )}
-                                                {sample.paths.map((option) => (
-                                                    <option key={option.path} value={option.path}>
-                                                        {option.path}
-                                                        {/* Marked, because a field with no value
-                                                            beside it looks broken otherwise. It is
-                                                            not — this shop has simply never had a
-                                                            coupon, or a variable product. */}
-                                                        {option.unused ? ' — not used yet' : ''}
-                                                        {option.readonly ? ' — read-only' : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                placeholder="—"
+                                                ariaLabel="The field this shop sends"
+                                                searchPlaceholder="Search this shop's fields…"
+                                                options={[
+                                                    { value: '', label: '—' },
+
+                                                    /* A path already mapped but no longer
+                                                       present in the sample still shows, or
+                                                       the row would silently blank itself. */
+                                                    ...(!sample.paths.some((p) => p.path === row.source) &&
+                                                    row.source !== ''
+                                                        ? [{ value: row.source, label: row.source }]
+                                                        : []),
+
+                                                    ...sample.paths.map((option) => ({
+                                                        value: option.path,
+                                                        label: option.path,
+
+                                                        /* Marked, because a field with no value
+                                                           beside it looks broken otherwise. It is
+                                                           not — this shop has simply never had a
+                                                           coupon, or a variable product. */
+                                                        note: option.unused
+                                                            ? 'not used yet'
+                                                            : option.readonly
+                                                              ? 'read-only'
+                                                              : undefined,
+                                                    })),
+                                                ]}
+                                            />
                                             </div>
                                         </td>
 
@@ -1111,11 +1118,9 @@ export function FieldMapPanel({
 
 
                                         <td>
-                                            <select
-                                                className="field w-full"
+                                            <SearchSelect
                                                 value={row.target}
-                                                onChange={(e) => {
-                                                    const target = e.target.value;
+                                                onChange={(target) => {
                                                     const known = sample.targets.find((t) => t.value === target);
 
                                                     // The right treatment for the
@@ -1127,15 +1132,25 @@ export function FieldMapPanel({
                                                         transform: known?.transform ?? row.transform,
                                                     });
                                                 }}
-                                            >
-                                                <option value="">—</option>
-                                                {sample.targets.map((target) => (
-                                                    <option key={target.value} value={target.value}>
-                                                        {target.label}
-                                                    </option>
-                                                ))}
-                                                <option value={NEW_FIELD}>＋ New field…</option>
-                                            </select>
+                                                placeholder="—"
+                                                ariaLabel="The field it becomes here"
+                                                searchPlaceholder="Search fields here…"
+                                                options={[
+                                                    { value: '', label: '—' },
+                                                    ...sample.targets.map((target) => ({
+                                                        value: target.value,
+                                                        label: target.label,
+                                                    })),
+
+                                                    /* Last, and after everything real.
+                                                       It is the answer when none of the
+                                                       above is, so it belongs at the end
+                                                       of the list rather than competing
+                                                       with the fields somebody came
+                                                       here to find. */
+                                                    { value: NEW_FIELD, label: '＋ New field…' },
+                                                ]}
+                                            />
 
                                             {(contested.get(row.target) ?? 0) > 1 && (
                                                 <div
@@ -1234,17 +1249,14 @@ export function FieldMapPanel({
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <select
-                                                    className="field w-full"
+                                                <SearchSelect
                                                     value={row.transform}
-                                                    onChange={(e) => update(index, { transform: e.target.value })}
-                                                >
-                                                    {Object.entries(sample.transforms).map(([value, label]) => (
-                                                        <option key={value} value={value}>
-                                                            {label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    onChange={(transform) => update(index, { transform })}
+                                                    ariaLabel="How this value is treated"
+                                                    options={Object.entries(sample.transforms).map(
+                                                        ([value, label]) => ({ value, label }),
+                                                    )}
+                                                />
                                             )}
                                         </td>
 
@@ -1260,10 +1272,15 @@ export function FieldMapPanel({
                                               hover away for anybody who has not
                                               met them before.
                                             */}
-                                            <select
-                                                className="field w-full"
+                                            {/*
+                                              Three options, so no search box —
+                                              see SearchSelect, which shows one
+                                              only when a list is long enough
+                                              that typing beats looking.
+                                            */}
+                                            <SearchSelect
                                                 value={row.direction}
-                                                onChange={(e) => update(index, { direction: e.target.value })}
+                                                onChange={(direction) => update(index, { direction })}
                                                 title={
                                                     row.direction === 'in'
                                                         ? 'Bring in only — changes here are never sent back'
@@ -1271,12 +1288,13 @@ export function FieldMapPanel({
                                                           ? 'Send out only — changes there are never brought in'
                                                           : 'Both ways'
                                                 }
-                                                aria-label="Which way this field travels"
-                                            >
-                                                <option value="both">⇄ Both</option>
-                                                <option value="in">← In</option>
-                                                <option value="out">→ Out</option>
-                                            </select>
+                                                ariaLabel="Which way this field travels"
+                                                options={[
+                                                    { value: 'both', label: '⇄ Both' },
+                                                    { value: 'in', label: '← In' },
+                                                    { value: 'out', label: '→ Out' },
+                                                ]}
+                                            />
                                         </td>
 
                                         <td className="text-right">

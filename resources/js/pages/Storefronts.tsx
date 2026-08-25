@@ -21,6 +21,7 @@ import { useMoney } from '@/hooks/useMoney';
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
 import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useFlyoutPosition } from '@/hooks/useFlyoutPosition';
@@ -1326,36 +1327,30 @@ export default function Storefronts() {
                             <label htmlFor="shop-type" className="mb-1.5 block text-sm font-medium">
                                 Kind
                             </label>
-                            <select
+                            <SearchSelect
                                 id="shop-type"
-                                className="field w-full"
                                 value={newType}
-                                onChange={(e) => setNewType(e.target.value)}
-                            >
-                                {types.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={setNewType}
+                                options={types.map((option) => ({
+                                    value: option.value,
+                                    label: option.label,
+                                }))}
+                            />
                         </div>
 
                         <div>
                             <label htmlFor="shop-status" className="mb-1.5 block text-sm font-medium">
                                 State
                             </label>
-                            <select
+                            <SearchSelect
                                 id="shop-status"
-                                className="field w-full"
                                 value={newStatus}
-                                onChange={(e) => setNewStatus(e.target.value)}
-                            >
-                                {statuses.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={setNewStatus}
+                                options={statuses.map((option) => ({
+                                    value: option.value,
+                                    label: option.label,
+                                }))}
+                            />
                         </div>
                     </div>
                 </div>
@@ -1802,36 +1797,30 @@ export default function Storefronts() {
                                                 <label htmlFor="sf-type" className="mb-1.5 block text-sm font-medium">
                                                     Kind
                                                 </label>
-                                                <select
+                                                <SearchSelect
                                                     id="sf-type"
-                                                    className="field w-full"
                                                     value={edit.type}
-                                                    onChange={(e) => setEdit((c) => ({ ...c, type: e.target.value }))}
-                                                >
-                                                    {types.map((o) => (
-                                                        <option key={o.value} value={o.value}>
-                                                            {o.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    onChange={(type) => setEdit((c) => ({ ...c, type }))}
+                                                    options={types.map((o) => ({
+                                                        value: o.value,
+                                                        label: o.label,
+                                                    }))}
+                                                />
                                             </div>
 
                                             <div>
                                                 <label htmlFor="sf-state" className="mb-1.5 block text-sm font-medium">
                                                     State
                                                 </label>
-                                                <select
+                                                <SearchSelect
                                                     id="sf-state"
-                                                    className="field w-full"
                                                     value={edit.status}
-                                                    onChange={(e) => setEdit((c) => ({ ...c, status: e.target.value }))}
-                                                >
-                                                    {statuses.map((o) => (
-                                                        <option key={o.value} value={o.value}>
-                                                            {o.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    onChange={(status) => setEdit((c) => ({ ...c, status }))}
+                                                    options={statuses.map((o) => ({
+                                                        value: o.value,
+                                                        label: o.label,
+                                                    }))}
+                                                />
                                             </div>
                                         </div>
 
@@ -1839,14 +1828,27 @@ export default function Storefronts() {
                                             <label htmlFor="sf-cur" className="mb-1.5 block text-sm font-medium">
                                                 Currency
                                             </label>
-                                            <select
+                                            {/*
+                                              The list this control was built for.
+
+                                              A hundred and sixty currencies in a
+                                              native dropdown means scrolling until
+                                              the right three letters go past.
+                                              Typing "taka" or "BDT" now finds it
+                                              either way round, because the code and
+                                              the name are both searched.
+                                            */}
+                                            <SearchSelect
                                                 id="sf-cur"
-                                                className="field w-full disabled:opacity-60 disabled:cursor-not-allowed"
                                                 value={edit.currency || ''}
-                                                onChange={(e) => {
-                                                    const newCurrency = e.target.value;
-                                                    // If currency is changing and there are orders, show warning
-                                                    if (newCurrency !== selectedStorefront.currency && selectedStorefront.total_orders > 0) {
+                                                onChange={(newCurrency) => {
+                                                    // Changing this on a shop that already has orders
+                                                    // is a decision with consequences, so it is asked
+                                                    // about rather than simply applied.
+                                                    if (
+                                                        newCurrency !== selectedStorefront.currency &&
+                                                        selectedStorefront.total_orders > 0
+                                                    ) {
                                                         setPendingCurrency(newCurrency);
                                                         setShowCurrencyWarning(true);
                                                     } else {
@@ -1854,16 +1856,24 @@ export default function Storefronts() {
                                                     }
                                                 }}
                                                 disabled={!!selectedStorefront.integration_id}
-                                            >
-                                                {!edit.currency && (
-                                                    <option value="">Not set - will auto-detect from orders</option>
-                                                )}
-                                                {currencies.map((c) => (
-                                                    <option key={c.code} value={c.code}>
-                                                        {c.code} — {c.name}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                placeholder="Not set — will auto-detect from orders"
+                                                searchPlaceholder="Code or name…"
+                                                options={[
+                                                    ...(edit.currency
+                                                        ? []
+                                                        : [
+                                                              {
+                                                                  value: '',
+                                                                  label: 'Not set — will auto-detect from orders',
+                                                              },
+                                                          ]),
+                                                    ...currencies.map((c) => ({
+                                                        value: c.code,
+                                                        label: c.code,
+                                                        note: c.name,
+                                                    })),
+                                                ]}
+                                            />
                                             <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
                                                 {selectedStorefront.integration_id ? (
                                                     <>Auto-detected from orders. Currency from order payloads is always preserved.</>
