@@ -16,6 +16,9 @@ import { InfoHint } from '@/components/ui/InfoHint';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
+import { DetailDrawer } from '@/components/modules';
+import { CustomerEditor } from '@/pages/customers/CustomerEditor';
+
 import { CustomField, type CustomFieldDef } from './CustomField';
 import { LineItems, type OrderLine } from './LineItems';
 import { placementFor, type Placement } from '@/pages/orders/fieldPlacement';
@@ -52,6 +55,12 @@ type Editor = {
         symbol: string;
         statuses: Array<{ value: string; label: string; custom?: boolean }>;
         storefronts: Array<{ id: string; name: string }>;
+
+        /** Who this order is for, as a record rather than as ten loose fields. */
+        customer: { id: string; name: string; email: string | null; phone: string | null } | null;
+
+        /** Everybody this order could be for. */
+        customers: Array<{ id: string; name: string; note: string | null }>;
         couriers: Array<{ id: string; label: string | null }>;
         dispatch: { courier: string | null; status: string | null } | null;
     };
@@ -104,6 +113,17 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
     const [custom, setCustom] = useState<Record<string, unknown>>({});
     const [lines, setLines] = useState<OrderLine[]>([]);
     const [courier, setCourier] = useState('');
+
+    /*
+     * The customer whose own form is open over this one, if any.
+     *
+     * Stacked rather than navigated to: this drawer keeps its unsaved changes
+     * while the customer is edited, and closing the customer reveals the order
+     * exactly as it was. Going somewhere and coming back would mean either
+     * losing what was typed here or persisting a half-filled form to get it
+     * back again.
+     */
+    const [editingCustomer, setEditingCustomer] = useState<string | null>(null);
     const [dispatching, setDispatching] = useState(false);
 
     /*
@@ -471,6 +491,12 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
             discount: atList - charged,
             total,
             paid,
+
+            // Not part of the arithmetic above: a refund is money that went
+            // back out after the order was priced, not a reduction in what the
+            // order was worth. Shown beside the rest, kept out of the sum.
+            refunded: Number(form.refunded) || 0,
+
             outstanding: Math.round((total - paid) * 100) / 100,
         };
     })();
@@ -485,6 +511,21 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
 
     return (
         <div className="flex h-full min-h-0 flex-col">
+            <DetailDrawer
+                open={editingCustomer !== null}
+                onClose={() => setEditingCustomer(null)}
+                title="Edit customer"
+                subtitle={editor.customer?.name ?? ''}
+                size="lg"
+            >
+                {editingCustomer !== null && (
+                    <CustomerEditor
+                        customerId={editingCustomer}
+                        onClose={() => setEditingCustomer(null)}
+                    />
+                )}
+            </DetailDrawer>
+
             {/*
               ── Which order this is, wherever you have scrolled to ───────────
 
@@ -582,6 +623,12 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 info="Your own reference for this order, if you use one. Not the shop's number."
                             />
 
+                            <Field
+                                name="source"
+                                label="Order source"
+                                info="Where the shop says this customer came from — facebook, an ad, a marketplace. Different from which part of this tool created the order."
+                            />
+
                             {extras('dates')}
 
                             <Field
@@ -593,38 +640,88 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                         </FieldGrid>
                     </FieldGroup>
 
-                    <FieldGroup title="Customer" icon="user">
-                        <FieldGrid>
-                            <Field name="customer_name" label="Name" />
-                            <Field name="customer_email" label="Email" />
-                            <Field name="customer_phone" label="Phone" />
-                            <Field name="customer_company" label="Company" />
-                            <Field name="customer_tax_number" label="Tax number" />
-                            {extras('customer')}
-                        </FieldGrid>
-                    </FieldGroup>
+                    {/*
+                      ── The customer is referenced, not retyped ──────────────
 
+                      This section held ten boxes — name, email, phone, company,
+                      tax number, four lines of billing address, notes — that
+                      wrote straight to the customer record. Editing one while
+                      looking at an order silently changed the other twelve
+                      orders that person had placed, and nothing on the screen
+                      said so.
+
+                      A customer is a record in its own right. The order picks
+                      one and shows enough to recognise it; the pencil opens the
+                      customer's own form, and closing that comes back here
+                      because this drawer never went away underneath.
+                    */}
                     <FieldGroup
-                        title="Billing address"
-                        icon="receipt"
-                        info="Held on the customer, not on this order — so a change here shows on their other orders too."
+                        title="Customer"
+                        icon="user"
+                        info="Their details live on the customer record, so a change shows on every order they have placed. Use the pencil to open it."
                     >
-                        <FieldGrid>
-                            <Field name="customer_billing_address" label="Address" wide />
+                        <div className="flex items-end gap-2">
+                            <div className="min-w-0 flex-1">
+                                <SelectField
+                                    label="Customer"
+                                    badge={marks('customer_id')}
+                                    value={val('customer_id')}
+                                    onChange={set('customer_id')}
+                                    placeholder="Walk-in — nobody's name on it"
+                                    searchPlaceholder="Search by name, phone or email…"
+                                    options={[
+                                        { value: '', label: "Walk-in — nobody's name on it" },
+                                        ...editor.customers.map((one) => ({
+                                            value: one.id,
+                                            label: one.name,
+                                            note: one.note ?? undefined,
+                                        })),
+                                    ]}
+                                />
+                            </div>
 
-                            {/*
-                              Labelled City, typed by the mapping.
+                            <button
+                                type="button"
+                                className="btn btn-secondary mb-[1px] shrink-0"
+                                disabled={val('customer_id') === ''}
+                                title={
+                                    val('customer_id') === ''
+                                        ? 'Pick a customer first'
+                                        : 'Edit this customer'
+                                }
+                                aria-label="Edit this customer"
+                                onClick={() => setEditingCustomer(val('customer_id'))}
+                            >
+                                <Icon name="pencil-simple" size={15} />
+                            </button>
+                        </div>
 
-                              On this shop it arrives from `_shipping_thana` as
-                              `BD-58-05` and is drawn as a picker of 581 thanas
-                              showing "Satkhira Sadar"; on a shop that sends a
-                              plain city name it is a text box. The label stays
-                              the same because the question is the same.
-                            */}
-                            <Field name="customer_billing_city" label="City" />
-                            <Field name="customer_billing_postcode" label="Postcode" />
-                            <Field name="customer_billing_country" label="Country" />
-                        </FieldGrid>
+                        {/*
+                          Enough to know it is the right person, and no more.
+                          Anything editable here would be the old problem back.
+                        */}
+                        {editor.customer && val('customer_id') === editor.customer.id && (
+                            <dl className="mt-3 grid gap-x-6 gap-y-1.5 border-t border-[var(--shell-border)] pt-3 text-sm sm:grid-cols-2">
+                                <div className="flex gap-2">
+                                    <dt className="text-[var(--color-text-muted)]">Email</dt>
+                                    <dd className="min-w-0 truncate text-[var(--color-text-main)]">
+                                        {editor.customer.email || '—'}
+                                    </dd>
+                                </div>
+                                <div className="flex gap-2">
+                                    <dt className="text-[var(--color-text-muted)]">Phone</dt>
+                                    <dd className="min-w-0 truncate text-[var(--color-text-main)]">
+                                        {editor.customer.phone || '—'}
+                                    </dd>
+                                </div>
+                            </dl>
+                        )}
+
+                        {placed.customer.length > 0 && (
+                            <div className="mt-4">
+                                <FieldGrid>{extras('customer')}</FieldGrid>
+                            </div>
+                        )}
                     </FieldGroup>
 
                     <FieldGroup
@@ -639,6 +736,19 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                             <Field name="shipping_city" label="City" />
                             <Field name="shipping_postcode" label="Postcode" />
                             <Field name="shipping_country" label="Country" />
+
+                            <Field
+                                name="shipping_method"
+                                label="Shipping method"
+                                info="What the customer chose and paid for. Not the courier it eventually goes with — that is on the shipment."
+                            />
+
+                            <Field
+                                name="promised_delivery_on"
+                                label="Delivery date"
+                                info="The date promised to the customer. What actually happened is recorded against the shipment, so the two can be compared."
+                            />
+
                             {extras('delivery')}
                         </FieldGrid>
                     </FieldGroup>
@@ -675,6 +785,25 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 info="What you charged the customer for delivery — not what the courier charges you."
                             />
                             <Field name="tax" label="Tax" />
+
+                            <Field
+                                name="payment_method"
+                                label="Payment method"
+                                info="How this was paid — bKash, Nagad, card, bank transfer, cash. For cash on delivery the courier collects it, so nothing is owed to you until they settle."
+                            />
+
+                            <Field
+                                name="transaction_ref"
+                                label="Payment reference"
+                                info="The gateway's own reference. The thing to quote when a customer says they paid and the money cannot be found."
+                            />
+
+                            <Field
+                                name="paid_at"
+                                label="Paid on"
+                                info="When the money arrived, as opposed to how much."
+                            />
+
                             {extras('payment')}
                         </FieldGrid>
 
@@ -688,7 +817,7 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                           line. See OrderTotals.
                         */}
                         <div className="mt-4 border-t border-[var(--shell-border)] pt-4">
-                            <div className="grid gap-4 sm:grid-cols-4">
+                            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
                                 <ReadOnlyField
                                     label="Subtotal"
                                     value={money(editor.symbol, totals.subtotal)}
@@ -710,6 +839,16 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                     value={money(editor.symbol, totals.paid)}
                                     badge={marks('paid')}
                                     info="The payments recorded against this order. Record a payment to change it."
+                                />
+                                <ReadOnlyField
+                                    label="Refunded"
+                                    value={
+                                        totals.refunded > 0
+                                            ? `−${money(editor.symbol, totals.refunded)}`
+                                            : money(editor.symbol, 0)
+                                    }
+                                    badge={marks('refunded')}
+                                    info="Money sent back. Recorded by refunding the order rather than typed here, so the books and this figure cannot disagree."
                                 />
                                 <ReadOnlyField
                                     label="Total"
@@ -734,11 +873,18 @@ export function OrderEditor({ orderId, onClose }: { orderId: string; onClose: ()
                                 rows={3}
                                 info="About this order. Kept here, and sent to the shop if it maps the field."
                             />
+                            {/*
+                              The note the customer must not read.
+
+                              Six of the eight platforms hold both kinds and
+                              this form held one field that mixed them, which is
+                              fine until the day one is printed on an invoice.
+                            */}
                             <Field
-                                name="customer_notes"
-                                label="Customer notes"
+                                name="staff_notes"
+                                label="Staff note"
                                 rows={2}
-                                info="About the customer, on their record — so it shows on every order they place."
+                                hint="Never shown to the customer, and never sent to the shop."
                             />
                         </div>
                     </FieldGroup>

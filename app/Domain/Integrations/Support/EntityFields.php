@@ -50,6 +50,31 @@ final class EntityFields
                 'channel' => ['Channel', 'lower'],
                 'external_ref' => ['External reference', 'trim'],
                 'is_cod' => ['Cash on delivery', 'boolean'],
+
+                /*
+                 * ── The fields every platform has ────────────────────────────
+                 *
+                 * Kept whether or not a shop sends them. That is the point: a
+                 * column with a name this application knows is the thing eight
+                 * private conventions can be mapped *onto*, and until one
+                 * exists there is nothing for `_orddd_timestamp` to become.
+                 *
+                 * See the migration that added them for where the list came
+                 * from and what was deliberately left out.
+                 */
+                'payment_method' => ['Payment method', 'trim'],
+                'transaction_ref' => ['Payment reference', 'trim'],
+                'paid_at' => ['Paid on', 'datetime'],
+                'promised_delivery_on' => ['Delivery date (promised)', 'date'],
+                'shipping_method' => ['Shipping method', 'trim'],
+
+                /*
+                 * Where the shop says the customer came from — facebook, an ad,
+                 * a marketplace. Not `channel`, which is which part of this
+                 * application made the order.
+                 */
+                'source' => ['Order source', 'trim'],
+                'refunded_minor' => ['Refunded', 'money_minor'],
                 'currency' => ['Currency', 'upper'],
                 'subtotal_minor' => ['Subtotal', 'money_minor'],
                 'discount_minor' => ['Discount', 'money_minor'],
@@ -86,6 +111,10 @@ final class EntityFields
                  */
                 'shipping_country' => ['Ship to country', 'country'],
                 'notes' => ['Notes', 'trim'],
+
+                // The note the customer must not read. Six platforms hold both
+                // kinds; this one held a single field that mixed them.
+                'staff_notes' => ['Staff note (private)', 'textarea'],
 
                 /*
                  * ── The buyer, mapped on the order ───────────────────────────

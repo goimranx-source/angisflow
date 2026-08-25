@@ -171,6 +171,22 @@ class CustomerController extends Endpoint
             'email' => $c->email ?? '',
             'phone' => $c->phone ?? '',
             'company' => $c->company,
+
+            /*
+             * ── Everything update() accepts, present() returns ───────────────
+             *
+             * These were missing, which was harmless while nothing edited a
+             * customer and dangerous the moment something did: a form loads
+             * what it is given, so a field the payload omits arrives blank and
+             * is saved back blank. The rule is that the two lists match.
+             */
+            'tax_number' => $c->tax_number,
+            'billing_address' => $c->billing_address,
+            'billing_city' => $c->billing_city,
+            'billing_postcode' => $c->billing_postcode,
+            'billing_country' => $c->billing_country,
+            'payment_terms_days' => $c->payment_terms_days,
+            'notes' => $c->notes,
             'total_spent' => (int) $c->lifetime_value_minor,
             'orders_count' => (int) $c->order_count,
             'status' => $c->is_active ? 'active' : 'inactive',

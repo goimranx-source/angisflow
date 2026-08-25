@@ -21,6 +21,7 @@ import { Icon } from '@/components/ui/Icon';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Table } from '@/components/ui/Table';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { CustomerEditor } from '@/pages/customers/CustomerEditor';
 import { api } from '@/lib/api';
 import { confirm } from '@/lib/confirm';
 
@@ -59,6 +60,9 @@ export default function Customers() {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [drawerTab, setDrawerTab] = useState('overview');
     const [showCreateModal, setShowCreateModal] = useState(false);
+
+    /** The customer whose own form is open, if any. */
+    const [editingCustomer, setEditingCustomer] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<string | null>('created_at');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>('desc');
 
@@ -446,7 +450,18 @@ export default function Customers() {
                 onTabChange={setDrawerTab}
                 actions={
                     <>
-                        <button className="btn btn-secondary">
+                        {/*
+                          This had no onClick. It looked like the feature and did
+                          nothing, which is worse than not offering it — and the
+                          form it needed did not exist anywhere, so the order
+                          screen had grown its own copy of these fields. There is
+                          one form now, and both places open it.
+                        */}
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setEditingCustomer(selectedCustomer?.id ?? null)}
+                        >
                             <Icon name="pencil-simple" size={16} />
                             <span>Edit</span>
                         </button>
@@ -455,6 +470,26 @@ export default function Customers() {
             >
                 {/* Children prop is required even when using tabs */}
                 <div />
+            </DetailDrawer>
+
+            {/*
+              Opened over the customer being looked at, so closing it reveals the
+              record it belongs to rather than the list. The same component the
+              order form opens — see CustomerEditor.
+            */}
+            <DetailDrawer
+                open={editingCustomer !== null}
+                onClose={() => setEditingCustomer(null)}
+                title="Edit customer"
+                subtitle={selectedCustomer?.name ?? ''}
+                size="lg"
+            >
+                {editingCustomer !== null && (
+                    <CustomerEditor
+                        customerId={editingCustomer}
+                        onClose={() => setEditingCustomer(null)}
+                    />
+                )}
             </DetailDrawer>
 
             {/* Create Customer Modal */}

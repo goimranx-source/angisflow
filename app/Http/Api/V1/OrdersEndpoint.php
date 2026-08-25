@@ -21,6 +21,7 @@ use App\Domain\Integrations\Support\Transform;
 use App\Domain\Money\Currencies;
 use App\Domain\Money\CurrencyService;
 use App\Domain\Sales\LinePresentation;
+use App\Domain\Sales\Models\Customer;
 use App\Domain\Sales\Models\Order;
 use App\Domain\Sales\OrderHistory;
 use App\Domain\Sales\OrderTotals;
@@ -1594,6 +1595,23 @@ class OrdersEndpoint
                     'ordered_on' => $model->ordered_on?->toDateString(),
                     'external_ref' => $model->external_ref,
                     'notes' => $model->notes,
+
+                    /*
+                     * ── The fields the platform survey turned up ─────────────
+                     *
+                     * Kept here whether or not this shop sends them. A shop
+                     * that does maps its own field onto one of these; a shop
+                     * that does not leaves it blank and somebody fills it in by
+                     * hand. See the migration that added the columns.
+                     */
+                    'payment_method' => $model->payment_method,
+                    'transaction_ref' => $model->transaction_ref,
+                    'paid_at' => $model->paid_at?->format('Y-m-d\TH:i'),
+                    'promised_delivery_on' => $model->promised_delivery_on?->toDateString(),
+                    'shipping_method' => $model->shipping_method,
+                    'source' => $model->source,
+                    'staff_notes' => $model->staff_notes,
+                    'refunded' => $money($model->refunded_minor),
                     'currency' => $model->currency,
 
                     /*
@@ -1642,6 +1660,10 @@ class OrdersEndpoint
                     'customer_billing_postcode' => $model->customer?->billing_postcode,
                     'customer_billing_country' => $model->customer?->billing_country,
                     'customer_notes' => $model->customer?->notes,
+
+                    // Which customer, rather than a copy of their details. The
+                    // form picks; their fields are edited on the customer.
+                    'customer_id' => $model->customer?->public_id,
 
                     // Shown but not editable: these identify the order, and a
                     // form that hides them makes somebody look elsewhere to be
@@ -1702,6 +1724,45 @@ class OrdersEndpoint
                     $model,
                     $link?->integration,
                 ),
+
+                /*
+                 * Who this order is for, and who else it could be for.
+                 *
+                 * The form shows the first to confirm it has the right person,
+                 * and offers the second to change their mind. Neither is
+                 * editable there — see CustomerEditor for why.
+                 */
+                'customer' => $model->customer === null ? null : [
+                    'id' => $model->customer->public_id,
+                    'name' => $model->customer->name,
+                    'email' => $model->customer->email,
+                    'phone' => $model->customer->phone,
+                ],
+
+                /*
+                 * Everybody, up to a point.
+                 *
+                 * Sent whole because a picker filters what it has been given,
+                 * and five hundred names is a small payload against the round
+                 * trip a search box would cost on every keystroke. A business
+                 * past that has a different problem and wants a picker that
+                 * asks the server; the cap is here so that day arrives as a
+                 * short list rather than a slow page.
+                 */
+                'customers' => Customer::query()
+                    ->where('business_id', $business->id)
+                    ->orderBy('name')
+                    ->limit(500)
+                    ->get(['public_id', 'name', 'phone', 'email'])
+                    ->map(fn ($one): array => [
+                        'id' => $one->public_id,
+                        'name' => $one->name,
+
+                        // Two people called Rahman are told apart by the phone
+                        // number, which is also what somebody searches by.
+                        'note' => $one->phone ?: $one->email,
+                    ])
+                    ->all(),
 
                 'shop' => $model->storefront?->name,
                 'symbol' => Currencies::symbol((string) $model->currency),
@@ -1791,6 +1852,25 @@ class OrdersEndpoint
             'external_ref' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
 
+            // See the migration that added these columns.
+            'payment_method' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'transaction_ref' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'paid_at' => ['sometimes', 'nullable', 'date'],
+            'promised_delivery_on' => ['sometimes', 'nullable', 'date'],
+            'shipping_method' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'source' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'staff_notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
+
+            /*
+             * The customer this order belongs to.
+             *
+             * A public id rather than the customer's own fields: those are
+             * edited on the customer, which is where they live and where a
+             * change to them shows on the other twelve orders that person has
+             * placed. See the order form, which picks rather than retypes.
+             */
+            'customer_id' => ['sometimes', 'nullable', 'string', 'max:40'],
+
             'shipping_name' => ['sometimes', 'nullable', 'string', 'max:160'],
             'shipping_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'shipping_address' => ['sometimes', 'nullable', 'string', 'max:400'],
@@ -1842,7 +1922,9 @@ class OrdersEndpoint
 
         foreach (['status', 'payment_status', 'is_cod',
             'external_ref', 'notes', 'shipping_name', 'shipping_phone', 'shipping_address',
-            'shipping_city', 'shipping_postcode', 'shipping_country'] as $field) {
+            'shipping_city', 'shipping_postcode', 'shipping_country',
+            'payment_method', 'transaction_ref', 'paid_at', 'promised_delivery_on',
+            'shipping_method', 'source', 'staff_notes'] as $field) {
             if (array_key_exists($field, $validated)) {
                 $changes[$field] = $validated[$field];
             }
@@ -1850,6 +1932,28 @@ class OrdersEndpoint
 
         if (array_key_exists('ordered_on', $validated)) {
             $changes['ordered_on'] = $validated['ordered_on'];
+        }
+
+        /*
+         * ── Which customer this order belongs to ────────────────────────────
+         *
+         * Looked up within this business, so an id from somebody else's account
+         * cannot attach their customer to this order. Null is a real answer: a
+         * counter sale with nobody's name on it.
+         */
+        if (array_key_exists('customer_id', $validated)) {
+            if (blank($validated['customer_id'])) {
+                $changes['customer_id'] = null;
+            } else {
+                $buyer = \App\Domain\Sales\Models\Customer::query()
+                    ->where('business_id', $business->id)
+                    ->where('public_id', $validated['customer_id'])
+                    ->first();
+
+                abort_if($buyer === null, 422, 'That customer does not belong to this business.');
+
+                $changes['customer_id'] = $buyer->id;
+            }
         }
 
         if (array_key_exists('storefront_id', $validated)) {

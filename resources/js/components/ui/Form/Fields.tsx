@@ -256,12 +256,15 @@ export function SelectField({
     onChange,
     options,
     placeholder,
+    searchPlaceholder,
     ...rest
 }: Common & {
     value: string;
     onChange: (value: string) => void;
     options: SelectOption[];
     placeholder?: string;
+    /** What the filter box says, when the list is long enough to have one. */
+    searchPlaceholder?: string;
 }) {
     const id = useId();
 
@@ -273,6 +276,7 @@ export function SelectField({
                 onChange={onChange}
                 options={options}
                 placeholder={placeholder}
+                searchPlaceholder={searchPlaceholder}
                 disabled={rest.disabled}
                 ariaLabel={rest.label}
             />

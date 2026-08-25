@@ -67,6 +67,11 @@ class Order extends Model
         'public_id', 'account_id', 'business_id', 'customer_id',
         'number', 'reference', 'ordered_on', 'status', 'fulfilment_status', 'payment_status',
         'channel', 'external_ref', 'is_cod', 'currency', 'storefront_id',
+
+        // The fields the eight-platform survey turned up. See the migration
+        // that added them.
+        'payment_method', 'transaction_ref', 'paid_at', 'promised_delivery_on',
+        'shipping_method', 'source', 'staff_notes', 'refunded_minor',
         'subtotal_minor', 'discount_minor', 'shipping_minor', 'tax_minor',
         'total_minor', 'paid_minor', 'cost_minor',
         'stock_location_id', 'invoice_id', 'till_session_id', 'idempotency_key',
@@ -95,6 +100,11 @@ class Order extends Model
     {
         return [
             'ordered_on' => 'date',
+
+            // The promise, not the fact. What actually happened is the
+            // shipment's delivered_at — see the migration that added this.
+            'promised_delivery_on' => 'date',
+            'paid_at' => 'datetime',
             'is_cod' => 'boolean',
             'confirmed_at' => 'datetime',
             'fulfilled_at' => 'datetime',
