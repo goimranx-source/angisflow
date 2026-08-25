@@ -12,6 +12,18 @@ export type OrderLine = {
     quantity: number;
     unit_price: number;
     total?: number;
+
+    /** The product's picture, from this application or from the shop. */
+    image?: string | null;
+
+    /**
+     * What the product normally sells for, per unit.
+     *
+     * Null for a line typed by hand with no product behind it, which is then
+     * taken to have been sold at its own price — see OrderTotals, which works
+     * the order's discount out of the gap between these two.
+     */
+    list_price?: number | null;
 };
 
 type Variant = {
@@ -20,6 +32,7 @@ type Variant = {
     name: string;
     price: number;
     currency: string | null;
+    image?: string | null;
 };
 
 /**
@@ -93,6 +106,8 @@ export function LineItems({
                 variant_id: variant?.id ?? null,
                 sku: variant?.sku ?? null,
                 description: variant?.name ?? '',
+                image: variant?.image ?? null,
+                list_price: variant?.price ?? null,
                 quantity: 1,
                 unit_price: variant?.price ?? 0,
             },
@@ -122,11 +137,24 @@ export function LineItems({
             <table className="w-full text-sm">
                 <thead>
                     <tr className="border-b border-[var(--shell-border)] text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                        <th className="px-4 py-2 text-left font-semibold">Item</th>
-                        <th className="w-20 py-2 pl-2 text-right font-semibold">Qty</th>
-                        <th className="w-32 py-2 pl-2 text-right font-semibold">Unit price</th>
-                        <th className="w-28 py-2 pl-2 text-right font-semibold">Amount</th>
-                        <th className="w-10 py-2 pr-2" />
+                        <th className="px-4 py-2 text-left font-semibold" colSpan={2}>
+                            Item
+                        </th>
+                        {/*
+                          Sized to their contents, not shared out evenly.
+
+                          A quantity is one or two digits and a price is five;
+                          giving each a comfortable column left the description
+                          — the only part that is prose, and the only part
+                          anybody reads — with 157 pixels for a name that needs
+                          231. Numbers are the cheapest thing on the row to
+                          narrow, because a right-aligned column of them stays
+                          readable until it actually clips.
+                        */}
+                        <th className="w-16 py-2 pl-2 text-right font-semibold">Qty</th>
+                        <th className="w-24 py-2 pl-2 text-right font-semibold">Unit price</th>
+                        <th className="w-24 py-2 pl-2 text-right font-semibold">Amount</th>
+                        <th className="w-8 py-2 pr-2" />
                     </tr>
                 </thead>
 
@@ -134,7 +162,7 @@ export function LineItems({
                     {lines.length === 0 && (
                         <tr>
                             <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="px-4 py-6 text-center text-xs text-[var(--color-text-subtle)]"
                             >
                                 Nothing on this order yet.
@@ -147,6 +175,39 @@ export function LineItems({
                             key={line.id ?? `new-${index}`}
                             className="group border-b border-[var(--shell-border)] last:border-0 hover:bg-[var(--color-site-bg)]"
                         >
+                            {/*
+                              ── The picture ──────────────────────────────────
+                              Somebody checking an order against what is on the
+                              shelf is matching a bottle, not a string, and
+                              reads the picture faster than the words.
+
+                              A framed placeholder rather than nothing when
+                              there is no picture: an empty cell makes the rows
+                              beside it look misaligned, where a frame reads as
+                              "this product has no picture yet".
+                            */}
+                            <td className="py-1.5 pl-3 pr-0 align-middle">
+                                <span
+                                    className="flex size-9 items-center justify-center overflow-hidden rounded-[var(--shell-radius-sm)] border bg-[var(--color-site-bg)]"
+                                    style={{ borderColor: 'var(--shell-border)' }}
+                                >
+                                    {line.image ? (
+                                        <img
+                                            src={line.image}
+                                            alt=""
+                                            loading="lazy"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <Icon
+                                            name="image"
+                                            size={14}
+                                            className="text-[var(--color-text-subtle)]"
+                                        />
+                                    )}
+                                </span>
+                            </td>
+
                             <td className="px-2 py-1.5">
                                 <input
                                     className={cell}
@@ -154,11 +215,33 @@ export function LineItems({
                                     placeholder="Item description"
                                     onChange={(event) => patch(index, { description: event.target.value })}
                                 />
-                                {line.sku && (
-                                    <span className="block px-2 font-mono text-[11px] text-[var(--color-text-subtle)]">
-                                        {line.sku}
-                                    </span>
-                                )}
+
+                                <span className="flex items-center gap-2 px-2">
+                                    {line.sku && (
+                                        <span className="font-mono text-[11px] text-[var(--color-text-subtle)]">
+                                            {line.sku}
+                                        </span>
+                                    )}
+
+                                    {/*
+                                      What it normally sells for, when this line
+                                      is not charging that.
+
+                                      The difference is the order's discount, so
+                                      showing it on the line is showing where the
+                                      discount came from — otherwise the figure
+                                      in the summary below has no visible cause.
+                                    */}
+                                    {typeof line.list_price === 'number' &&
+                                        line.list_price > line.unit_price && (
+                                            <span
+                                                className="text-[11px] text-[var(--color-text-subtle)] line-through"
+                                                title="Usual price"
+                                            >
+                                                {money(line.list_price)}
+                                            </span>
+                                        )}
+                                </span>
                             </td>
 
                             <td className="py-1.5 pl-2 align-top">
@@ -212,7 +295,7 @@ export function LineItems({
                 {lines.length > 0 && (
                     <tfoot>
                         <tr className="border-t border-[var(--shell-border)] bg-[var(--color-site-bg)]">
-                            <td colSpan={3} className="px-4 py-2.5 text-right text-[var(--color-text-muted)]">
+                            <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--color-text-muted)]">
                                 Lines total
                             </td>
                             <td className="py-2.5 pl-2 pr-2 text-right font-semibold tabular-nums text-[var(--color-text-main)]">

@@ -28,6 +28,56 @@ use Illuminate\Support\Str;
  */
 class ProductReconciler
 {
+
+    /**
+     * The address of the picture a shop serves for this record.
+     *
+     * ── Why it is read from the payload and not mapped ───────────────────────
+     *
+     * Every other field on this screen is mapped, on purpose: a shop names
+     * things its own way and only somebody looking at it knows which of its
+     * fields is the weight. An image is not like that. Every platform worth
+     * syncing puts it in the same two or three places under the same two or
+     * three names, and asking a person to map "images.0.src" is asking them to
+     * do a job that has one right answer.
+     *
+     * WooCommerce sends `images` on a product and `image` on a variation;
+     * Shopify sends `image` with `src`; several send a bare string. All of them
+     * are tried, and anything that is not an http address is ignored — a
+     * payload carrying a local file path or a placeholder id would otherwise
+     * become a broken picture on every order line.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function pictureFrom(array $payload): ?string
+    {
+        $candidates = [
+            $payload['images'][0]['src'] ?? null,
+            $payload['image']['src'] ?? null,
+            $payload['image'] ?? null,
+            $payload['images'][0] ?? null,
+            $payload['featured_image'] ?? null,
+            $payload['thumbnail'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (! is_string($candidate)) {
+                continue;
+            }
+
+            $url = trim($candidate);
+
+            // Only something a browser can actually fetch. Left looser, a feed
+            // sending "0" or "no-image" would be stored and rendered as a
+            // broken image on every line it appears on.
+            if ($url !== '' && str_starts_with($url, 'http')) {
+                return mb_substr($url, 0, 1024);
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -50,6 +100,20 @@ class ProductReconciler
 
             if ($product !== null) {
                 $product->fill($attributes)->save();
+
+                /*
+                 * Filled in, and refreshed when the shop changes it.
+                 *
+                 * Written outside fill() because it is not a mapped attribute —
+                 * see pictureFrom. forceFill because nothing should have to add
+                 * it to $fillable for a picture to appear.
+                 */
+                $picture = $this->pictureFrom($payload);
+
+                if ($picture !== null && $picture !== $product->image_url) {
+                    $product->forceFill(['image_url' => $picture])->save();
+                }
+
                 $this->syncDefaultVariant($integration, $product, $payload, $variantFields);
 
                 return $product;
@@ -72,6 +136,14 @@ class ProductReconciler
             'is_active' => true,
             ...$attributes,
         ]);
+
+        // The same picture as on the update path, on the pass that creates it —
+        // otherwise a product looks right only after its second sync.
+        $picture = $this->pictureFrom($payload);
+
+        if ($picture !== null) {
+            $product->forceFill(['image_url' => $picture])->save();
+        }
 
         $this->syncDefaultVariant($integration, $product, $payload, $variantFields);
 

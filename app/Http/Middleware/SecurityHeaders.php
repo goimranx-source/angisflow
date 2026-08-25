@@ -62,7 +62,33 @@ class SecurityHeaders
             "script-src 'self'",
             "style-src 'self' 'unsafe-inline'",
             "font-src 'self' data:",
-            "img-src 'self' data: blob:",
+            /*
+             * ── Pictures may come from the shops this business sells through ─
+             *
+             * A product's photograph is hosted by the shop that sells it —
+             * vorosabajar.com, someone else's Shopify, a CDN in front of
+             * either. This application stores the address rather than a second
+             * copy of the file (see the migration that added products.
+             * image_url), so an order line's thumbnail is a request to a host
+             * that is not this one, and 'self' refused every one of them.
+             *
+             * Widened to https rather than to a list, because the list is not
+             * knowable here: every business connects different shops, and each
+             * of those can move its images to a different CDN without telling
+             * anybody. A policy that has to be edited whenever a customer
+             * changes hosting is a policy that gets switched off.
+             *
+             * What this gives up is narrow. An image cannot execute; the worst
+             * a hostile one does is fail to load, or report to its own host
+             * that somebody looked at it — which the shop's own site already
+             * does, to the same host, for the same person. Scripts, styles,
+             * frames and connections are all still 'self'.
+             *
+             * http is deliberately not allowed: a plain-text image on an https
+             * page is a mixed-content warning and a downgrade, and any shop
+             * worth syncing with serves its media over TLS.
+             */
+            "img-src 'self' data: blob: https:",
             "connect-src 'self'",
             "form-action 'self'",
             "frame-ancestors 'none'",

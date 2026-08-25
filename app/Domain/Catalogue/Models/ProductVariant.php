@@ -10,6 +10,7 @@ use App\Domain\Tenancy\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -45,6 +46,18 @@ class ProductVariant extends Model
             'is_active' => 'boolean',
             'position' => 'integer',
         ];
+    }
+
+    /**
+     * Pictures belonging to this variant rather than to the product.
+     *
+     * A product with four colours has four pictures, and the one that goes
+     * against a line saying "blue" is the blue one. Empty for most variants,
+     * which fall back to the product's own — see LinePresentation.
+     */
+    public function media(): HasMany
+    {
+        return $this->hasMany(ProductMedia::class, 'product_variant_id')->orderBy('position');
     }
 
     public function product(): BelongsTo

@@ -19,8 +19,10 @@ use App\Domain\Integrations\Support\OrderStatuses;
 use App\Domain\Integrations\Support\Transform;
 use App\Domain\Money\Currencies;
 use App\Domain\Money\CurrencyService;
+use App\Domain\Sales\LinePresentation;
 use App\Domain\Sales\Models\Order;
 use App\Domain\Sales\OrderHistory;
+use App\Domain\Sales\OrderTotals;
 use App\Domain\Storefront\StoreCode;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Storefront;
@@ -97,7 +99,22 @@ class OrdersEndpoint
                 // request per order. One page is at most a few hundred lines;
                 // the count below is still done in SQL because that is what the
                 // table column needs and it is cheaper than counting in PHP.
-                'lines:id,order_id,description,sku,quantity,unit_price_minor,total_minor',
+                /*
+                 * product_variant_id is in the list because the picture and the
+                 * list price hang off it — leave it out and every row lazy-loads
+                 * a variant, which in development is an exception and in
+                 * production is a query per line.
+                 */
+                'lines:id,order_id,product_variant_id,description,sku,quantity,unit_price_minor,total_minor',
+
+                // The picture and the price behind each line, loaded once for
+                // the whole page rather than once per line. See
+                // LinePresentation::RELATIONS, which names the same set the
+                // editor loads so the two screens cannot drift.
+                ...array_map(
+                    static fn (string $relation): string => 'lines.'.$relation,
+                    LinePresentation::RELATIONS,
+                ),
             ])
             // Counted in SQL rather than by loading the lines: the table shows a
             // number, and loading four hundred line rows to count them is the
@@ -778,6 +795,15 @@ class OrdersEndpoint
                     'quantity' => (float) $line->quantity,
                     'unit_price' => self::plain($line->unit_price_minor, $from),
                     'total' => self::plain($line->total_minor, $from),
+
+                    // Read the same way here as in the editor: somebody
+                    // checking an order against the shelf is matching a bottle
+                    // rather than a string.
+                    'image' => LinePresentation::image($line),
+                    'list_price' => LinePresentation::listPrice(
+                        $line,
+                        10 ** Currencies::scale($from),
+                    ),
                 ])->all()
                 : [],
 
@@ -1634,6 +1660,7 @@ class OrdersEndpoint
                  * is what somebody types into a price box.
                  */
                 'lines' => $model->lines()
+                    ->with(LinePresentation::RELATIONS)
                     ->orderBy('line_no')
                     ->get()
                     ->map(fn ($line): array => [
@@ -1644,6 +1671,13 @@ class OrdersEndpoint
                         'quantity' => (float) $line->quantity,
                         'unit_price' => round(((int) $line->unit_price_minor) / $scale, 2),
                         'total' => round(((int) $line->total_minor) / $scale, 2),
+
+                        // What it looks like, and what it normally sells for —
+                        // the second being the only way to know the discount on
+                        // a line rather than taking a typed figure on trust.
+                        // See LinePresentation for both.
+                        'image' => LinePresentation::image($line),
+                        'list_price' => LinePresentation::listPrice($line, $scale),
                     ])
                     ->all(),
 
@@ -1748,12 +1782,21 @@ class OrdersEndpoint
             'shipping_postcode' => ['sometimes', 'nullable', 'string', 'max:40'],
             'shipping_country' => ['sometimes', 'nullable', 'string', 'max:80'],
 
-            'subtotal' => ['sometimes', 'numeric', 'min:0'],
-            'discount' => ['sometimes', 'numeric', 'min:0'],
+            /*
+             * Shipping and tax, and nothing else.
+             *
+             * Subtotal, discount and total are the arithmetic of the lines and
+             * are worked out here — see OrderTotals, which explains why they
+             * stopped being typed in. Paid is the sum of the payments recorded
+             * against the order, so a form that set it would be a form for
+             * claiming money had arrived when it had not.
+             *
+             * Left out of the rules rather than ignored further down: a request
+             * that sends them gets a validation error naming them, instead of
+             * appearing to work and quietly discarding the figures.
+             */
             'shipping' => ['sometimes', 'numeric', 'min:0'],
             'tax' => ['sometimes', 'numeric', 'min:0'],
-            'total' => ['sometimes', 'numeric', 'min:0'],
-            'paid' => ['sometimes', 'numeric', 'min:0'],
 
             'customer_name' => ['sometimes', 'nullable', 'string', 'max:160'],
             'customer_email' => ['sometimes', 'nullable', 'email', 'max:190'],
@@ -1813,7 +1856,7 @@ class OrdersEndpoint
 
         // Typed back into minor units here, so the rest of the application
         // never sees a float where it expects an integer number of paisa.
-        foreach (['subtotal', 'discount', 'shipping', 'tax', 'total', 'paid'] as $field) {
+        foreach (['shipping', 'tax'] as $field) {
             if (array_key_exists($field, $validated)) {
                 $changes[$field.'_minor'] = (int) round(((float) $validated[$field]) * $scale);
             }
@@ -1881,6 +1924,21 @@ class OrdersEndpoint
 
             if (array_key_exists('lines', $validated)) {
                 $this->writeLines($model, $validated['lines'], $scale);
+            }
+
+            /*
+             * The money, after everything it is made of has been written.
+             *
+             * Run whenever the lines changed or either typed figure did, and
+             * on a fresh copy because writeLines has been at the rows behind
+             * the relation this reads.
+             */
+            if (
+                array_key_exists('lines', $validated)
+                || array_key_exists('shipping', $validated)
+                || array_key_exists('tax', $validated)
+            ) {
+                OrderTotals::recalculate($model->refresh());
             }
 
             if (array_key_exists('custom', $validated)) {
@@ -1955,7 +2013,14 @@ class OrdersEndpoint
                         ->orWhereHas('product', fn (Builder $p) => $p->where('name', 'like', $like));
                 });
             })
-            ->with('product:id,name')
+            ->with([
+                'product:id,name,image_url',
+
+                // The picture, so a line picked from here arrives with one
+                // instead of showing a placeholder until the page is reloaded.
+                'product.media.mediaItem',
+                'media.mediaItem',
+            ])
             ->orderBy('name')
             ->limit(20)
             ->get();
@@ -1976,6 +2041,10 @@ class OrdersEndpoint
                 'name' => self::variantName($v),
                 'price' => round(((int) $v->price_minor) / (10 ** Currencies::scale((string) ($v->currency ?? $business->base_currency ?? 'USD'))), 2),
                 'currency' => $v->currency,
+                'image' => $v->media->first()?->mediaItem?->thumbUrl()
+                    ?? $v->product?->media->first()?->mediaItem?->thumbUrl()
+                    ?? $v->image_url
+                    ?? $v->product?->image_url,
             ])->all(),
         ]);
     }

@@ -104,6 +104,12 @@ type Order = {
         quantity: number;
         unit_price: number;
         total: number;
+
+        /** The product's picture, from this application or from the shop. */
+        image?: string | null;
+
+        /** What it normally sells for, when that is more than was charged. */
+        list_price?: number | null;
     }>;
     items_count: number;
     subtotal: number;
@@ -317,6 +323,34 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
             <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
             <p className="mt-0.5 text-sm break-words text-[var(--color-text-main)]">{value}</p>
         </div>
+    );
+}
+
+/**
+ * A product's picture on an order line.
+ *
+ * ── Why a frame and not simply nothing ───────────────────────────────────────
+ *
+ * Not every product has a picture — a shop that never uploaded one, an item
+ * typed in by hand — and leaving the cell empty makes every row beside it look
+ * misaligned, as though the picture had failed to load. A frame with a mark in
+ * it reads as "this one has no picture", which is a different and true thing.
+ *
+ * Cropped rather than contained, unlike a shop's logo: these are photographs of
+ * objects, and a square crop of a bottle is still a bottle.
+ */
+function LineThumb({ src }: { src?: string | null }) {
+    return (
+        <span
+            className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[var(--shell-radius-sm)] border bg-[var(--color-site-bg)]"
+            style={{ borderColor: 'var(--shell-border)' }}
+        >
+            {src ? (
+                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+                <Icon name="image" size={14} className="text-[var(--color-text-subtle)]" />
+            )}
+        </span>
     );
 }
 
@@ -2968,6 +3002,8 @@ export default function Orders() {
                                                         className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0"
                                                         style={{ borderColor: 'var(--shell-border)' }}
                                                     >
+                                                        <LineThumb src={line.image} />
+
                                                         <div className="min-w-0 flex-1">
                                                             <p className="truncate text-sm font-medium text-[var(--color-text-main)]">
                                                                 {line.description}
@@ -3180,14 +3216,40 @@ export default function Orders() {
                                                     className="border-b border-[var(--shell-border)] last:border-0"
                                                 >
                                                     <td className="px-3 py-2.5">
-                                                        <p className="font-medium text-[var(--color-text-main)]">
-                                                            {item.description}
-                                                        </p>
-                                                        {item.sku && (
-                                                            <p className="mt-0.5 font-mono text-[11px] text-[var(--color-text-muted)]">
-                                                                {item.sku}
-                                                            </p>
-                                                        )}
+                                                        <div className="flex items-center gap-2.5">
+                                                            <LineThumb src={item.image} />
+
+                                                            <div className="min-w-0">
+                                                                <p className="truncate font-medium text-[var(--color-text-main)]">
+                                                                    {item.description}
+                                                                </p>
+
+                                                                <span className="flex items-center gap-2">
+                                                                    {item.sku && (
+                                                                        <span className="font-mono text-[11px] text-[var(--color-text-muted)]">
+                                                                            {item.sku}
+                                                                        </span>
+                                                                    )}
+
+                                                                    {/* Where the order's discount
+                                                                        came from, on the line it
+                                                                        came from. */}
+                                                                    {typeof item.list_price === 'number' &&
+                                                                        item.list_price > item.unit_price && (
+                                                                            <span
+                                                                                className="text-[11px] text-[var(--color-text-subtle)] line-through"
+                                                                                title="Usual price"
+                                                                            >
+                                                                                {selectedOrder.native.symbol}
+                                                                                {item.list_price.toLocaleString(undefined, {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
+                                                                            </span>
+                                                                        )}
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="px-3 py-2.5 text-right tabular-nums text-[var(--color-text-muted)]">
                                                         {item.quantity}
