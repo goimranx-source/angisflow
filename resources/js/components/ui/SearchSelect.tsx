@@ -1,4 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type MutableRefObject,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import { FlyoutGuard } from '@/components/ui/FlyoutGuard';
@@ -72,6 +80,169 @@ function matches(option: SelectOption, terms: string[]): boolean {
     const haystack = `${option.label} ${option.note ?? ''} ${option.value}`.toLowerCase();
 
     return terms.every((term) => haystack.includes(term));
+}
+
+
+/**
+ * ── Taking a choice back ─────────────────────────────────────────────────────
+ *
+ * A text box gets undo for nothing: the browser keeps its own history and
+ * Ctrl+Z walks it. A picker built out of a button and a list gets none, so
+ * choosing the wrong option from a hundred and seventy-five left somebody
+ * hunting through the list for whichever one had been there before — assuming
+ * they could still remember it.
+ *
+ * ── Why the history is shared rather than per-picker ─────────────────────────
+ *
+ * Because "undo" means the last thing I did, not the last thing I did to this
+ * particular control. Somebody who changes a field, then a second, then presses
+ * Ctrl+Z means the second one — and a per-picker history would only know about
+ * whichever control happened to hold focus.
+ */
+type Choice = {
+    /**
+     * The picker's current change handler, held by reference rather than by
+     * value.
+     *
+     * A closure captured when the choice was made would be undone against the
+     * state of the form as it was then, which on a table of sixteen rows means
+     * quietly reverting the other fifteen along with it.
+     */
+    apply: MutableRefObject<(value: string) => void>;
+
+    /** False once its picker has left the screen, and its handler means nothing. */
+    alive: MutableRefObject<boolean>;
+
+    from: string;
+    to: string;
+};
+
+/**
+ * Enough to cover somebody working through a form and changing their mind;
+ * not enough for a long session to be worth any memory.
+ */
+const REMEMBERED = 50;
+
+const past: Choice[] = [];
+const future: Choice[] = [];
+
+function remember(choice: Choice): void {
+    past.push(choice);
+
+    if (past.length > REMEMBERED) {
+        past.shift();
+    }
+
+    /*
+     * A fresh choice ends the redo branch.
+     *
+     * Undoing twice and then choosing something new leaves the two undone
+     * choices unreachable — offering to redo them after that would put back a
+     * value from a version of the form that no longer exists.
+     */
+    future.length = 0;
+}
+
+/** Move one choice from one stack to the other, applying it on the way. */
+function walk(from: Choice[], to: Choice[], pick: (choice: Choice) => string): boolean {
+    while (from.length > 0) {
+        const choice = from.pop() as Choice;
+
+        // Its picker has gone — a row deleted, a drawer closed. Skipped rather
+        // than stopping, so an undo still reaches the change before it.
+        if (!choice.alive.current) {
+            continue;
+        }
+
+        choice.apply.current(pick(choice));
+        to.push(choice);
+
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Whether the browser has its own undo to do.
+ *
+ * Ctrl+Z in a text box belongs to the text box, including the search box inside
+ * an open picker. Taking it would mean somebody correcting a typo lost a
+ * selection three fields away instead.
+ */
+function isTyping(): boolean {
+    const node = document.activeElement;
+
+    if (!(node instanceof HTMLElement)) {
+        return false;
+    }
+
+    return node.isContentEditable || node.tagName === 'INPUT' || node.tagName === 'TEXTAREA';
+}
+
+function onUndoKey(event: KeyboardEvent): void {
+    if (!event.ctrlKey && !event.metaKey) {
+        return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    // Ctrl+Y is the other redo, and the one Windows users reach for.
+    const redo = key === 'y' || (key === 'z' && event.shiftKey);
+
+    if (key !== 'z' && !redo) {
+        return;
+    }
+
+    if (isTyping()) {
+        return;
+    }
+
+    /*
+     * Only claimed when there is something to do with it.
+     *
+     * With nothing in the history the press goes back to the page, so a
+     * screen that grows its own undo later is not silently swallowed by this
+     * one.
+     */
+    if (redo ? walk(future, past, (choice) => choice.to) : walk(past, future, (choice) => choice.from)) {
+        event.preventDefault();
+    }
+}
+
+/**
+ * One listener between all of them, on while any picker is mounted.
+ *
+ * Counted rather than flagged, so React mounting a component twice in
+ * development adds and removes it in pairs and the count comes back to zero.
+ */
+let listening = 0;
+
+function useUndoKey(): void {
+    useEffect(() => {
+        if (listening === 0) {
+            document.addEventListener('keydown', onUndoKey);
+        }
+
+        listening += 1;
+
+        return () => {
+            listening -= 1;
+
+            if (listening === 0) {
+                document.removeEventListener('keydown', onUndoKey);
+            }
+        };
+    }, []);
+}
+
+/** Everything an option says, for the hover that shows what a column cut off. */
+function fullText(option: SelectOption | null): string | undefined {
+    if (option === null) {
+        return undefined;
+    }
+
+    return [option.label, option.note].filter(Boolean).join(' — ');
 }
 
 /**
@@ -155,6 +326,26 @@ export function SearchSelect({
 
     const listId = useId();
     const at = useFlyoutPosition({ open, trigger, panel, align: 'start' });
+
+    /*
+     * Kept current every render, and handed to the undo history by reference.
+     * See Choice, above, for why a captured closure would be the wrong thing
+     * to undo against.
+     */
+    const apply = useRef(onChange);
+    apply.current = onChange;
+
+    const alive = useRef(true);
+
+    useEffect(() => {
+        alive.current = true;
+
+        return () => {
+            alive.current = false;
+        };
+    }, []);
+
+    useUndoKey();
 
     const chosen = options.find((option) => option.value === value) ?? null;
     const searchable = options.length >= searchFrom;
@@ -301,6 +492,12 @@ export function SearchSelect({
             return;
         }
 
+        // Nothing to take back when nothing changed, and a history full of
+        // those would mean pressing Ctrl+Z several times to reach a real one.
+        if (option.value !== value) {
+            remember({ apply, alive, from: value, to: option.value });
+        }
+
         onChange(option.value);
         setOpen(false);
         trigger.current?.focus();
@@ -368,7 +565,16 @@ export function SearchSelect({
                 aria-haspopup="listbox"
                 aria-controls={open ? listId : undefined}
                 aria-label={ariaLabel}
-                title={title}
+                /*
+                 * What it says in full, for the hover.
+                 *
+                 * These sit in table columns narrow enough to truncate a field
+                 * name to `meta_data._billing_th…`, and the value somebody is
+                 * checking is the part that got cut. An explicit title wins,
+                 * because the few controls that pass one are explaining what
+                 * the choice means rather than repeating it.
+                 */
+                title={title ?? fullText(chosen) ?? placeholder}
                 disabled={disabled}
                 className={cn(
                     'field flex w-full items-center gap-2 text-left',
@@ -532,6 +738,11 @@ export function SearchSelect({
                                             key={option.value}
                                             role="option"
                                             aria-selected={picked}
+                                            // The same hover on the list itself:
+                                            // the panel is only as wide as the
+                                            // control, so a long path truncates
+                                            // here too.
+                                            title={fullText(option)}
                                             aria-disabled={option.disabled}
                                             /*
                                               Chosen on pointer-down, not click.

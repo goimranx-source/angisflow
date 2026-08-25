@@ -1602,8 +1602,28 @@ export default function Storefronts() {
                                   page -- so the panel reads as the same
                                   application rather than a plainer one.
                                 */}
+                                {/*
+                                  ── shrink-0, or half the form disappears ─────
+                                  This sits in a flex column that fills the
+                                  drawer, and a flex item is normally stopped
+                                  from being squashed below its own content by
+                                  an automatic minimum height. `overflow-hidden`
+                                  — here only to keep the corners rounded —
+                                  drops that minimum to zero, so the column was
+                                  free to squash the card. And because the same
+                                  `overflow-hidden` clips rather than scrolls,
+                                  what was squashed out simply vanished: 632
+                                  pixels of form in a 320-pixel box, with no
+                                  scrollbar anywhere to say so, because nothing
+                                  had overflowed — it had been cut off.
+
+                                  Refusing to shrink puts the card back at its
+                                  full height and lets it overflow the drawer
+                                  body, which scrolls, which is where the
+                                  scrolling belonged.
+                                */}
                                 <div
-                                    className="overflow-hidden rounded-[var(--shell-radius)] border"
+                                    className="shrink-0 overflow-hidden rounded-[var(--shell-radius)] border"
                                     style={{ borderColor: 'var(--shell-border)' }}
                                 >
                                 <div className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5"
@@ -1951,7 +1971,10 @@ export default function Storefronts() {
                                     than describing it, and a shared border made
                                     them read as the end of the list above. */}
                                 <div
-                                    className="mt-3 flex flex-wrap gap-2 rounded-[var(--shell-radius)] border p-3"
+                                    // shrink-0 for the same reason as the card
+                                    // above: it is content to be read, not a
+                                    // pane to be fitted.
+                                    className="mt-3 flex shrink-0 flex-wrap gap-2 rounded-[var(--shell-radius)] border p-3"
                                     style={{ borderColor: 'var(--shell-border)' }}
                                 >
                                     {/* The shop's own address, from the
